@@ -89,6 +89,7 @@
     <div class="settings-row" style="gap:8px;">
       <button class="btn btn-primary" onclick="saveAndFetch()">儲存並載入</button>
       <button class="btn btn-secondary" onclick="clearSettings()">清除設定</button>
+      <button class="btn btn-secondary" onclick="restoreDefaults()">恢復預設值</button>
     </div>
     <div style="font-size:11px;color:#aaa;margin-top:6px;">
       欄位對應：A=時間戳記、B=記錄日期、C=工號、D=車型、E=種類、F=顏色代號<br>
@@ -382,6 +383,13 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script>
+// ── Default config (built-in, used when localStorage is empty) ────────────────
+const DEFAULT_CONFIG = {
+  sheetsId:  '1xQoIxoLlM4LkKjDrYZ_87uIahtebPgPcG6Hitck1T5c',
+  apiKey:    'AIzaSyBMgXHsua64mciOFJwqH4NreGI11gMXR-s',
+  sheetName: '整修日報'
+};
+
 // ── Fallback hardcoded data ──────────────────────────────────────────────────
 const FALLBACK_RECORDS = [
   // [date, personId, type]  type: 'bx'=保險桿, 'mz'=馬自達
@@ -420,12 +428,20 @@ let currentView = 'detail';
 let selectedEffPid = null;
 
 // ── LocalStorage helpers ─────────────────────────────────────────────────────
+function getConfig() {
+  return {
+    id:    localStorage.getItem('gsId')    || DEFAULT_CONFIG.sheetsId,
+    key:   localStorage.getItem('gsKey')   || DEFAULT_CONFIG.apiKey,
+    sheet: localStorage.getItem('gsSheet') || DEFAULT_CONFIG.sheetName,
+  };
+}
 function loadSettings() {
-  document.getElementById('sheetsId').value = localStorage.getItem('gsId') || '';
-  document.getElementById('apiKey').value = localStorage.getItem('gsKey') || '';
-  document.getElementById('sheetName').value = localStorage.getItem('gsSheet') || '整修日報';
-  document.getElementById('bxTarget').value = localStorage.getItem('bxTarget') || '40';
-  document.getElementById('mzTarget').value = localStorage.getItem('mzTarget') || '25';
+  const cfg = getConfig();
+  document.getElementById('sheetsId').value  = cfg.id;
+  document.getElementById('apiKey').value    = cfg.key;
+  document.getElementById('sheetName').value = cfg.sheet;
+  document.getElementById('bxTarget').value  = localStorage.getItem('bxTarget') || '40';
+  document.getElementById('mzTarget').value  = localStorage.getItem('mzTarget') || '25';
 }
 function saveTargets() {
   localStorage.setItem('bxTarget', document.getElementById('bxTarget').value);
@@ -436,10 +452,17 @@ function toggleSettings() {
 }
 function clearSettings() {
   ['gsId','gsKey','gsSheet'].forEach(k => localStorage.removeItem(k));
-  document.getElementById('sheetsId').value = '';
-  document.getElementById('apiKey').value = '';
+  document.getElementById('sheetsId').value  = '';
+  document.getElementById('apiKey').value    = '';
   document.getElementById('sheetName').value = '整修日報';
-  setBadge('已使用示範資料','ok');
+  setBadge('已清除設定，使用示範資料','ok');
+}
+function restoreDefaults() {
+  ['gsId','gsKey','gsSheet'].forEach(k => localStorage.removeItem(k));
+  document.getElementById('sheetsId').value  = DEFAULT_CONFIG.sheetsId;
+  document.getElementById('apiKey').value    = DEFAULT_CONFIG.apiKey;
+  document.getElementById('sheetName').value = DEFAULT_CONFIG.sheetName;
+  fetchFromSheets(DEFAULT_CONFIG.sheetsId, DEFAULT_CONFIG.apiKey, DEFAULT_CONFIG.sheetName);
 }
 
 function setBadge(text, type) {
@@ -1860,19 +1883,9 @@ function setDefaultDateRange() {
 
 function init() {
   loadSettings();
-
-  const id    = localStorage.getItem('gsId');
-  const key   = localStorage.getItem('gsKey');
-  const sheet = localStorage.getItem('gsSheet') || '整修日報';
-
-  if (id && key) {
-    fetchFromSheets(id, key, sheet);
-  } else {
-    allRecords = FALLBACK_RECORDS;
-    setBadge('使用示範資料','ok');
-    setDefaultDateRange(); // default to full data range
-    applyDateFilter();
-  }
+  const cfg = getConfig();
+  // Always auto-fetch: localStorage values take priority, DEFAULT_CONFIG as fallback
+  fetchFromSheets(cfg.id, cfg.key, cfg.sheet);
 }
 
 init();
