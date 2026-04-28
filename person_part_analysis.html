@@ -1,0 +1,1881 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>個人部件分析 — 保險桿 vs 馬自達</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f5f5f3; color: #1a1a18; padding: 1.5rem; }
+  h1 { font-size: 18px; font-weight: 500; margin-bottom: 1rem; color: #1a1a18; }
+  .tab-btn { background: none; border: 0.5px solid #aaa; border-radius: 8px; padding: 6px 14px; font-size: 13px; cursor: pointer; color: #555; }
+  .tab-btn.active { background: #e6f1fb; color: #185fa5; border-color: #185fa5; }
+  .person-card { background: #fff; border: 0.5px solid #ddd; border-radius: 12px; padding: 1rem 1.25rem; margin-bottom: 1rem; }
+  .person-title { font-size: 14px; font-weight: 500; margin: 0 0 8px; }
+  .stat-row { display: flex; gap: 12px; margin-bottom: 10px; }
+  .stat-box { background: #f5f5f3; border-radius: 8px; padding: 6px 12px; flex: 1; text-align: center; }
+  .stat-label { font-size: 11px; color: #888; }
+  .stat-val { font-size: 16px; font-weight: 500; }
+  .mz-color { color: #1D9E75; }
+  .bx-color { color: #378ADD; }
+  select { font-size: 12px; padding: 2px 6px; border: 0.5px solid #aaa; border-radius: 6px; background: #fff; }
+  input[type=text], input[type=date], input[type=number] { font-size: 12px; padding: 4px 8px; border: 0.5px solid #aaa; border-radius: 6px; background: #fff; }
+
+  /* Settings Panel */
+  .settings-panel { background: #fff; border: 0.5px solid #ddd; border-radius: 12px; padding: 1rem 1.25rem; margin-bottom: 1rem; }
+  .settings-title { font-size: 13px; font-weight: 500; color: #555; cursor: pointer; display: flex; align-items: center; gap: 6px; user-select: none; }
+  .settings-body { margin-top: 0.75rem; display: none; }
+  .settings-body.open { display: block; }
+  .settings-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
+  .settings-row label { font-size: 12px; color: #666; width: 80px; flex-shrink: 0; }
+  .settings-row input { flex: 1; min-width: 180px; }
+  .btn { font-size: 12px; padding: 5px 12px; border: none; border-radius: 6px; cursor: pointer; }
+  .btn-primary { background: #185fa5; color: #fff; }
+  .btn-secondary { background: #eee; color: #444; }
+  .status-badge { font-size: 11px; padding: 3px 8px; border-radius: 10px; }
+  .badge-ok { background: #d4f5e9; color: #1D9E75; }
+  .badge-err { background: #fde8e8; color: #c0392b; }
+  .badge-loading { background: #e6f1fb; color: #185fa5; }
+
+  /* Date Filter */
+  .date-filter { background: #fff; border: 0.5px solid #ddd; border-radius: 12px; padding: 0.75rem 1.25rem; margin-bottom: 1rem; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .quick-btn { font-size: 11px; padding: 3px 10px; border: 0.5px solid #aaa; border-radius: 6px; cursor: pointer; background: #f5f5f3; color: #555; }
+  .quick-btn.active { background: #e6f1fb; color: #185fa5; border-color: #185fa5; }
+
+  /* Efficiency Tab */
+  .target-bar { background: #fff; border: 0.5px solid #ddd; border-radius: 12px; padding: 0.75rem 1.25rem; margin-bottom: 1rem; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+  .target-bar label { font-size: 12px; color: #666; }
+  .target-bar input { width: 70px; }
+  .eff-cards { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 1.5rem; }
+  .eff-card { background: #fff; border: 0.5px solid #ddd; border-radius: 12px; padding: 0.75rem 1rem; width: 120px; cursor: pointer; transition: box-shadow 0.15s; text-align: center; position: relative; }
+  .eff-card:hover { box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+  .eff-card.selected { border-color: #185fa5; box-shadow: 0 0 0 2px #185fa533; }
+  .eff-card .light { font-size: 28px; margin-bottom: 4px; }
+  .eff-card .eid { font-size: 22px; font-weight: 700; }
+  .eff-card .equantity { font-size: 15px; color: #666; margin: 2px 0; }
+  .eff-card .erate { font-size: 18px; font-weight: 700; }
+  .eff-card.absent { opacity: 0.5; }
+  .eff-detail { background: #fff; border: 0.5px solid #ddd; border-radius: 12px; padding: 1rem 1.25rem; margin-bottom: 1rem; display: none; }
+  .summary-grid { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 0.5rem; }
+  .summary-item { background: #fff; border: 0.5px solid #ddd; border-radius: 10px; padding: 0.75rem 1rem; flex: 1; min-width: 130px; }
+  .summary-item .si-label { font-size: 15px; color: #888; margin-bottom: 4px; }
+  .summary-item .si-val { font-size: 26px; font-weight: 700; }
+  .q-sub-btn { background: none; border: 0.5px solid #bbb; border-radius: 6px; padding: 4px 14px; font-size: 16px; font-weight: 700; cursor: pointer; color: #666; }
+  .q-sub-btn.active { background: #e6f1fb; color: #185fa5; border-color: #185fa5; font-weight: 700; }
+</style>
+</head>
+<body>
+<h1 id="pageTitle">個人部件分析 — 保險桿 vs 馬自達</h1>
+
+<!-- Settings Panel -->
+<div class="settings-panel">
+  <div class="settings-title" onclick="toggleSettings()">
+    ⚙️ 資料來源設定
+    <span id="settingsBadge" class="status-badge badge-ok">已使用示範資料</span>
+  </div>
+  <div class="settings-body" id="settingsBody">
+    <div class="settings-row">
+      <label>Sheets ID</label>
+      <input type="text" id="sheetsId" placeholder="貼上 Google Sheets ID" />
+    </div>
+    <div class="settings-row">
+      <label>API Key</label>
+      <input type="text" id="apiKey" placeholder="貼上 Google API Key" />
+    </div>
+    <div class="settings-row">
+      <label>工作表名稱</label>
+      <input type="text" id="sheetName" placeholder="整修日報" value="整修日報" />
+    </div>
+    <div class="settings-row" style="gap:8px;">
+      <button class="btn btn-primary" onclick="saveAndFetch()">儲存並載入</button>
+      <button class="btn btn-secondary" onclick="clearSettings()">清除設定</button>
+    </div>
+    <div style="font-size:11px;color:#aaa;margin-top:6px;">
+      欄位對應：A=時間戳記、B=記錄日期、C=工號、D=車型、E=種類、F=顏色代號<br>
+      馬自達色碼：51、A4D、41W、46V、PZ、TAS，其餘為保險桿
+    </div>
+  </div>
+</div>
+
+<!-- Date Filter -->
+<div class="date-filter">
+  <span style="font-size:12px;color:#888;">日期範圍：</span>
+  <input type="date" id="startDate" onchange="applyDateFilter()" />
+  <span style="font-size:12px;color:#aaa;">～</span>
+  <input type="date" id="endDate" onchange="applyDateFilter()" />
+  <div style="display:flex;gap:6px;flex-wrap:wrap;">
+    <button class="quick-btn" onclick="setQuick('week')">本週</button>
+    <button class="quick-btn" onclick="setQuick('lastweek')">上週</button>
+    <button class="quick-btn" onclick="setQuick('month')">本月</button>
+    <button class="quick-btn active" id="qbtn-14" onclick="setQuick('14')">近14天</button>
+    <button class="quick-btn" onclick="setQuick('all')">全部</button>
+  </div>
+</div>
+
+<!-- Tabs -->
+<div style="margin: 0 0 1.5rem;">
+  <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 1.5rem; align-items: center;">
+    <span style="font-size: 12px; color: #888; margin-right: 4px;">檢視模式：</span>
+    <button class="tab-btn active" onclick="showView('detail')">個人詳細</button>
+    <button class="tab-btn" onclick="showView('daily')">每日產量</button>
+    <button class="tab-btn" onclick="showView('efficiency')">人員效率</button>
+    <button class="tab-btn" onclick="showView('realtime')">即時看板</button>
+    <button class="tab-btn" onclick="showView('quality')">品質情報</button>
+  </div>
+
+  <!-- Detail -->
+  <div id="view-detail"></div>
+
+  <!-- Daily -->
+  <div id="view-daily" style="display:none;">
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:1rem;font-size:12px;color:#888;align-items:center;">
+      <span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;background:#378ADD;border-radius:2px;display:inline-block;"></span>保險桿 人均</span>
+      <span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;background:#1D9E75;border-radius:2px;display:inline-block;"></span>馬自達 人均</span>
+      <span style="display:flex;align-items:center;gap:4px;margin-left:8px;"><span style="width:20px;height:2px;border-top:2px dashed #888;display:inline-block;"></span>總人均</span>
+    </div>
+    <div style="position:relative;width:100%;height:320px;">
+      <canvas id="dailyChart"></canvas>
+    </div>
+    <div style="margin-top:1.5rem;">
+      <div style="font-size:12px;color:#888;margin-bottom:8px;">每日詳細數字（人均 = 當天有作業該部件的人數平均）</div>
+      <div style="overflow-x:auto;">
+        <table id="dailyTable" style="width:100%;border-collapse:collapse;font-size:15px;">
+          <thead>
+            <tr style="border-bottom:1px solid #ddd;color:#888;font-size:15px;font-weight:700;">
+              <th style="text-align:left;padding:8px 10px;">日期</th>
+              <th style="text-align:left;padding:8px 10px;">星期</th>
+              <th style="text-align:right;padding:8px 10px;color:#378ADD;">保險桿人均</th>
+              <th style="text-align:right;padding:8px 10px;color:#378ADD;">保險桿人數</th>
+              <th style="text-align:right;padding:8px 10px;color:#1D9E75;">馬自達人均</th>
+              <th style="text-align:right;padding:8px 10px;color:#1D9E75;">馬自達人數</th>
+              <th style="text-align:right;padding:8px 10px;">合計人均</th>
+              <th style="text-align:center;padding:8px 10px;"></th>
+            </tr>
+          </thead>
+          <tbody id="dailyTbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Efficiency -->
+  <div id="view-efficiency" style="display:none;">
+    <div class="target-bar">
+      <label>保險桿目標（隻/天）：</label>
+      <input type="number" id="bxTarget" value="40" min="1" onchange="saveTargets();refreshEfficiency();" />
+      <label>馬自達目標（隻/天）：</label>
+      <input type="number" id="mzTarget" value="25" min="1" onchange="saveTargets();refreshEfficiency();" />
+      <span style="font-size:11px;color:#aaa;">變更後即時更新</span>
+    </div>
+    <div id="effStatusTitle" style="font-size:18px;font-weight:700;margin-bottom:0.75rem;color:#555;">當日人員狀態</div>
+    <div class="eff-cards" id="effCards"></div>
+    <div class="eff-detail" id="effDetail">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
+        <span id="effDetailTitle" style="font-size:13px;font-weight:500;"></span>
+        <button class="btn btn-secondary" onclick="closeEffDetail()">關閉</button>
+      </div>
+      <div style="position:relative;width:100%;height:280px;">
+        <canvas id="effChart"></canvas>
+      </div>
+    </div>
+    <div id="cumStatusTitle" style="font-size:18px;font-weight:700;margin:1.5rem 0 0.75rem;color:#555;">本月累積狀態（截至昨日）</div>
+    <div id="cumStatusCards"></div>
+    <div style="font-size:18px;font-weight:700;margin:1.5rem 0 0.75rem;color:#555;">統計摘要</div>
+    <div class="summary-grid" id="summaryGrid"></div>
+  </div>
+
+  <!-- Realtime Board -->
+  <div id="view-realtime" style="display:none;">
+  <div style="background:#0f1117;border-radius:16px;padding:1rem 1.2rem 1.2rem;margin:-0.5rem;">
+
+    <!-- 頂部一列：日期 ｜ 目前時段 ｜ 距下次休息 ｜ 倒數 ｜ 更新時間 -->
+    <div style="display:flex;align-items:center;gap:0;margin-bottom:0.8rem;background:#131929;border-radius:12px;padding:0.6rem 1.2rem;flex-wrap:wrap;row-gap:4px;">
+      <div style="display:flex;align-items:center;gap:0.5rem;margin-right:1.6rem;">
+        <span style="font-size:13px;color:#445;white-space:nowrap;">日期</span>
+        <span id="rtDate" style="font-size:20px;font-weight:700;color:#e0e0e0;">—</span>
+      </div>
+      <div style="width:1px;height:28px;background:#1e2a40;margin-right:1.6rem;"></div>
+      <div style="display:flex;align-items:center;gap:0.5rem;margin-right:1.6rem;">
+        <span style="font-size:13px;color:#445;white-space:nowrap;">目前時段</span>
+        <span id="rtCurSeg" style="font-size:18px;font-weight:600;color:#5b9cf6;">—</span>
+      </div>
+      <div style="width:1px;height:28px;background:#1e2a40;margin-right:1.6rem;"></div>
+      <div style="display:flex;align-items:center;gap:0.5rem;flex:1;">
+        <span style="font-size:13px;color:#445;white-space:nowrap;">距下次休息</span>
+        <span id="rtNextBreak" style="font-size:18px;font-weight:600;color:#f0c040;">—</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:1rem;margin-left:auto;">
+        <div style="text-align:right;">
+          <div style="font-size:11px;color:#445;">最後更新</div>
+          <div id="rtLastUpdate" style="font-size:13px;color:#556;">—</div>
+        </div>
+        <div style="background:#0f1117;border-radius:20px;padding:5px 16px;border:1px solid #1e2a40;text-align:center;">
+          <div style="font-size:10px;color:#445;letter-spacing:0.5px;">下次更新</div>
+          <div id="rtCountdown" style="font-size:20px;font-weight:700;color:#5b9cf6;line-height:1.2;">5:00</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 圓形進度條（置中） -->
+    <div style="display:flex;justify-content:center;margin-bottom:0.8rem;">
+      <svg viewBox="0 0 220 220" style="width:200px;height:200px;">
+        <circle cx="110" cy="110" r="90" fill="none" stroke="#1e2330" stroke-width="20"/>
+        <circle id="rtProgressCircle" cx="110" cy="110" r="90" fill="none"
+          stroke="#555" stroke-width="20" stroke-linecap="round"
+          stroke-dasharray="565" stroke-dashoffset="565"
+          transform="rotate(-90 110 110)"
+          style="transition:stroke-dashoffset 0.6s ease, stroke 0.4s;"/>
+        <text id="rtProgressPct" x="110" y="104" text-anchor="middle"
+          fill="#888" font-size="52" font-weight="800" font-family="system-ui">—</text>
+        <text x="110" y="140" text-anchor="middle" fill="#445" font-size="15"
+          font-family="system-ui">整體達成率</text>
+      </svg>
+    </div>
+
+    <!-- 今日出勤說明 -->
+    <div id="rtTableInfo" style="font-size:13px;color:#445;text-align:center;margin-bottom:0.5rem;"></div>
+
+    <!-- 合計時段表格 -->
+    <div style="background:#161b27;border-radius:12px;overflow:hidden;margin-bottom:1rem;box-shadow:0 4px 24px rgba(0,0,0,0.5);">
+      <table style="width:100%;border-collapse:collapse;">
+        <thead>
+          <tr style="border-bottom:2px solid #1e2a40;font-size:16px;color:#556;">
+            <th style="text-align:left;padding:14px 20px;font-weight:600;">時段</th>
+            <th style="text-align:center;padding:14px 12px;font-weight:600;">時間</th>
+            <th style="text-align:center;padding:14px 20px;font-weight:600;">計畫目標</th>
+            <th style="text-align:center;padding:14px 20px;font-weight:600;">累計計畫</th>
+            <th style="text-align:center;padding:14px 20px;font-weight:600;color:#60c8ff;">實績</th>
+            <th style="text-align:center;padding:14px 20px;font-weight:600;color:#60c8ff;">累計實績</th>
+            <th style="text-align:center;padding:14px 28px;font-weight:600;">達成率</th>
+          </tr>
+        </thead>
+        <tbody id="rtTbody"></tbody>
+      </table>
+    </div>
+
+    <!-- 底部四大數字卡片 -->
+    <div id="rtOverall" style="display:flex;gap:12px;"></div>
+
+  </div><!-- /dark wrapper -->
+  </div>
+
+  <!-- Quality -->
+  <div id="view-quality" style="display:none;">
+
+    <!-- BX/MZ toggle -->
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:0.75rem;">
+      <span style="font-size:12px;color:#888;">部件類型：</span>
+      <button id="qToggleBx" class="tab-btn active" style="font-size:15px;font-weight:700;" onclick="setQualityType('bx')">保險桿</button>
+      <button id="qToggleMz" class="tab-btn" style="font-size:15px;font-weight:700;" onclick="setQualityType('mz')">馬自達</button>
+    </div>
+
+    <!-- Sub-tab buttons -->
+    <div style="display:flex;gap:6px;margin-bottom:1rem;border-bottom:1px solid #e0e0de;padding-bottom:8px;">
+      <button class="q-sub-btn active" id="qSubModel" onclick="setQualitySub('model')">車型分析</button>
+      <button class="q-sub-btn" id="qSubPart"  onclick="setQualitySub('part')">部件分析</button>
+      <button class="q-sub-btn" id="qSubColor" onclick="setQualitySub('color')">顏色分析</button>
+    </div>
+
+    <!-- No data -->
+    <div id="qNoData" style="display:none;font-size:13px;color:#aaa;padding:2rem;text-align:center;background:#fff;border-radius:12px;border:0.5px solid #ddd;">
+      目前篩選範圍內無補漆點數資料（需從 Google Sheets 載入含 G 欄「補漆總點數」的資料）
+    </div>
+
+    <!-- ── Sub-tab 1: 車型分析 ───────────────────────────────────────── -->
+    <div id="qSub-model">
+      <div class="person-card" style="margin-bottom:1rem;">
+        <div style="font-size:18px;font-weight:700;margin-bottom:0.75rem;">車型排行榜（依平均點數高到低）</div>
+        <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:16px;">
+          <thead><tr style="border-bottom:1px solid #ddd;color:#888;font-size:17px;font-weight:700;">
+            <th style="padding:6px 10px;text-align:center;">排名</th>
+            <th style="padding:6px 10px;text-align:left;">車型</th>
+            <th style="padding:6px 10px;text-align:right;">本週平均</th>
+            <th style="padding:6px 10px;text-align:right;">上週平均</th>
+            <th style="padding:6px 10px;text-align:center;">趨勢</th>
+            <th style="padding:6px 10px;text-align:right;">筆數</th>
+            <th style="padding:6px 10px;text-align:right;">總點數</th>
+          </tr></thead>
+          <tbody id="qModelRankTbody"></tbody>
+        </table></div>
+      </div>
+      <div class="person-card" style="margin-bottom:1rem;">
+        <div style="font-size:18px;font-weight:700;margin-bottom:0.75rem;">各車型平均補漆點數</div>
+        <div style="position:relative;width:100%;height:260px;"><canvas id="qModelBarChart"></canvas></div>
+      </div>
+      <div class="person-card">
+        <div style="font-size:18px;font-weight:700;margin-bottom:0.5rem;">車型每日趨勢</div>
+        <div id="qModelCheckboxes" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:0.75rem;"></div>
+        <div style="position:relative;width:100%;height:280px;"><canvas id="qModelLineChart"></canvas></div>
+      </div>
+    </div><!-- /qSub-model -->
+
+    <!-- ── Sub-tab 2: 部件分析 ───────────────────────────────────────── -->
+    <div id="qSub-part" style="display:none;">
+      <div class="person-card" style="margin-bottom:1rem;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+        <label style="font-size:13px;color:#555;font-weight:500;">篩選車型：</label>
+        <select id="qPartModelSel" onchange="buildSubPart()" style="font-size:13px;padding:4px 10px;border:0.5px solid #aaa;border-radius:6px;background:#fff;">
+          <option value="">全部車型</option>
+        </select>
+      </div>
+      <div class="person-card" style="margin-bottom:1rem;">
+        <div style="font-size:18px;font-weight:700;margin-bottom:0.5rem;">部件 × 顏色 熱力圖矩陣</div>
+        <div style="font-size:11px;color:#888;margin-bottom:0.5rem;">
+          <span style="display:inline-block;width:12px;height:12px;background:#d5f5e3;border-radius:2px;margin-right:3px;vertical-align:middle;"></span>&lt;2
+          <span style="display:inline-block;width:12px;height:12px;background:#fdeaa7;border-radius:2px;margin-left:8px;margin-right:3px;vertical-align:middle;"></span>2～2.9
+          <span style="display:inline-block;width:12px;height:12px;background:#f39c12;border-radius:2px;margin-left:8px;margin-right:3px;vertical-align:middle;"></span>3～3.9
+          <span style="display:inline-block;width:12px;height:12px;background:#e67e22;border-radius:2px;margin-left:8px;margin-right:3px;vertical-align:middle;"></span>4～4.9
+          <span style="display:inline-block;width:12px;height:12px;background:#e74c3c;border-radius:2px;margin-left:8px;margin-right:3px;vertical-align:middle;"></span>≥5
+        </div>
+        <div id="qPartHeatmap"></div>
+      </div>
+      <div class="person-card">
+        <div style="font-size:18px;font-weight:700;margin-bottom:0.75rem;">本週 vs 上週 趨勢比較（惡化最多排最上面）</div>
+        <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:16px;">
+          <thead><tr style="border-bottom:1px solid #ddd;color:#888;font-size:17px;font-weight:700;">
+            <th style="padding:6px 10px;text-align:left;">部件</th>
+            <th style="padding:6px 10px;text-align:left;">顏色</th>
+            <th style="padding:6px 10px;text-align:right;">本週</th>
+            <th style="padding:6px 10px;text-align:right;">上週</th>
+            <th style="padding:6px 10px;text-align:right;">變化量</th>
+            <th style="padding:6px 10px;text-align:center;">趨勢</th>
+          </tr></thead>
+          <tbody id="qPartTrendTbody"></tbody>
+        </table></div>
+      </div>
+    </div><!-- /qSub-part -->
+
+    <!-- ── Sub-tab 3: 顏色分析 ───────────────────────────────────────── -->
+    <div id="qSub-color" style="display:none;">
+      <div class="person-card" style="margin-bottom:1rem;">
+        <div style="font-size:18px;font-weight:700;margin-bottom:0.75rem;">顏色排行榜（依平均點數高到低）</div>
+        <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:16px;">
+          <thead><tr style="border-bottom:1px solid #ddd;color:#888;font-size:17px;font-weight:700;">
+            <th style="padding:6px 10px;text-align:center;">排名</th>
+            <th style="padding:6px 10px;text-align:left;">顏色代號</th>
+            <th style="padding:6px 10px;text-align:right;">本週平均</th>
+            <th style="padding:6px 10px;text-align:right;">上週平均</th>
+            <th style="padding:6px 10px;text-align:center;">趨勢</th>
+            <th style="padding:6px 10px;text-align:right;">筆數</th>
+          </tr></thead>
+          <tbody id="qColorRankTbody"></tbody>
+        </table></div>
+      </div>
+      <div class="person-card" style="margin-bottom:1rem;">
+        <div style="font-size:18px;font-weight:700;margin-bottom:0.75rem;">各顏色平均補漆點數</div>
+        <div style="position:relative;width:100%;height:260px;"><canvas id="qColorBarChart"></canvas></div>
+      </div>
+      <div class="person-card" style="margin-bottom:1rem;">
+        <div style="font-size:18px;font-weight:700;margin-bottom:0.5rem;">顏色每日趨勢</div>
+        <div id="qColorCheckboxes" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:0.75rem;"></div>
+        <div style="position:relative;width:100%;height:280px;"><canvas id="qColorLineChart"></canvas></div>
+      </div>
+      <div class="person-card">
+        <div style="font-size:18px;font-weight:700;margin-bottom:0.5rem;">顏色 × 車型 交叉熱力圖</div>
+        <div style="font-size:11px;color:#888;margin-bottom:0.5rem;">格子數值為平均補漆點數/筆</div>
+        <div id="qColorModelHeat"></div>
+      </div>
+    </div><!-- /qSub-color -->
+
+  </div><!-- /view-quality -->
+
+</div><!-- /tab container -->
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+// ── Fallback hardcoded data ──────────────────────────────────────────────────
+const FALLBACK_RECORDS = [
+  // [date, personId, type]  type: 'bx'=保險桿, 'mz'=馬自達
+];
+(function(){
+  const raw = {
+    '8623': { mz: {'2026/04/12':17,'2026/04/18':27}, bx: {'2026/04/08':31,'2026/04/09':51,'2026/04/10':27,'2026/04/12':4,'2026/04/13':66,'2026/04/14':73,'2026/04/15':34,'2026/04/16':36,'2026/04/17':48,'2026/04/20':34,'2026/04/21':31,'2026/04/22':33} },
+    '8720': { mz: {'2026/04/08':37,'2026/04/09':28,'2026/04/10':48,'2026/04/12':23,'2026/04/13':23,'2026/04/14':28,'2026/04/15':20,'2026/04/16':27,'2026/04/17':37,'2026/04/18':26,'2026/04/19':25,'2026/04/20':24,'2026/04/21':33,'2026/04/22':41}, bx: {'2026/04/09':12,'2026/04/16':2} },
+    '8745': { mz: {'2026/04/08':32,'2026/04/09':34,'2026/04/10':46,'2026/04/12':19,'2026/04/13':28,'2026/04/14':18,'2026/04/15':20,'2026/04/16':27,'2026/04/17':35,'2026/04/18':22,'2026/04/19':22,'2026/04/20':24,'2026/04/21':35,'2026/04/22':39}, bx: {'2026/04/15':10,'2026/04/16':3} },
+    '8760': { mz: {'2026/04/12':21}, bx: {'2026/04/07':44,'2026/04/08':35,'2026/04/09':51,'2026/04/10':46,'2026/04/12':2,'2026/04/13':48,'2026/04/14':43,'2026/04/15':51,'2026/04/16':44,'2026/04/17':32} },
+    '8764': { mz: {'2026/04/08':37,'2026/04/10':52,'2026/04/12':25,'2026/04/13':24,'2026/04/14':29,'2026/04/15':24,'2026/04/16':28,'2026/04/17':36,'2026/04/18':24,'2026/04/19':25,'2026/04/20':23,'2026/04/21':30,'2026/04/22':39}, bx: {'2026/04/08':1,'2026/04/15':11,'2026/04/16':1} },
+    '8767': { mz: {'2026/04/10':5,'2026/04/12':21,'2026/04/13':1,'2026/04/14':2,'2026/04/18':47,'2026/04/19':33}, bx: {'2026/04/08':36,'2026/04/09':41,'2026/04/10':53,'2026/04/12':4,'2026/04/13':42,'2026/04/14':37,'2026/04/15':49,'2026/04/16':43,'2026/04/17':47,'2026/04/19':10,'2026/04/20':52,'2026/04/21':46,'2026/04/22':49} },
+    '8768': { mz: {'2026/04/10':22,'2026/04/12':24,'2026/04/13':17,'2026/04/14':30,'2026/04/15':18,'2026/04/16':18,'2026/04/17':37,'2026/04/18':28,'2026/04/19':25,'2026/04/20':22,'2026/04/21':28}, bx: {'2026/04/10':1,'2026/04/12':1,'2026/04/15':8,'2026/04/16':12,'2026/04/22':22} },
+    '8782': { mz: {'2026/04/12':7,'2026/04/18':30}, bx: {'2026/04/08':39,'2026/04/09':35,'2026/04/10':25,'2026/04/12':1,'2026/04/13':40,'2026/04/14':31,'2026/04/15':46,'2026/04/16':44,'2026/04/17':52,'2026/04/19':35,'2026/04/20':46,'2026/04/21':60,'2026/04/22':53} }
+  };
+  Object.entries(raw).forEach(([pid, parts]) => {
+    ['bx','mz'].forEach(type => {
+      Object.entries(parts[type]).forEach(([date, qty]) => {
+        for(let i=0;i<qty;i++) FALLBACK_RECORDS.push([date, pid, type, null]);
+      });
+    });
+  });
+})();
+
+const MZ_CODES = new Set(['51','A4D','41W','46V','PZ','TAS']);
+
+// ── State ────────────────────────────────────────────────────────────────────
+let allRecords = []; // [{date:'2026/04/08', pid:'8623', type:'bx'|'mz'}]
+let filteredDates = []; // sorted unique date strings in current filter range
+let personData = {}; // pid -> {bx:{date:qty}, mz:{date:qty}}
+let persons = [];
+
+let dailyChartInst = null;
+let effChartInst = null;
+let currentView = 'detail';
+let selectedEffPid = null;
+
+// ── LocalStorage helpers ─────────────────────────────────────────────────────
+function loadSettings() {
+  document.getElementById('sheetsId').value = localStorage.getItem('gsId') || '';
+  document.getElementById('apiKey').value = localStorage.getItem('gsKey') || '';
+  document.getElementById('sheetName').value = localStorage.getItem('gsSheet') || '整修日報';
+  document.getElementById('bxTarget').value = localStorage.getItem('bxTarget') || '40';
+  document.getElementById('mzTarget').value = localStorage.getItem('mzTarget') || '25';
+}
+function saveTargets() {
+  localStorage.setItem('bxTarget', document.getElementById('bxTarget').value);
+  localStorage.setItem('mzTarget', document.getElementById('mzTarget').value);
+}
+function toggleSettings() {
+  document.getElementById('settingsBody').classList.toggle('open');
+}
+function clearSettings() {
+  ['gsId','gsKey','gsSheet'].forEach(k => localStorage.removeItem(k));
+  document.getElementById('sheetsId').value = '';
+  document.getElementById('apiKey').value = '';
+  document.getElementById('sheetName').value = '整修日報';
+  setBadge('已使用示範資料','ok');
+}
+
+function setBadge(text, type) {
+  const b = document.getElementById('settingsBadge');
+  b.textContent = text;
+  b.className = 'status-badge badge-' + type;
+}
+
+async function saveAndFetch() {
+  const id = document.getElementById('sheetsId').value.trim();
+  const key = document.getElementById('apiKey').value.trim();
+  const sheet = document.getElementById('sheetName').value.trim() || '整修日報';
+  if (!id || !key) { alert('請填入 Sheets ID 與 API Key'); return; }
+  localStorage.setItem('gsId', id);
+  localStorage.setItem('gsKey', key);
+  localStorage.setItem('gsSheet', sheet);
+  await fetchFromSheets(id, key, sheet);
+}
+
+async function fetchFromSheets(id, key, sheet) {
+  setBadge('載入中…','loading');
+  try {
+    // 抓到 G 欄（col6 = 補漆總點數）
+    const range = encodeURIComponent(sheet + '!A:G');
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${range}?key=${key}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
+    const values = json.values || [];
+    if (!values.length) throw new Error('無資料');
+
+    // 固定欄位對應（依實際工作表結構）
+    // A=col0 時間戳記, B=col1 記錄日期, C=col2 工號,
+    // D=col3 車型,     E=col4 種類,     F=col5 顏色代號, G=col6 補漆總點數
+    let dateCol = 1, pidCol = 2, codeCol = 5, ptsCol = 6;
+
+    // 自動偵測：若 header 存在則修正（防止工作表欄位調整）
+    const header = values[0].map(h => (h || '').trim());
+    const isHeader = isNaN(Number(header[1])) && header[1].length > 0 && !/^\d{4}/.test(header[1]);
+    if (isHeader) {
+      header.forEach((h, i) => {
+        if (/記錄日期|date/i.test(h))                        dateCol = i;
+        else if (/工號|員工|人員/i.test(h))                   pidCol  = i;
+        else if (/顏色代號|顏色|色碼|color/i.test(h))         codeCol = i;
+        else if (/補漆總點數|點數|points/i.test(h))           ptsCol  = i;
+      });
+    }
+
+    console.log(`[Sheets] 欄位對應: 記錄日期=col${dateCol}(${['A','B','C','D','E','F','G','H'][dateCol]}), 工號=col${pidCol}(${['A','B','C','D','E','F','G','H'][pidCol]}), 顏色=col${codeCol}(${['A','B','C','D','E','F','G','H'][codeCol]})`);
+    console.log(`[Sheets] 馬自達色碼清單:`, [...MZ_CODES]);
+
+    const records = [];
+    const codeStats = {}; // code → count，用來確認分類
+    values.slice(1).forEach(row => {
+      const rawDate = (row[dateCol] || '').trim();
+      const pid     = (row[pidCol]  || '').trim();
+      const code    = (row[codeCol] || '').trim().toUpperCase();
+      if (!rawDate || !pid || !code) return;
+      const date = normalizeDate(rawDate);
+      if (!/^\d{4}\/\d{2}\/\d{2}$/.test(date)) {
+        console.warn(`[Sheets] 日期無法解析，跳過: "${rawDate}"`);
+        return;
+      }
+      const type = MZ_CODES.has(code) ? 'mz' : 'bx';
+      codeStats[code] = (codeStats[code] || { type, count:0 });
+      codeStats[code].count++;
+      const tsMin    = parseTimestampMinutes((row[0] || '').trim()); // col0 = 時間戳記
+      const carModel = (row[3] || '').trim();                        // col3 = 車型
+      const partType = (row[4] || '').trim();                        // col4 = 種類
+      const rawPts   = row[ptsCol] !== undefined ? parseFloat(row[ptsCol]) : NaN;
+      const points   = isNaN(rawPts) ? null : rawPts;
+      records.push([date, pid, type, tsMin, carModel, partType, code, points]);
+    });
+
+    console.log('[Sheets] 顏色代號分類統計:');
+    Object.entries(codeStats).sort((a,b)=>b[1].count-a[1].count).forEach(([code,{type,count}])=>{
+      console.log(`  ${type==='mz'?'🟢馬自達':'🔵保險桿'} ${code}: ${count} 筆`);
+    });
+    const mzTotal = records.filter(r=>r[2]==='mz').length;
+    const bxTotal = records.filter(r=>r[2]==='bx').length;
+    console.log(`[Sheets] 合計 → 保險桿: ${bxTotal} 筆, 馬自達: ${mzTotal} 筆`);
+
+    allRecords = records;
+    setBadge(`已載入 ${records.length} 筆 (保${bxTotal}/馬${mzTotal})`, 'ok');
+    setDefaultDateRange();
+    applyDateFilter();
+  } catch(e) {
+    console.error(e);
+    setBadge('載入失敗，使用示範資料','err');
+    allRecords = FALLBACK_RECORDS;
+    setDefaultDateRange();
+    applyDateFilter();
+  }
+}
+
+function normalizeDate(s) {
+  // Strip time part and locale AM/PM markers before any parsing
+  s = s.trim().replace(/\s*(上午|下午|AM|PM)[\s\d:：]*$/i, '').trim();
+  s = s.split('T')[0].trim(); // ISO datetime
+  s = s.replace(/-/g, '/');
+
+  // YYYY/MM/DD — already canonical
+  if (/^\d{4}\/\d{2}\/\d{2}$/.test(s)) return s;
+
+  // YYYY/M/D — zero-pad month and day
+  const m1 = s.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
+  if (m1) return `${m1[1]}/${m1[2].padStart(2,'0')}/${m1[3].padStart(2,'0')}`;
+
+  // M/D/YYYY (US locale from Sheets)
+  const m2 = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m2) return `${m2[3]}/${m2[1].padStart(2,'0')}/${m2[2].padStart(2,'0')}`;
+
+  // MM/DD — assume current year
+  if (/^\d{2}\/\d{2}$/.test(s)) return `${new Date().getFullYear()}/${s}`;
+
+  return ''; // unparseable — caller should skip
+}
+
+// ── Date Filter ──────────────────────────────────────────────────────────────
+function dateToISO(s) { return s.replace(/\//g,'-'); } // YYYY/MM/DD → YYYY-MM-DD
+function isoToSlash(s) { return s.replace(/-/g,'/'); } // YYYY-MM-DD → YYYY/MM/DD
+function today() { return new Date().toISOString().slice(0,10); }
+function addDays(iso, n) {
+  const d = new Date(iso); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10);
+}
+function mondayOfWeek(iso) {
+  const d = new Date(iso);
+  const day = d.getDay() || 7;
+  d.setDate(d.getDate() - day + 1);
+  return d.toISOString().slice(0,10);
+}
+
+function setQuick(mode) {
+  const t = today();
+  let s, e = t;
+  if (mode==='14')       { s = addDays(t,-13); }
+  else if (mode==='week')  { s = mondayOfWeek(t); }
+  else if (mode==='lastweek') { const m=mondayOfWeek(t); s=addDays(m,-7); e=addDays(m,-1); }
+  else if (mode==='month') { s = t.slice(0,7)+'-01'; }
+  else { // all — use extent of data
+    const all = allRecords.map(r=>dateToISO(r[0])).sort();
+    s = all[0] || addDays(t,-30); e = all[all.length-1] || t;
+  }
+  document.getElementById('startDate').value = s;
+  document.getElementById('endDate').value   = e;
+  document.querySelectorAll('.quick-btn').forEach(b=>b.classList.remove('active'));
+  applyDateFilter();
+}
+
+function applyDateFilter() {
+  const s = document.getElementById('startDate').value;
+  const e = document.getElementById('endDate').value;
+  // Build personData & filteredDates from allRecords filtered by [s,e]
+  const pMap = {}; // pid -> {bx:{}, mz:{}}
+  const dateSet = new Set();
+  allRecords.forEach(([date, pid, type]) => {
+    const iso = dateToISO(date);
+    if ((s && iso < s) || (e && iso > e)) return;
+    dateSet.add(date);
+    if (!pMap[pid]) pMap[pid] = {bx:{}, mz:{}};
+    pMap[pid][type][date] = (pMap[pid][type][date] || 0) + 1;
+  });
+  personData = pMap;
+  // Exclude any date-like strings that accidentally ended up as person keys
+  persons = Object.keys(pMap).filter(k => !/^\d{4}[-\/]/.test(k)).sort();
+  filteredDates = Array.from(dateSet).sort();
+
+  // Update title — show full YYYY/MM/DD
+  if (filteredDates.length) {
+    document.getElementById('pageTitle').textContent =
+      `個人部件分析 — 保險桿 vs 馬自達（${filteredDates[0]}～${filteredDates[filteredDates.length-1]}）`;
+  }
+
+  rebuildAll();
+}
+
+function rebuildAll() {
+  if (currentView==='detail') buildDetail();
+  buildDailyData();
+  if (currentView==='daily') renderDailyChart();
+  refreshEfficiency();
+  if (currentView==='realtime') buildRealtimeBoard();
+  if (currentView==='quality')  buildQualityView();
+}
+
+// ── Views ────────────────────────────────────────────────────────────────────
+const VIEWS = ['detail','daily','efficiency','realtime','quality'];
+
+function showView(v) {
+  VIEWS.forEach(x => {
+    document.getElementById('view-'+x).style.display = x===v ? '' : 'none';
+  });
+  document.querySelectorAll('.tab-btn').forEach((b,i) => {
+    b.classList.toggle('active', VIEWS[i]===v);
+  });
+  currentView = v;
+  if(v==='detail') buildDetail();
+  if(v==='daily') renderDailyChart();
+  if(v==='efficiency') refreshEfficiency();
+  if(v==='quality') buildQualityView();
+  if(v==='realtime') buildRealtimeBoard(); // timer managed inside buildRealtimeBoard
+  else stopRealtimeTimer();
+}
+
+function sumObj(o) { return Object.values(o).reduce((a,b)=>a+b,0); }
+function countDays(o) { return Object.keys(o).length; }
+
+// ── Detail ────────────────────────────────────────────────────────────────────
+function buildDetail() {
+  const el = document.getElementById('view-detail');
+  el.innerHTML = '';
+  persons.forEach(pid => {
+    const d = personData[pid];
+    const mzTotal=sumObj(d.mz), bxTotal=sumObj(d.bx);
+    const mzDays=countDays(d.mz), bxDays=countDays(d.bx);
+    const mzAvg=mzDays>0?(mzTotal/mzDays).toFixed(1):'-';
+    const bxAvg=bxDays>0?(bxTotal/bxDays).toFixed(1):'-';
+    const total=mzTotal+bxTotal;
+    const mzPct=total>0?Math.round(mzTotal/total*100):0;
+    const bxPct=100-mzPct;
+    const div=document.createElement('div');
+    div.className='person-card';
+    div.innerHTML=`
+      <div class="person-title">工號 ${pid}</div>
+      <div class="stat-row">
+        <div class="stat-box"><div class="stat-label">保險桿 日均</div><div class="stat-val bx-color">${bxAvg} 隻</div><div class="stat-label">共 ${bxTotal} 隻 / ${bxDays} 天</div></div>
+        <div class="stat-box"><div class="stat-label">馬自達 日均</div><div class="stat-val mz-color">${mzAvg} 隻</div><div class="stat-label">共 ${mzTotal} 隻 / ${mzDays} 天</div></div>
+        <div class="stat-box"><div class="stat-label">作業比例</div><div style="font-size:12px;margin-top:4px;"><span class="bx-color">${bxPct}%</span> / <span class="mz-color">${mzPct}%</span></div><div class="stat-label">保 / 馬</div></div>
+      </div>
+      <div style="height:6px;border-radius:3px;background:#eee;overflow:hidden;margin-top:4px;">
+        <div style="height:100%;width:${bxPct}%;background:#378ADD;display:inline-block;"></div><div style="height:100%;width:${mzPct}%;background:#1D9E75;display:inline-block;"></div>
+      </div>`;
+    el.appendChild(div);
+  });
+}
+
+// ── Daily ─────────────────────────────────────────────────────────────────────
+let dailyComputed = {};
+
+function buildDailyData() {
+  dailyComputed = {};
+  filteredDates.forEach(date => {
+    let bxTotal=0, bxPax=0, mzTotal=0, mzPax=0;
+    persons.forEach(pid => {
+      const d = personData[pid];
+      if (d.bx[date]) { bxTotal += d.bx[date]; bxPax++; }
+      if (d.mz[date]) { mzTotal += d.mz[date]; mzPax++; }
+    });
+    dailyComputed[date] = {bxTotal, bxPax, mzTotal, mzPax};
+  });
+}
+
+function renderDailyChart() {
+  const labels = filteredDates.map(d=>d.slice(5));
+  const bxAvgArr = filteredDates.map(d => { const r=dailyComputed[d]; return r.bxPax>0?parseFloat((r.bxTotal/r.bxPax).toFixed(2)):null; });
+  const mzAvgArr = filteredDates.map(d => { const r=dailyComputed[d]; return r.mzPax>0?parseFloat((r.mzTotal/r.mzPax).toFixed(2)):null; });
+  const totalAvgArr = filteredDates.map(d => { const r=dailyComputed[d]; const pax=Math.max(r.bxPax,r.mzPax); return pax>0?parseFloat(((r.bxTotal+r.mzTotal)/pax).toFixed(2)):null; });
+
+  if (dailyChartInst) { dailyChartInst.destroy(); dailyChartInst = null; }
+  dailyChartInst = new Chart(document.getElementById('dailyChart'), {
+    type:'bar',
+    data:{ labels, datasets:[
+      { label:'保險桿 人均', data:bxAvgArr, backgroundColor:'#378ADDBB', borderColor:'#378ADD', borderWidth:1, order:2 },
+      { label:'馬自達 人均', data:mzAvgArr, backgroundColor:'#1D9E75BB', borderColor:'#1D9E75', borderWidth:1, order:2 },
+      { label:'總人均', data:totalAvgArr, type:'line', borderColor:'#888', borderWidth:2, borderDash:[5,3], pointRadius:4, pointBackgroundColor:'#888', fill:false, tension:0.3, order:1 }
+    ]},
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false}, tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}：${ctx.parsed.y!=null?ctx.parsed.y.toFixed(1)+' 隻':'無資料'}`}} },
+      scales:{
+        x:{grid:{display:false},ticks:{font:{size:11},autoSkip:true,maxTicksLimit:15}},
+        y:{min:0,grid:{color:'rgba(136,135,128,0.12)'},ticks:{font:{size:11},callback:v=>v+' 隻'}}
+      }
+    }
+  });
+
+  const WEEKDAY_NAMES = ['週日','週一','週二','週三','週四','週五','週六'];
+
+  const tbody = document.getElementById('dailyTbody');
+  tbody.innerHTML = '';
+
+  // Accumulate totals for summary row
+  let sumBxTotal = 0, sumBxPax = 0, sumMzTotal = 0, sumMzPax = 0, workDays = 0;
+
+  filteredDates.forEach(d => {
+    const r = dailyComputed[d];
+    const isoD = dateToISO(d);
+    const dow = new Date(isoD).getDay(); // 0=Sun,6=Sat
+    const isWeekend = dow === 0 || dow === 6;
+    const isSat = dow === 6;
+    const isSun = dow === 0;
+
+    const wdName  = WEEKDAY_NAMES[dow];
+    const wdColor = isSat ? '#378ADD' : isSun ? '#D85A30' : '#555';
+    const rowBg   = isWeekend ? '#f5f5f5' : '';
+    const numColor = isWeekend ? '#999' : '';
+
+    const bxAvg    = r.bxPax > 0 ? (r.bxTotal / r.bxPax).toFixed(1) : '—';
+    const mzAvg    = r.mzPax > 0 ? (r.mzTotal / r.mzPax).toFixed(1) : '—';
+    const totalPax = Math.max(r.bxPax, r.mzPax);
+    const totalAvg = totalPax > 0 ? ((r.bxTotal + r.mzTotal) / totalPax).toFixed(1) : '—';
+
+    const holidayBadge = isWeekend
+      ? `<span style="display:inline-block;background:#ccc;color:#fff;border-radius:20px;padding:2px 8px;font-size:12px;font-weight:700;margin-left:4px;">休</span>`
+      : '';
+
+    const wdCell = `<span style="font-size:15px;font-weight:700;color:${wdColor};">${wdName}</span>${holidayBadge}`;
+
+    // Only accumulate weekday data for totals
+    if (!isWeekend) {
+      sumBxTotal += r.bxTotal; sumBxPax += r.bxPax;
+      sumMzTotal += r.mzTotal; sumMzPax += r.mzPax;
+      workDays++;
+    }
+
+    const nc = numColor ? `color:${numColor};` : '';
+    const tr = document.createElement('tr');
+    tr.style.cssText = `border-bottom:0.5px solid #eee;height:48px;${rowBg ? 'background:' + rowBg + ';' : ''}`;
+    tr.innerHTML = `
+      <td style="padding:8px 10px;font-size:15px;font-weight:700;">${d.slice(5)}</td>
+      <td style="padding:8px 10px;">${wdCell}</td>
+      <td style="text-align:right;padding:8px 10px;font-size:15px;${nc || 'color:#378ADD;'}">${bxAvg}</td>
+      <td style="text-align:right;padding:8px 10px;font-size:15px;${nc || 'color:#888;'}">${r.bxPax} 人</td>
+      <td style="text-align:right;padding:8px 10px;font-size:15px;${nc || 'color:#1D9E75;'}">${mzAvg}</td>
+      <td style="text-align:right;padding:8px 10px;font-size:15px;${nc || 'color:#888;'}">${r.mzPax} 人</td>
+      <td style="text-align:right;padding:8px 10px;font-size:15px;font-weight:500;${nc}">${totalAvg}</td>
+      <td style="text-align:center;padding:8px 10px;">${isWeekend ? `<span style="display:inline-block;background:#bbb;color:#fff;border-radius:20px;padding:3px 10px;font-size:12px;font-weight:700;">假日</span>` : ''}</td>`;
+    tbody.appendChild(tr);
+  });
+
+  // Summary / totals row (weekdays only)
+  if (filteredDates.length > 0) {
+    const totBxAvg  = sumBxPax  > 0 ? (sumBxTotal  / sumBxPax ).toFixed(1) : '—';
+    const totMzAvg  = sumMzPax  > 0 ? (sumMzTotal  / sumMzPax ).toFixed(1) : '—';
+    const totPax    = Math.max(sumBxPax, sumMzPax);
+    const totAvg    = totPax    > 0 ? ((sumBxTotal + sumMzTotal) / totPax).toFixed(1) : '—';
+    const totRow    = document.createElement('tr');
+    totRow.style.cssText = 'border-top:2px solid #ddd;background:#fafafa;height:48px;';
+    totRow.innerHTML = `
+      <td style="padding:8px 10px;font-size:16px;font-weight:700;">合計</td>
+      <td style="padding:8px 10px;font-size:14px;color:#aaa;">${workDays} 工作天</td>
+      <td style="text-align:right;padding:8px 10px;font-size:16px;font-weight:700;color:#378ADD;">${totBxAvg}</td>
+      <td style="text-align:right;padding:8px 10px;font-size:16px;font-weight:700;color:#888;">—</td>
+      <td style="text-align:right;padding:8px 10px;font-size:16px;font-weight:700;color:#1D9E75;">${totMzAvg}</td>
+      <td style="text-align:right;padding:8px 10px;font-size:16px;font-weight:700;color:#888;">—</td>
+      <td style="text-align:right;padding:8px 10px;font-size:16px;font-weight:700;">${totAvg}</td>
+      <td></td>`;
+    tbody.appendChild(totRow);
+  }
+}
+
+// ── Efficiency Tab ────────────────────────────────────────────────────────────
+function refreshEfficiency() {
+  const bxTarget = parseInt(document.getElementById('bxTarget').value) || 40;
+  const mzTarget = parseInt(document.getElementById('mzTarget').value) || 25;
+  const lastDate = filteredDates[filteredDates.length - 1];
+
+  // Cards
+  const container = document.getElementById('effCards');
+  container.innerHTML = '';
+  if (!lastDate) { container.innerHTML = '<div style="font-size:12px;color:#aaa;">無資料</div>'; buildSummary(bxTarget,mzTarget); return; }
+
+  // Today vs past: ratio used as denominator multiplier
+  const isViewingToday = lastDate && dateToISO(lastDate) === today();
+  const planRatio = isViewingToday ? getCommittedPlanRatio(nowMin()) : 1.0;
+  const bxCommitted = bxTarget * planRatio;  // cumulative plan target for current moment
+  const mzCommitted = mzTarget * planRatio;
+
+  // Update section title
+  const titleEl = document.getElementById('effStatusTitle');
+  if (titleEl) {
+    titleEl.textContent = isViewingToday
+      ? `即時人員狀態（今天 ${lastDate} — 依目前時段累計目標）`
+      : `人員狀態（${lastDate||'—'} 全天結果）`;
+  }
+
+  // Rate colour for a row
+  function rateColor(rate) {
+    if (rate >= 100) return '#1D9E75';
+    if (rate >= 80)  return '#e67e22';
+    return '#e74c3c';
+  }
+
+  persons.forEach(pid => {
+    const d = personData[pid];
+    const bxQty = d.bx[lastDate] || 0;
+    const mzQty = d.mz[lastDate] || 0;
+    const absent = bxQty === 0 && mzQty === 0;
+
+    // Per-type instant achievement rate (null when the person didn't work that type)
+    const bxRate = bxQty > 0 && bxCommitted > 0 ? Math.round(bxQty / bxCommitted * 100)
+                 : bxQty > 0                     ? 100   // committed = 0 (pre-shift) but has qty → 100%
+                 : null;                                  // didn't work this type → not counted
+    const mzRate = mzQty > 0 && mzCommitted > 0 ? Math.round(mzQty / mzCommitted * 100)
+                 : mzQty > 0                     ? 100
+                 : null;
+
+    // Overall light: green if any present type ≥ 100%; yellow if best ≥ 80%; red otherwise
+    let overallLight;
+    if (absent) {
+      overallLight = '⚫';
+    } else {
+      const rates = [bxRate, mzRate].filter(r => r !== null);
+      const best  = rates.length ? Math.max(...rates) : 0;
+      overallLight = best >= 100 ? '🟢' : best >= 80 ? '🟡' : '🔴';
+    }
+
+    // Row for each type — only shown when the person actually worked that type today
+    function typeRow(label, qty, committed, rate, colorBase) {
+      if (qty === 0) return '';
+      const goal  = committed > 0 ? Math.round(committed) : '—';
+      const color = rateColor(rate ?? 0);
+      const rateStr = rate !== null ? `(${rate}%)` : '';
+      return `<div style="font-size:15px;color:${color};margin-top:3px;">${label} ${qty}/${goal}隻 ${rateStr}</div>`;
+    }
+
+    const bxRow = typeRow('保', bxQty, bxCommitted, bxRate, '#378ADD');
+    const mzRow = typeRow('馬', mzQty, mzCommitted, mzRate, '#1D9E75');
+
+    const subLabel = isViewingToday && planRatio > 0
+      ? `<div style="font-size:15px;color:#aaa;margin-top:2px;">進度 ${Math.round(planRatio*100)}%</div>`
+      : '';
+
+    const card = document.createElement('div');
+    card.className = 'eff-card' + (absent?' absent':'') + (selectedEffPid===pid?' selected':'');
+    card.onclick = () => toggleEffDetail(pid);
+    card.innerHTML = `
+      <div class="light">${overallLight}</div>
+      <div class="eid">${pid}</div>
+      ${absent
+        ? '<div style="font-size:15px;color:#aaa;margin-top:3px;">未出勤</div>'
+        : bxRow + mzRow + subLabel}`;
+    container.appendChild(card);
+  });
+
+  if (selectedEffPid && personData[selectedEffPid]) {
+    renderEffChart(selectedEffPid, bxTarget, mzTarget);
+  }
+  buildSummary(bxTarget, mzTarget);
+  buildCumulativeStatus(bxTarget, mzTarget);
+}
+
+function buildCumulativeStatus(bxTarget, mzTarget) {
+  const container = document.getElementById('cumStatusCards');
+  const titleEl   = document.getElementById('cumStatusTitle');
+  if (!container) return;
+
+  // Calculate date range: this month 1st → yesterday; if today is 1st → last full month
+  const todayISO  = today();
+  const todayDate = new Date(todayISO);
+  let rangeStart, rangeEnd;
+  if (todayDate.getDate() === 1) {
+    rangeEnd   = addDays(todayISO, -1); // last day of previous month
+    rangeStart = rangeEnd.slice(0, 7) + '-01';
+  } else {
+    rangeStart = todayISO.slice(0, 7) + '-01';
+    rangeEnd   = addDays(todayISO, -1);
+  }
+  const rangeLabel = `${rangeStart.replace(/-/g,'/')} ～ ${rangeEnd.replace(/-/g,'/')}`;
+
+  if (titleEl) {
+    titleEl.innerHTML = `本月累積狀態（截至昨日）<div style="font-size:13px;font-weight:400;color:#aaa;margin-top:3px;">${rangeLabel}</div>`;
+  }
+
+  // Build per-person stats within rangeStart..rangeEnd
+  const pMap = {};
+  allRecords.forEach(([date, pid, type]) => {
+    const iso = dateToISO(date);
+    if (iso < rangeStart || iso > rangeEnd) return;
+    if (pid && !/^\d{4}[-\/]/.test(pid)) {
+      if (!pMap[pid]) pMap[pid] = { bx: {}, mz: {} };
+      pMap[pid][type][date] = (pMap[pid][type][date] || 0) + 1;
+    }
+  });
+
+  const pids = Object.keys(pMap).sort();
+  if (!pids.length) { container.innerHTML = '<div style="font-size:15px;color:#aaa;padding:1rem;">此區間無資料</div>'; return; }
+
+  const stats = pids.map(pid => {
+    const d = pMap[pid];
+    const allDays    = new Set([...Object.keys(d.bx), ...Object.keys(d.mz)]);
+    const attendDays = allDays.size;
+
+    // 累積量計算：每出勤一天就累加一天目標與當天實績
+    const bxDays   = Object.keys(d.bx).length;
+    const bxActual = Object.values(d.bx).reduce((s, v) => s + v, 0);
+    const bxGoal   = bxDays * bxTarget;
+    const bxRate   = bxGoal > 0 ? Math.round(bxActual / bxGoal * 100) : null;
+
+    const mzDays   = Object.keys(d.mz).length;
+    const mzActual = Object.values(d.mz).reduce((s, v) => s + v, 0);
+    const mzGoal   = mzDays * mzTarget;
+    const mzRate   = mzGoal > 0 ? Math.round(mzActual / mzGoal * 100) : null;
+
+    const totalActual = bxActual + mzActual;
+    const totalGoal   = bxGoal + mzGoal;
+    const overallRate = totalGoal > 0 ? Math.round(totalActual / totalGoal * 100) : 0;
+
+    return { pid, attendDays, bxDays, bxActual, bxGoal, bxRate, mzDays, mzActual, mzGoal, mzRate, totalActual, totalGoal, overallRate };
+  });
+  stats.sort((a, b) => b.overallRate - a.overallRate);
+
+  container.innerHTML = '';
+  stats.forEach(s => {
+    // 進度條顏色：≥100% 綠、80-99% 橘、<80% 紅
+    const circleColor = s.overallRate >= 100 ? '#1D9E75' : s.overallRate >= 80 ? '#e67e22' : '#e74c3c';
+    const r = 34, circ = Math.round(2 * Math.PI * r);
+    // 進度條最多顯示到 100%
+    const pct = Math.min(s.overallRate, 100);
+    const offset = Math.round(circ * (1 - pct / 100));
+
+    const card = document.createElement('div');
+    card.className = 'person-card';
+    card.style.marginBottom = '0.75rem';
+    card.innerHTML = `
+      <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;">
+        <div style="flex:1;min-width:220px;">
+          <div style="font-size:22px;font-weight:700;margin-bottom:8px;">工號 ${s.pid}</div>
+          <div style="font-size:15px;color:#666;margin-bottom:10px;">統計出勤 <b style="font-size:18px;font-weight:700;color:#1a1a18;">${s.attendDays}</b> 天</div>
+          <div style="display:flex;gap:20px;flex-wrap:wrap;">
+            <div>
+              <div style="font-size:15px;color:#888;margin-bottom:4px;">保險桿</div>
+              <div style="font-size:15px;line-height:1.8;">
+                累積實績 <b style="font-size:18px;font-weight:700;color:#378ADD;">${s.bxActual}</b> 隻 /
+                累積目標 <b style="font-size:18px;font-weight:700;color:#378ADD;">${s.bxGoal}</b> 隻 /
+                達標率 <b style="font-size:18px;font-weight:700;color:#378ADD;">${s.bxRate !== null ? s.bxRate + '%' : '—'}</b>
+              </div>
+            </div>
+            <div>
+              <div style="font-size:15px;color:#888;margin-bottom:4px;">馬自達</div>
+              <div style="font-size:15px;line-height:1.8;">
+                累積實績 <b style="font-size:18px;font-weight:700;color:#1D9E75;">${s.mzActual}</b> 隻 /
+                累積目標 <b style="font-size:18px;font-weight:700;color:#1D9E75;">${s.mzGoal}</b> 隻 /
+                達標率 <b style="font-size:18px;font-weight:700;color:#1D9E75;">${s.mzRate !== null ? s.mzRate + '%' : '—'}</b>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div style="text-align:center;flex-shrink:0;">
+          <svg viewBox="0 0 96 96" style="width:110px;height:110px;">
+            <circle cx="48" cy="48" r="${r}" fill="none" stroke="#eee" stroke-width="9"/>
+            <circle cx="48" cy="48" r="${r}" fill="none"
+              stroke="${circleColor}" stroke-width="9" stroke-linecap="round"
+              stroke-dasharray="${circ}" stroke-dashoffset="${offset}"
+              transform="rotate(-90 48 48)"/>
+            <text x="48" y="44" text-anchor="middle" fill="${circleColor}"
+              font-size="18" font-weight="700" font-family="system-ui">${s.overallRate}%</text>
+            <text x="48" y="62" text-anchor="middle" fill="#888"
+              font-size="10" font-family="system-ui">${s.totalActual}/${s.totalGoal} 隻</text>
+          </svg>
+          <div style="font-size:15px;color:#888;margin-top:2px;">整體達標率</div>
+        </div>
+      </div>`;
+    container.appendChild(card);
+  });
+}
+
+function toggleEffDetail(pid) {
+  if (selectedEffPid === pid) {
+    selectedEffPid = null;
+    document.getElementById('effDetail').style.display = 'none';
+  } else {
+    selectedEffPid = pid;
+    document.getElementById('effDetail').style.display = 'block';
+    const bxTarget = parseInt(document.getElementById('bxTarget').value) || 40;
+    const mzTarget = parseInt(document.getElementById('mzTarget').value) || 25;
+    renderEffChart(pid, bxTarget, mzTarget);
+  }
+  // Update card selection
+  document.querySelectorAll('.eff-card').forEach((c,i) => {
+    c.classList.toggle('selected', persons[i]===selectedEffPid);
+  });
+}
+
+function closeEffDetail() {
+  selectedEffPid = null;
+  document.getElementById('effDetail').style.display = 'none';
+  document.querySelectorAll('.eff-card').forEach(c=>c.classList.remove('selected'));
+}
+
+function renderEffChart(pid, bxTarget, mzTarget) {
+  document.getElementById('effDetailTitle').textContent = `工號 ${pid} — 每日產量推移`;
+  const d = personData[pid];
+  const labels = filteredDates.map(dt=>dt.slice(5));
+  const bxArr = filteredDates.map(dt => d.bx[dt] ?? null);
+  const mzArr = filteredDates.map(dt => d.mz[dt] ?? null);
+
+  // Point colors based on target
+  const bxPointColors = filteredDates.map(dt => {
+    const v = d.bx[dt];
+    if (v == null) return 'transparent';
+    return v >= bxTarget ? '#1D9E75' : '#e74c3c';
+  });
+  const mzPointColors = filteredDates.map(dt => {
+    const v = d.mz[dt];
+    if (v == null) return 'transparent';
+    return v >= mzTarget ? '#1D9E75' : '#e74c3c';
+  });
+
+  if (effChartInst) { effChartInst.destroy(); effChartInst = null; }
+  effChartInst = new Chart(document.getElementById('effChart'), {
+    type:'line',
+    data:{ labels, datasets:[
+      { label:'保險桿', data:bxArr, borderColor:'#378ADD', backgroundColor:'rgba(55,138,221,0.06)', borderWidth:2, pointRadius:5, pointBackgroundColor:bxPointColors, fill:true, tension:0.3, spanGaps:false },
+      { label:'馬自達', data:mzArr, borderColor:'#1D9E75', backgroundColor:'rgba(29,158,117,0.06)', borderWidth:2, pointRadius:5, pointBackgroundColor:mzPointColors, fill:true, tension:0.3, spanGaps:false, borderDash:[5,3] },
+      { label:'保險桿目標', data:filteredDates.map(()=>bxTarget), borderColor:'#378ADD55', borderWidth:1.5, borderDash:[4,4], pointRadius:0, fill:false },
+      { label:'馬自達目標', data:filteredDates.map(()=>mzTarget), borderColor:'#1D9E7555', borderWidth:1.5, borderDash:[4,4], pointRadius:0, fill:false }
+    ]},
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{display:false},
+        tooltip:{callbacks:{label:ctx=>{
+          if(ctx.datasetIndex>=2) return `${ctx.dataset.label}：${ctx.parsed.y} 隻`;
+          return ctx.parsed.y!=null?`${ctx.dataset.label}：${ctx.parsed.y} 隻`:'';
+        }}}
+      },
+      scales:{
+        x:{grid:{color:'rgba(136,135,128,0.12)'},ticks:{font:{size:11},autoSkip:true,maxTicksLimit:15}},
+        y:{min:0,grid:{color:'rgba(136,135,128,0.12)'},ticks:{font:{size:11},callback:v=>v+' 隻'}}
+      }
+    }
+  });
+}
+
+function buildSummary(bxTarget, mzTarget) {
+  // ── 分部件達標率 ──────────────────────────────────────────────
+  // bx: 有出勤保險桿才計入分母；mz 同理
+  let bxPassDays=0, bxWorkDays=0, mzPassDays=0, mzWorkDays=0;
+  let bestStreak=0, bestStreakPid='—';
+  let weekAvgMap = {};
+
+  const weekStart = isoToSlash(addDays(isoToSlash(mondayOfWeek(today())).replace(/\//g,'-')+'',0));
+  const last3 = filteredDates.slice(-3);
+
+  persons.forEach(pid => {
+    const d = personData[pid];
+    let streak=0, maxStreak=0;
+
+    filteredDates.forEach(dt => {
+      const bxQ = d.bx[dt]||0, mzQ = d.mz[dt]||0;
+
+      // 保險桿達標統計（只計算當天有做保險桿的）
+      if (bxQ > 0) {
+        bxWorkDays++;
+        if (bxQ >= bxTarget) bxPassDays++;
+      }
+      // 馬自達達標統計（只計算當天有做馬自達的）
+      if (mzQ > 0) {
+        mzWorkDays++;
+        if (mzQ >= mzTarget) mzPassDays++;
+      }
+
+      // 連續達標：當天有出勤且所有有做的部件都達標才算連續
+      const total = bxQ + mzQ;
+      if (total === 0) { streak=0; return; }
+      const bxOk = bxQ===0 || bxQ>=bxTarget;
+      const mzOk = mzQ===0 || mzQ>=mzTarget;
+      if (bxOk && mzOk) { streak++; maxStreak=Math.max(maxStreak,streak); }
+      else streak=0;
+    });
+
+    if (maxStreak > bestStreak) { bestStreak=maxStreak; bestStreakPid=pid; }
+
+    // 本週平均
+    const wkDates = filteredDates.filter(dt => dateToISO(dt) >= dateToISO(weekStart));
+    const wkTotal = wkDates.reduce((s,dt)=>(d.bx[dt]||0)+(d.mz[dt]||0)+s, 0);
+    const wkDays  = wkDates.filter(dt=>(d.bx[dt]||0)+(d.mz[dt]||0)>0).length;
+    weekAvgMap[pid] = wkDays>0?(wkTotal/wkDays):0;
+  });
+
+  const bestWeekPid = Object.entries(weekAvgMap).sort((a,b)=>b[1]-a[1])[0];
+
+  // 趨勢（近三天全隊總產量）
+  let trendText = '→ 持平';
+  if (last3.length >= 2) {
+    const vals = last3.map(dt => persons.reduce((s,pid)=>(personData[pid].bx[dt]||0)+(personData[pid].mz[dt]||0)+s,0));
+    const first = vals[0], last = vals[vals.length-1];
+    trendText = last > first*1.05 ? '↑ 上升' : last < first*0.95 ? '↓ 下降' : '→ 持平';
+  }
+
+  const grid = document.getElementById('summaryGrid');
+  grid.innerHTML = `
+    <div class="summary-item">
+      <div class="si-label">連續達標最多</div>
+      <div class="si-val">${bestStreakPid} <span style="font-size:18px;color:#888;">${bestStreak} 天</span></div>
+    </div>
+    <div class="summary-item">
+      <div class="si-label">本週平均最高</div>
+      <div class="si-val">${bestWeekPid?bestWeekPid[0]:'—'} <span style="font-size:18px;color:#888;">${bestWeekPid?bestWeekPid[1].toFixed(1)+' 隻/天':''}</span></div>
+    </div>
+    <div class="summary-item">
+      <div class="si-label">近三天趨勢</div>
+      <div class="si-val">${trendText}</div>
+    </div>
+  `;
+}
+
+// ── Realtime Board ───────────────────────────────────────────────────────────
+const SEGMENTS = [
+  { name:'第一段', label:'08:00～10:00', start: 8*60,      end: 10*60,    min: 120 },
+  { name:'第二段', label:'10:10～12:00', start: 10*60+10,  end: 12*60,    min: 110 },
+  { name:'第三段', label:'12:30～14:30', start: 12*60+30,  end: 14*60+30, min: 120 },
+  { name:'第四段', label:'14:40～18:30', start: 14*60+40,  end: 18*60+30, min: 230 },
+  { name:'第五段', label:'19:00～21:00', start: 19*60,     end: 21*60,    min: 120 },
+];
+const TOTAL_WORK_MIN = 700;
+SEGMENTS.forEach(s => { s.ratio = s.min / TOTAL_WORK_MIN; });
+
+const BREAKS = [
+  { label:'10:00～10:10', start: 10*60,    end: 10*60+10 },
+  { label:'12:00～12:30', start: 12*60,    end: 12*60+30 },
+  { label:'14:30～14:40', start: 14*60+30, end: 14*60+40 },
+  { label:'18:30～19:00', start: 18*60+30, end: 19*60    },
+];
+const SHIFT_START = 8*60, SHIFT_END = 21*60;
+
+function nowMin() {
+  const d = new Date();
+  return d.getHours()*60 + d.getMinutes();
+}
+
+function parseTimestampMinutes(rawTs) {
+  if (!rawTs) return null;
+  // 上午/下午 (Chinese AM/PM)
+  const ampm = rawTs.match(/(上午|下午)\s*(\d{1,2}):(\d{2})/);
+  if (ampm) {
+    let h = parseInt(ampm[2]), m = parseInt(ampm[3]);
+    if (ampm[1]==='下午' && h<12) h += 12;
+    if (ampm[1]==='上午' && h===12) h = 0;
+    return h*60 + m;
+  }
+  // 24h HH:MM or H:MM
+  const t24 = rawTs.match(/\b(\d{1,2}):(\d{2})(?::\d{2})?\b/);
+  if (t24) return parseInt(t24[1])*60 + parseInt(t24[2]);
+  return null;
+}
+
+function getSegmentIdx(mins) {
+  if (mins == null) return -1;
+  for (const brk of BREAKS) {
+    if (mins >= brk.start && mins < brk.end) {
+      // 休息中 → 歸入下一個時段
+      for (let i=0; i<SEGMENTS.length; i++) {
+        if (SEGMENTS[i].start >= brk.end) return i;
+      }
+      return -1;
+    }
+  }
+  for (let i=0; i<SEGMENTS.length; i++) {
+    if (mins >= SEGMENTS[i].start && mins < SEGMENTS[i].end) return i;
+  }
+  return -1;
+}
+
+function currentSegIdx() { return getSegmentIdx(nowMin()); }
+
+// Returns 0..1: fraction of total work time elapsed as of nowMins
+function getCommittedPlanRatio(nowMins) {
+  const curSeg = getSegmentIdx(nowMins);
+  let elapsed = 0;
+  for (let i = 0; i < SEGMENTS.length; i++) {
+    const seg = SEGMENTS[i];
+    if (nowMins >= seg.end)   { elapsed += seg.min; }
+    else if (i === curSeg)    { elapsed += Math.max(0, nowMins - seg.start); }
+  }
+  return elapsed / TOTAL_WORK_MIN;
+}
+
+function minutesToNextEvent() {
+  const now = nowMin();
+  if (now < SHIFT_START) return { text: `班前（${SHIFT_START-now} 分鐘後開班）` };
+  if (now >= SHIFT_END)  return { text: '已下班' };
+  for (const brk of BREAKS) {
+    if (now >= brk.start && now < brk.end) return { text: `休息中（${brk.end-now} 分鐘後復工）` };
+    if (now < brk.start)  return { text: `${brk.start-now} 分鐘後` };
+  }
+  return { text: `${SHIFT_END-now} 分鐘後下班` };
+}
+
+// Timer state
+let rtTimerInterval = null;
+let rtCountdownSec  = 300;
+
+function startRealtimeTimer() {
+  stopRealtimeTimer();
+  rtCountdownSec = 300;
+  rtTimerInterval = setInterval(() => {
+    rtCountdownSec--;
+    const m = Math.floor(rtCountdownSec/60);
+    const s = String(rtCountdownSec%60).padStart(2,'0');
+    const cd = document.getElementById('rtCountdown');
+    if (cd) cd.textContent = `${m}:${s}`;
+    if (rtCountdownSec <= 0) {
+      rtCountdownSec = 300;
+      const boardDate = filteredDates.length ? filteredDates[filteredDates.length-1] : null;
+      if (!boardDate || dateToISO(boardDate) !== today()) { stopRealtimeTimer(); return; }
+      const id = localStorage.getItem('gsId'), key = localStorage.getItem('gsKey');
+      const sh = localStorage.getItem('gsSheet') || '整修日報';
+      if (id && key) {
+        fetchFromSheets(id, key, sh).then(() => {
+          if (currentView==='realtime') buildRealtimeBoard();
+        });
+      } else {
+        if (currentView==='realtime') buildRealtimeBoard();
+      }
+    }
+  }, 1000);
+}
+
+function stopRealtimeTimer() {
+  if (rtTimerInterval) { clearInterval(rtTimerInterval); rtTimerInterval = null; }
+}
+
+function rtRateColor(rate) {
+  if (rate === null) return '#aaa';
+  if (rate >= 100)  return '#1D9E75';
+  if (rate >= 85)   return '#e67e22';
+  return '#e74c3c';
+}
+
+function rtStatus(rate) {
+  if (rate === null) return { emoji: '', text: '', color: '#aaa' };
+  if (rate >= 100)  return { emoji: '😊', text: '已達標',   color: '#1D9E75' };
+  if (rate >= 85)   return { emoji: '💪', text: '加油衝刺', color: '#e67e22' };
+  return                   { emoji: '😢', text: '需要加速', color: '#e74c3c' };
+}
+
+function updateRtProgress(rate) {
+  const circle = document.getElementById('rtProgressCircle');
+  const label  = document.getElementById('rtProgressPct');
+  if (!circle || !label) return;
+  const circumference = 565;
+  const pct = rate != null ? Math.min(rate, 100) : 0;
+  const offset = circumference - (pct / 100) * circumference;
+  circle.style.strokeDashoffset = offset;
+  circle.style.stroke = rtRateColor(rate);
+  label.textContent = rate != null ? rate + '%' : '—';
+  label.style.fill  = rtRateColor(rate);
+}
+
+function buildRealtimeBoard() {
+  const bxTarget = parseInt(document.getElementById('bxTarget').value) || 40;
+  const mzTarget = parseInt(document.getElementById('mzTarget').value) || 25;
+
+  // Determine board date from date filter (last date in range)
+  const boardDateSlash = filteredDates.length ? filteredDates[filteredDates.length - 1] : isoToSlash(today());
+  const boardISO = dateToISO(boardDateSlash);
+  const isToday  = boardISO === today();
+
+  // For realtime: use actual clock; for history: treat as shift-end (all segments past)
+  const now    = isToday ? nowMin() : SHIFT_END;
+  const curSeg = isToday ? currentSegIdx() : -1;
+
+  // 該日記錄
+  const dayRecs   = allRecords.filter(r => dateToISO(r[0]) === boardISO);
+  const hasTsData = dayRecs.some(r => r[3] != null);
+
+  // 出勤人數
+  const bxWorkers = new Set(dayRecs.filter(r=>r[2]==='bx').map(r=>r[1])).size;
+  const mzWorkers = new Set(dayRecs.filter(r=>r[2]==='mz').map(r=>r[1])).size;
+  const bxDayTarget = bxTarget * bxWorkers;
+  const mzDayTarget = mzTarget * mzWorkers;
+  const dayTarget   = bxDayTarget + mzDayTarget;
+
+  // 時段實績（合計）
+  const segTotal = SEGMENTS.map(()=>0);
+  let noTs = 0;
+  dayRecs.forEach(([,, , tsMin]) => {
+    const idx = getSegmentIdx(tsMin);
+    if (idx >= 0) segTotal[idx]++;
+    else          noTs++;
+  });
+
+  // 頂部資訊
+  const rtDate = document.getElementById('rtDate');
+  const rtSeg  = document.getElementById('rtCurSeg');
+  const rtNext = document.getElementById('rtNextBreak');
+  const rtLU   = document.getElementById('rtLastUpdate');
+  if (rtDate) rtDate.textContent = boardDateSlash + (isToday ? '' : '（歷史）');
+  if (rtSeg) {
+    if (isToday) {
+      rtSeg.textContent = curSeg>=0
+        ? `${SEGMENTS[curSeg].name}（${SEGMENTS[curSeg].label}）`
+        : (now<SHIFT_START?'班前':now>=SHIFT_END?'已下班':'休息中');
+    } else {
+      rtSeg.textContent = '歷史看板';
+    }
+  }
+  if (rtNext) rtNext.textContent = isToday ? minutesToNextEvent().text : '—';
+  if (rtLU)   rtLU.textContent   = new Date().toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+
+  renderRtTableMerged(segTotal, dayTarget, hasTsData, curSeg, now, isToday);
+
+  const totalActual = segTotal.reduce((a,b)=>a+b,0) + (hasTsData ? 0 : noTs);
+  renderRtOverall(totalActual, dayTarget, bxDayTarget, mzDayTarget,
+    dayRecs.filter(r=>r[2]==='bx').length, dayRecs.filter(r=>r[2]==='mz').length);
+
+  // Manage timer: only auto-refresh when viewing today
+  if (isToday) startRealtimeTimer();
+  else stopRealtimeTimer();
+}
+
+function renderRtTableMerged(segActuals, dayTarget, hasTsData, curSegIdx, now, isToday=true) {
+  const tbody = document.getElementById('rtTbody');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+
+  const segPlans = SEGMENTS.map(s => dayTarget * s.ratio);
+
+  let committedPlan = 0;
+  for (let i=0; i<SEGMENTS.length; i++) {
+    const seg = SEGMENTS[i];
+    if (now >= seg.end) {
+      committedPlan += segPlans[i];
+    } else if (i === curSegIdx) {
+      const elapsed = Math.max(0, now - seg.start);
+      committedPlan += dayTarget * (elapsed / TOTAL_WORK_MIN);
+    }
+  }
+
+  const endCumPlan = [];
+  let acc = 0;
+  SEGMENTS.forEach((s,i) => { acc += segPlans[i]; endCumPlan.push(acc); });
+
+  let cumActual = 0;
+  let lastRate = null;
+
+  SEGMENTS.forEach((seg, i) => {
+    const isPast    = now >= seg.end;
+    const isCurrent = i === curSegIdx;
+    const isFuture  = !isPast && !isCurrent;
+
+    const actual = (!isFuture && hasTsData) ? segActuals[i] : 0;
+    if (!isFuture) cumActual += actual;
+
+    const cumPlanDisplay = isCurrent ? committedPlan : endCumPlan[i];
+    const planForRate = isPast ? endCumPlan[i] : isCurrent ? committedPlan : null;
+    const rate = (planForRate != null && planForRate > 0 && hasTsData)
+      ? Math.round(cumActual / planForRate * 100) : null;
+    if (rate !== null) lastRate = rate;
+
+    const segPlanDisp = dayTarget>0 ? Math.round(segPlans[i])    : '—';
+    const cumPlanDisp = dayTarget>0 ? Math.round(cumPlanDisplay)  : '—';
+    const actualDisp  = isFuture ? '—' : hasTsData ? actual      : '?';
+    const cumActDisp  = isFuture ? '—' : hasTsData ? cumActual   : '?';
+
+    const st = rtStatus(rate);
+    const rateDisp = rate!=null
+      ? `<span style="color:${st.color};font-weight:800;font-size:24px;">${rate}%</span> <span style="font-size:20px;">${st.emoji}</span>`
+      : '<span style="color:#555;font-size:22px;">—</span>';
+
+    let rowStyle, nameColor, subColor;
+    if (isCurrent && isToday) {
+      rowStyle = 'background:#1a2744;';
+      nameColor = '#fff'; subColor = '#8ab4f8';
+    } else if (isFuture && isToday) {
+      rowStyle = '';
+      nameColor = '#444'; subColor = '#333';
+    } else {
+      rowStyle = '';
+      nameColor = '#ccc'; subColor = '#666';
+    }
+
+    const fw = isCurrent ? '700' : '500';
+
+    const tr = document.createElement('tr');
+    tr.style.cssText = `border-bottom:1px solid #1e2535;height:70px;${rowStyle}`;
+    tr.innerHTML = `
+      <td style="padding:0 20px;font-size:20px;font-weight:${fw};color:${nameColor};">${seg.name}<br>
+        <span style="font-size:13px;color:${subColor};">${seg.label}</span></td>
+      <td style="text-align:center;padding:0 12px;font-size:16px;color:#556;">${seg.min}分</td>
+      <td style="text-align:center;padding:0 20px;font-size:22px;color:#888;">${segPlanDisp}</td>
+      <td style="text-align:center;padding:0 20px;font-size:22px;color:#888;">${cumPlanDisp}</td>
+      <td style="text-align:center;padding:0 20px;font-size:22px;font-weight:600;color:${isFuture?'#333':'#e0e0e0'};">${actualDisp}</td>
+      <td style="text-align:center;padding:0 20px;font-size:22px;font-weight:600;color:${isFuture?'#333':'#e0e0e0'};">${cumActDisp}</td>
+      <td style="text-align:center;padding:0 28px;">${rateDisp}</td>`;
+    tbody.appendChild(tr);
+  });
+
+  updateRtProgress(lastRate);
+}
+
+function renderRtOverall(total, totalTarget, bxTarget, mzTarget, bxActual, mzActual) {
+  const totRate = totalTarget>0 ? Math.round(total/totalTarget*100) : null;
+  const st = rtStatus(totRate);
+
+  const cardBase = 'flex:1;background:#131929;border-radius:16px;padding:0 1rem;text-align:center;display:flex;flex-direction:column;justify-content:center;align-items:center;height:200px;';
+
+  const card = (label, val, unit='隻') => `
+    <div style="${cardBase}border:1px solid #1e2d50;">
+      <div style="font-size:14px;color:#8ab4f8;margin-bottom:6px;letter-spacing:1px;">${label}</div>
+      <div style="font-size:80px;font-weight:800;line-height:1;color:#ffffff;">${val}</div>
+      <div style="font-size:14px;color:#556;margin-top:6px;">${unit}</div>
+    </div>`;
+
+  const rateCard = `
+    <div style="${cardBase}border:2px solid ${st.color};">
+      <div style="font-size:14px;color:#8ab4f8;margin-bottom:6px;letter-spacing:1px;">累計達成率</div>
+      <div style="font-size:72px;font-weight:800;line-height:1;color:${st.color};">${totRate!=null?totRate+'%':'—'}</div>
+      <div style="font-size:20px;color:${st.color};margin-top:10px;">${st.emoji} ${st.text}</div>
+    </div>`;
+
+  const breakdown = `
+    <div style="${cardBase.replace('text-align:center;','').replace('align-items:center;','')}border:1px solid #1e2d50;padding:0 1.6rem;align-items:stretch;">
+      <div style="font-size:14px;color:#8ab4f8;margin-bottom:16px;letter-spacing:1px;text-align:left;">今日明細</div>
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:16px;">
+        <span style="color:#aaa;font-size:16px;">保險桿</span>
+        <span style="color:#e0e0e0;font-size:28px;font-weight:700;">${bxActual} <span style="font-size:14px;color:#556;">/ ${bxTarget}</span></span>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:baseline;">
+        <span style="color:#aaa;font-size:16px;">馬自達</span>
+        <span style="color:#e0e0e0;font-size:28px;font-weight:700;">${mzActual} <span style="font-size:14px;color:#556;">/ ${mzTarget}</span></span>
+      </div>
+    </div>`;
+
+  const el = document.getElementById('rtOverall');
+  if (el) el.innerHTML =
+    card('累計實績', total) +
+    card('累計目標', totalTarget) +
+    rateCard +
+    breakdown;
+}
+
+// ── Quality Tab ──────────────────────────────────────────────────────────────
+let qualityType     = 'bx';
+let qualitySub      = 'model';
+const qCharts       = {};
+const qModelChecked = new Set();
+const qColorChecked = new Set();
+
+function setQualityType(t) {
+  qualityType = t;
+  document.getElementById('qToggleBx').classList.toggle('active', t === 'bx');
+  document.getElementById('qToggleMz').classList.toggle('active', t === 'mz');
+  qModelChecked.clear(); qColorChecked.clear();
+  buildQualityView();
+}
+
+function setQualitySub(sub) {
+  qualitySub = sub;
+  ['model','part','color'].forEach(s => {
+    document.getElementById(`qSub-${s}`).style.display = s === sub ? '' : 'none';
+    const btn = document.getElementById(`qSub${s.charAt(0).toUpperCase()+s.slice(1)}`);
+    if (btn) btn.classList.toggle('active', s === sub);
+  });
+  buildQualityView();
+}
+
+function getQualityRecs() {
+  const s = document.getElementById('startDate').value;
+  const e = document.getElementById('endDate').value;
+  return allRecords.filter(r => {
+    const iso = dateToISO(r[0]);
+    if ((s && iso < s) || (e && iso > e)) return false;
+    if (r[2] !== qualityType) return false;
+    return r[7] !== null && r[7] !== undefined;
+  });
+}
+
+function qWeekRange() {
+  const t = today();
+  const thisMon = mondayOfWeek(t);
+  const lastMon = addDays(thisMon, -7);
+  return { thisStart: thisMon, thisEnd: t, lastStart: lastMon, lastEnd: addDays(thisMon, -1) };
+}
+
+function qAvgByKey(recs, keyFn) {
+  const map = {};
+  recs.forEach(r => {
+    const k = keyFn(r) || '—';
+    if (!map[k]) map[k] = { count: 0, total: 0 };
+    map[k].count++;
+    map[k].total += r[7] || 0;
+  });
+  Object.keys(map).forEach(k => { map[k].avg = map[k].count > 0 ? map[k].total / map[k].count : 0; });
+  return map;
+}
+
+function qTrend(thisAvg, lastAvg) {
+  if (thisAvg === null || lastAvg === null) return { icon: '—', color: '#bbb', bg: null, label: '無資料' };
+  const d = thisAvg - lastAvg;
+  if (d > 0.2)  return { icon: '😟', color: '#D85A30', bg: '#D85A30', label: '退步' };
+  if (d < -0.2) return { icon: '😊', color: '#1D9E75', bg: '#1D9E75', label: '進步' };
+  return              { icon: '😐', color: '#888780', bg: '#888780', label: '持平' };
+}
+
+function qTrendBadge(tr) {
+  if (!tr.bg) return '<span style="color:#bbb;font-size:16px;">—</span>';
+  return `<span style="display:inline-flex;align-items:center;gap:4px;background:${tr.bg};color:#fff;border-radius:20px;padding:4px 10px;white-space:nowrap;"><span style="font-size:18px;">${tr.icon}</span><b style="font-size:14px;">${tr.label}</b></span>`;
+}
+
+function qSeverityColor(avg) {
+  if (avg >= 5) return '#e74c3c';
+  if (avg >= 3) return '#e67e22';
+  return '#1D9E75';
+}
+
+function qHeatBg(avg) {
+  if (avg >= 5) return '#e74c3c';
+  if (avg >= 4) return '#e67e22';
+  if (avg >= 3) return '#f39c12';
+  if (avg >= 2) return '#fdeaa7';
+  return '#d5f5e3';
+}
+
+function qHeatFg(avg) { return avg >= 3 ? '#fff' : '#1a1a18'; }
+
+// ── Main entry ────────────────────────────────────────────────────────────────
+function buildQualityView() {
+  const allRecs = getQualityRecs();
+  if (!allRecs.length) {
+    document.getElementById('qNoData').style.display = '';
+    ['model','part','color'].forEach(s => { document.getElementById(`qSub-${s}`).style.display = 'none'; });
+    return;
+  }
+  document.getElementById('qNoData').style.display = 'none';
+  ['model','part','color'].forEach(s => {
+    document.getElementById(`qSub-${s}`).style.display = s === qualitySub ? '' : 'none';
+  });
+  if      (qualitySub === 'model') buildSubModel();
+  else if (qualitySub === 'part')  buildSubPart();
+  else                              buildSubColor();
+}
+
+// ── Sub-tab 1: 車型分析 ───────────────────────────────────────────────────────
+function buildSubModel() {
+  const all  = getQualityRecs();
+  const wr   = qWeekRange();
+  const inWk = (r, s, e) => { const d = dateToISO(r[0]); return d >= s && d <= e; };
+  const thisR = all.filter(r => inWk(r, wr.thisStart, wr.thisEnd));
+  const lastR = all.filter(r => inWk(r, wr.lastStart, wr.lastEnd));
+  const ov = qAvgByKey(all,  r => r[4]);
+  const tw = qAvgByKey(thisR, r => r[4]);
+  const lw = qAvgByKey(lastR, r => r[4]);
+  const models = Object.keys(ov).sort((a, b) => ov[b].avg - ov[a].avg);
+
+  // Block A – Ranking table
+  const tb = document.getElementById('qModelRankTbody');
+  tb.innerHTML = '';
+  models.forEach((m, i) => {
+    const tA = tw[m]?.avg ?? null, lA = lw[m]?.avg ?? null;
+    const tr = qTrend(tA, lA);
+    const rkS = i < 3 ? 'color:#e74c3c;font-weight:700;font-size:20px;' : 'font-size:20px;font-weight:700;';
+    const row = document.createElement('tr');
+    row.style.cssText = `border-bottom:0.5px solid #eee;background:${i%2?'#f9f9f7':'#fff'};`;
+    row.innerHTML = `
+      <td style="padding:6px 10px;text-align:center;${rkS}">${i+1}</td>
+      <td style="padding:6px 10px;font-weight:500;">${m}</td>
+      <td style="text-align:right;padding:6px 10px;color:${qSeverityColor(tA??0)};">${tA!==null?tA.toFixed(1):'—'}</td>
+      <td style="text-align:right;padding:6px 10px;color:#888;">${lA!==null?lA.toFixed(1):'—'}</td>
+      <td style="text-align:center;padding:6px 8px;">${qTrendBadge(tr)}</td>
+      <td style="text-align:right;padding:6px 10px;">${ov[m].count}</td>
+      <td style="text-align:right;padding:6px 10px;">${ov[m].total.toFixed(1)}</td>`;
+    tb.appendChild(row);
+  });
+
+  // Block B – Bar chart
+  if (qCharts.modelBar) qCharts.modelBar.destroy();
+  qCharts.modelBar = new Chart(document.getElementById('qModelBarChart'), {
+    type: 'bar',
+    data: { labels: models, datasets: [{
+      data: models.map(m => +ov[m].avg.toFixed(2)),
+      backgroundColor: models.map(m => qSeverityColor(ov[m].avg)+'BB'),
+      borderColor: models.map(m => qSeverityColor(ov[m].avg)),
+      borderWidth: 1, borderRadius: 4
+    }]},
+    options: { responsive: true, maintainAspectRatio: false, animation: { duration: 500 },
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => {
+        const m = models[ctx.dataIndex], t = qTrend(tw[m]?.avg??null, lw[m]?.avg??null);
+        return [`平均：${ov[m].avg.toFixed(1)} 點/筆`, `筆數：${ov[m].count}`, `趨勢：${t.icon} ${t.label}（本週${tw[m]?.avg!=null?tw[m].avg.toFixed(1):'—'} / 上週${lw[m]?.avg!=null?lw[m].avg.toFixed(1):'—'}）`];
+      }}}},
+      scales: { x: { grid:{display:false}, ticks:{font:{size:14}} },
+                y: { min:0, ticks:{callback:v=>v+' 點',font:{size:14}}, grid:{color:'rgba(136,135,128,0.12)'} } }
+    }
+  });
+
+  // Block C – Line chart with checkboxes
+  if (qModelChecked.size === 0) models.slice(0,3).forEach(m => qModelChecked.add(m));
+  buildQCheckboxes('qModelCheckboxes', models, qModelChecked,
+    () => buildQLineChart('modelLine', all, r=>r[4], qModelChecked, 'qModelLineChart'));
+  buildQLineChart('modelLine', all, r=>r[4], qModelChecked, 'qModelLineChart');
+}
+
+// ── Sub-tab 2: 部件分析 ───────────────────────────────────────────────────────
+function buildSubPart() {
+  const all = getQualityRecs();
+  const wr  = qWeekRange();
+  const inWk = (r, s, e) => { const d = dateToISO(r[0]); return d >= s && d <= e; };
+
+  // Block A – Model selector
+  const models = ['', ...[...new Set(all.map(r => r[4]||'').filter(Boolean))].sort()];
+  const selEl  = document.getElementById('qPartModelSel');
+  const cur    = selEl.value;
+  selEl.innerHTML = models.map(m => `<option value="${m}">${m||'全部車型'}</option>`).join('');
+  if (models.includes(cur)) selEl.value = cur;
+  const sel  = selEl.value;
+  const recs = sel ? all.filter(r => r[4] === sel) : all;
+
+  // Block B – Heatmap (partType × colorCode)
+  const parts  = [...new Set(recs.map(r => r[5]||'—'))].sort();
+  const colors = [...new Set(recs.map(r => r[6]||'—'))].sort();
+  const cm = {};
+  recs.forEach(r => {
+    const k = `${r[5]||'—'}||${r[6]||'—'}`;
+    if (!cm[k]) cm[k] = {count:0,total:0};
+    cm[k].count++; cm[k].total += r[7]||0;
+  });
+  buildQHeatmap('qPartHeatmap', parts, colors,
+    (p,c) => { const k=`${p}||${c}`; if(!cm[k]) return null; return {avg:cm[k].total/cm[k].count,count:cm[k].count}; },
+    (p,c,avg,n) => `${sel||'全部'} / ${p} / ${c}：${avg.toFixed(1)} 點/筆・${n} 筆`);
+
+  // Block C – Trend table
+  const mk = rs => {
+    const m = {};
+    (sel ? rs.filter(r=>r[4]===sel) : rs).forEach(r => {
+      const k=`${r[5]||'—'}||${r[6]||'—'}`;
+      if(!m[k]) m[k]={count:0,total:0};
+      m[k].count++; m[k].total += r[7]||0;
+    });
+    return m;
+  };
+  const thisM = mk(all.filter(r=>inWk(r,wr.thisStart,wr.thisEnd)));
+  const lastM = mk(all.filter(r=>inWk(r,wr.lastStart,wr.lastEnd)));
+  const rows = [];
+  new Set([...Object.keys(thisM),...Object.keys(lastM)]).forEach(k => {
+    const [part,color] = k.split('||');
+    const tA = thisM[k] ? thisM[k].total/thisM[k].count : null;
+    const lA = lastM[k] ? lastM[k].total/lastM[k].count : null;
+    rows.push({part,color,tA,lA,diff:tA!==null&&lA!==null?tA-lA:null});
+  });
+  rows.sort((a,b) => (b.diff??-Infinity)-(a.diff??-Infinity));
+
+  const tb = document.getElementById('qPartTrendTbody');
+  tb.innerHTML = '';
+  rows.forEach((r,i) => {
+    const tr = qTrend(r.tA, r.lA);
+    const dc = r.diff===null?'#888':r.diff>0.2?'#e74c3c':r.diff<-0.2?'#1D9E75':'#888';
+    const ds = r.diff!==null?(r.diff>0?'+':'')+r.diff.toFixed(1):'—';
+    const row = document.createElement('tr');
+    row.style.cssText = `border-bottom:0.5px solid #eee;background:${i%2?'#f9f9f7':'#fff'};`;
+    row.innerHTML = `
+      <td style="padding:6px 10px;">${r.part}</td>
+      <td style="padding:6px 10px;">${r.color}</td>
+      <td style="text-align:right;padding:6px 10px;color:${qSeverityColor(r.tA??0)};">${r.tA!==null?r.tA.toFixed(1):'—'}</td>
+      <td style="text-align:right;padding:6px 10px;color:#888;">${r.lA!==null?r.lA.toFixed(1):'—'}</td>
+      <td style="text-align:right;padding:6px 10px;font-weight:600;color:${dc};">${ds}</td>
+      <td style="text-align:center;padding:6px 8px;">${qTrendBadge(tr)}</td>`;
+    tb.appendChild(row);
+  });
+}
+
+// ── Sub-tab 3: 顏色分析 ───────────────────────────────────────────────────────
+function buildSubColor() {
+  const all  = getQualityRecs();
+  const wr   = qWeekRange();
+  const inWk = (r, s, e) => { const d = dateToISO(r[0]); return d >= s && d <= e; };
+  const thisR = all.filter(r => inWk(r,wr.thisStart,wr.thisEnd));
+  const lastR = all.filter(r => inWk(r,wr.lastStart,wr.lastEnd));
+  const ov = qAvgByKey(all,  r => r[6]);
+  const tw = qAvgByKey(thisR, r => r[6]);
+  const lw = qAvgByKey(lastR, r => r[6]);
+  const colors = Object.keys(ov).sort((a,b) => ov[b].avg - ov[a].avg);
+
+  // Block A – Ranking table
+  const tb = document.getElementById('qColorRankTbody');
+  tb.innerHTML = '';
+  colors.forEach((c,i) => {
+    const tA = tw[c]?.avg??null, lA = lw[c]?.avg??null;
+    const tr = qTrend(tA,lA);
+    const rkS = i<3?'color:#e74c3c;font-weight:700;font-size:20px;':'font-size:20px;font-weight:700;';
+    const row = document.createElement('tr');
+    row.style.cssText = `border-bottom:0.5px solid #eee;background:${i%2?'#f9f9f7':'#fff'};`;
+    row.innerHTML = `
+      <td style="padding:6px 10px;text-align:center;${rkS}">${i+1}</td>
+      <td style="padding:6px 10px;font-weight:500;">${c}</td>
+      <td style="text-align:right;padding:6px 10px;color:${qSeverityColor(tA??0)};">${tA!==null?tA.toFixed(1):'—'}</td>
+      <td style="text-align:right;padding:6px 10px;color:#888;">${lA!==null?lA.toFixed(1):'—'}</td>
+      <td style="text-align:center;padding:6px 8px;">${qTrendBadge(tr)}</td>
+      <td style="text-align:right;padding:6px 10px;">${ov[c].count}</td>`;
+    tb.appendChild(row);
+  });
+
+  // Block B – Bar chart
+  if (qCharts.colorBar) qCharts.colorBar.destroy();
+  qCharts.colorBar = new Chart(document.getElementById('qColorBarChart'), {
+    type: 'bar',
+    data: { labels: colors, datasets: [{
+      data: colors.map(c => +ov[c].avg.toFixed(2)),
+      backgroundColor: colors.map(c => qSeverityColor(ov[c].avg)+'BB'),
+      borderColor: colors.map(c => qSeverityColor(ov[c].avg)),
+      borderWidth: 1, borderRadius: 4
+    }]},
+    options: { responsive: true, maintainAspectRatio: false, animation: { duration: 500 },
+      plugins: { legend:{display:false}, tooltip:{callbacks:{label:ctx=>{
+        const c=colors[ctx.dataIndex],t=qTrend(tw[c]?.avg??null,lw[c]?.avg??null);
+        return [`平均：${ov[c].avg.toFixed(1)} 點/筆`,`筆數：${ov[c].count}`,`趨勢：${t.icon} ${t.label}（本週${tw[c]?.avg!=null?tw[c].avg.toFixed(1):'—'} / 上週${lw[c]?.avg!=null?lw[c].avg.toFixed(1):'—'}）`];
+      }}}},
+      scales:{x:{grid:{display:false},ticks:{font:{size:14}}},
+              y:{min:0,ticks:{callback:v=>v+' 點',font:{size:14}},grid:{color:'rgba(136,135,128,0.12)'}}}
+    }
+  });
+
+  // Block C – Line chart
+  const colorTrendFn = k => qTrend(tw[k]?.avg ?? null, lw[k]?.avg ?? null);
+  if (qColorChecked.size === 0) colors.slice(0,3).forEach(c => qColorChecked.add(c));
+  buildQCheckboxes('qColorCheckboxes', colors, qColorChecked,
+    () => buildQLineChart('colorLine', all, r=>r[6], qColorChecked, 'qColorLineChart', colorTrendFn));
+  buildQLineChart('colorLine', all, r=>r[6], qColorChecked, 'qColorLineChart', colorTrendFn);
+
+  // Block D – Color × Model heatmap
+  const models = [...new Set(all.map(r=>r[4]||'—'))].sort();
+  const cm = {};
+  all.forEach(r => {
+    const k=`${r[6]||'—'}||${r[4]||'—'}`;
+    if(!cm[k]) cm[k]={count:0,total:0};
+    cm[k].count++; cm[k].total+=r[7]||0;
+  });
+  buildQHeatmap('qColorModelHeat', colors, models,
+    (color,model) => { const k=`${color}||${model}`; if(!cm[k]) return null; return {avg:cm[k].total/cm[k].count,count:cm[k].count}; },
+    (color,model,avg,n) => `${color} × ${model}：${avg.toFixed(1)} 點/筆・${n} 筆`);
+}
+
+// ── Shared builders ───────────────────────────────────────────────────────────
+const Q_PAL = ['#e74c3c','#e67e22','#3498db','#9b59b6','#1D9E75','#f39c12','#2980b9','#16a085','#d35400','#8e44ad'];
+
+function buildQCheckboxes(cid, keys, checked, onChange) {
+  const el = document.getElementById(cid);
+  el.innerHTML = '';
+  keys.forEach((k, i) => {
+    const color = Q_PAL[i % Q_PAL.length];
+    const isChk = checked.has(k);
+    const lbl = document.createElement('label');
+    lbl.style.cssText = `display:inline-flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;padding:3px 8px;border-radius:6px;border:1px solid ${color}44;background:${isChk?color+'22':'#fff'};user-select:none;`;
+    const cb = document.createElement('input');
+    cb.type = 'checkbox'; cb.checked = isChk; cb.style.accentColor = color;
+    cb.onchange = () => {
+      if (cb.checked) checked.add(k); else checked.delete(k);
+      lbl.style.background = cb.checked ? color+'22' : '#fff';
+      onChange();
+    };
+    lbl.appendChild(cb);
+    lbl.appendChild(document.createTextNode(' '+k));
+    el.appendChild(lbl);
+  });
+}
+
+function buildQLineChart(chartKey, all, keyFn, checked, canvasId, trendFn) {
+  const dates = filteredDates;
+  const keys  = [...checked];
+  const datasets = keys.map((k, i) => ({
+    label: k,
+    data: dates.map(dt => {
+      const dr = all.filter(r => r[0] === dt && keyFn(r) === k);
+      return dr.length ? +(dr.reduce((s,r)=>s+(r[7]||0),0)/dr.length).toFixed(2) : null;
+    }),
+    borderColor: Q_PAL[i%Q_PAL.length],
+    backgroundColor: Q_PAL[i%Q_PAL.length]+'18',
+    borderWidth: 2, pointRadius: 4, tension: 0.3, spanGaps: false,
+  }));
+
+  if (qCharts[chartKey]) qCharts[chartKey].destroy();
+  qCharts[chartKey] = new Chart(document.getElementById(canvasId), {
+    type: 'line',
+    data: { labels: dates.map(d=>d.slice(5)), datasets },
+    options: { responsive:true, maintainAspectRatio:false, animation:{duration:400},
+      plugins:{
+        legend:{display:true,position:'top',labels:{font:{size:13},boxWidth:16}},
+        tooltip:{callbacks:{label:ctx=>{
+          if (ctx.parsed.y === null) return '';
+          let line = `${ctx.dataset.label}：${ctx.parsed.y.toFixed(1)} 點/筆`;
+          if (trendFn) { const t = trendFn(ctx.dataset.label); if (t.bg) line += `  ${t.icon} ${t.label}`; }
+          return line;
+        }}}
+      },
+      scales:{
+        x:{grid:{color:'rgba(136,135,128,0.12)'},ticks:{font:{size:14},autoSkip:true,maxTicksLimit:15}},
+        y:{min:0,ticks:{callback:v=>v+' 點',font:{size:14}},grid:{color:'rgba(136,135,128,0.12)'}}
+      }
+    }
+  });
+}
+
+function buildQHeatmap(cid, rowKeys, colKeys, getCellFn, getTitleFn) {
+  const el = document.getElementById(cid);
+  let html = '<div style="overflow-x:auto;"><table style="border-collapse:collapse;font-size:15px;">';
+  html += '<thead><tr><th style="padding:6px 10px;text-align:left;color:#888;border-bottom:1px solid #ddd;background:#f5f5f3;white-space:nowrap;font-size:15px;font-weight:700;"></th>';
+  colKeys.forEach(c => {
+    html += `<th style="padding:6px 8px;text-align:center;color:#888;border-bottom:1px solid #ddd;background:#f5f5f3;min-width:54px;white-space:nowrap;font-size:15px;font-weight:700;">${c}</th>`;
+  });
+  html += '</tr></thead><tbody>';
+  rowKeys.forEach((p, ri) => {
+    html += `<tr><td style="padding:6px 10px;font-weight:700;font-size:15px;border-right:1px solid #eee;white-space:nowrap;background:${ri%2?'#fafafa':'#fff'};">${p}</td>`;
+    colKeys.forEach(c => {
+      const cell = getCellFn(p, c);
+      if (!cell) {
+        html += `<td style="text-align:center;padding:6px 8px;color:#ccc;background:#f5f5f3;border:0.5px solid #eee;">—</td>`;
+      } else {
+        const bg = qHeatBg(cell.avg), fg = qHeatFg(cell.avg);
+        const title = getTitleFn ? getTitleFn(p,c,cell.avg,cell.count) : `${p}×${c}: ${cell.avg.toFixed(1)}`;
+        html += `<td style="text-align:center;padding:6px 8px;background:${bg};color:${fg};font-weight:700;font-size:15px;border:0.5px solid rgba(0,0,0,0.06);cursor:default;" title="${title}">${cell.avg.toFixed(1)}</td>`;
+      }
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table></div>';
+  el.innerHTML = html;
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+function setDefaultDateRange() {
+  const isos = allRecords.map(r => dateToISO(r[0])).filter(Boolean).sort();
+  if (isos.length) {
+    document.getElementById('startDate').value = isos[0];
+    document.getElementById('endDate').value   = isos[isos.length - 1];
+  }
+}
+
+function init() {
+  loadSettings();
+
+  const id    = localStorage.getItem('gsId');
+  const key   = localStorage.getItem('gsKey');
+  const sheet = localStorage.getItem('gsSheet') || '整修日報';
+
+  if (id && key) {
+    fetchFromSheets(id, key, sheet);
+  } else {
+    allRecords = FALLBACK_RECORDS;
+    setBadge('使用示範資料','ok');
+    setDefaultDateRange(); // default to full data range
+    applyDateFilter();
+  }
+}
+
+init();
+</script>
+</body>
+</html>
