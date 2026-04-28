@@ -240,14 +240,15 @@
     <div style="background:#161b27;border-radius:12px;overflow:hidden;margin-bottom:1rem;box-shadow:0 4px 24px rgba(0,0,0,0.5);">
       <table style="width:100%;border-collapse:collapse;">
         <thead>
-          <tr style="border-bottom:2px solid #1e2a40;font-size:16px;color:#556;">
-            <th style="text-align:left;padding:14px 20px;font-weight:600;">時段</th>
-            <th style="text-align:center;padding:14px 12px;font-weight:600;">時間</th>
-            <th style="text-align:center;padding:14px 20px;font-weight:600;">計畫目標</th>
-            <th style="text-align:center;padding:14px 20px;font-weight:600;">累計計畫</th>
-            <th style="text-align:center;padding:14px 20px;font-weight:600;color:#60c8ff;">實績</th>
-            <th style="text-align:center;padding:14px 20px;font-weight:600;color:#60c8ff;">累計實績</th>
-            <th style="text-align:center;padding:14px 28px;font-weight:600;">達成率</th>
+          <tr style="border-bottom:2px solid #1e2a40;font-size:15px;color:#556;">
+            <th style="text-align:left;padding:14px 16px;font-weight:600;">時段</th>
+            <th style="text-align:center;padding:14px 10px;font-weight:600;">時間</th>
+            <th style="text-align:center;padding:14px 12px;font-weight:600;">計畫目標</th>
+            <th style="text-align:center;padding:14px 12px;font-weight:600;">累計計畫</th>
+            <th style="text-align:center;padding:14px 12px;font-weight:600;color:#60c8ff;">實績</th>
+            <th style="text-align:center;padding:14px 12px;font-weight:600;color:#60c8ff;">累計實績</th>
+            <th style="text-align:center;padding:14px 10px;font-weight:600;">階段達成率</th>
+            <th style="text-align:center;padding:14px 10px;font-weight:600;">累積達成率</th>
           </tr>
         </thead>
         <tbody id="rtTbody"></tbody>
@@ -1388,6 +1389,13 @@ function renderRtTableMerged(segActuals, dayTarget, hasTsData, curSegIdx, now, i
   let acc = 0;
   SEGMENTS.forEach((s,i) => { acc += segPlans[i]; endCumPlan.push(acc); });
 
+  // Helper: render a rate cell with colour + emoji
+  function rateCell(r) {
+    if (r === null) return '<span style="color:#555;font-size:20px;">—</span>';
+    const st = rtStatus(r);
+    return `<span style="color:${st.color};font-weight:800;font-size:22px;">${r}%</span><br><span style="font-size:18px;">${st.emoji}</span>`;
+  }
+
   let cumActual = 0;
   let lastRate = null;
 
@@ -1401,19 +1409,20 @@ function renderRtTableMerged(segActuals, dayTarget, hasTsData, curSegIdx, now, i
 
     const cumPlanDisplay = isCurrent ? committedPlan : endCumPlan[i];
     const planForRate = isPast ? endCumPlan[i] : isCurrent ? committedPlan : null;
-    const rate = (planForRate != null && planForRate > 0 && hasTsData)
+
+    // 累積達成率（截至本段的整體進度）
+    const cumRate = (planForRate != null && planForRate > 0 && hasTsData)
       ? Math.round(cumActual / planForRate * 100) : null;
-    if (rate !== null) lastRate = rate;
+    if (cumRate !== null) lastRate = cumRate;
 
-    const segPlanDisp = dayTarget>0 ? Math.round(segPlans[i])    : '—';
-    const cumPlanDisp = dayTarget>0 ? Math.round(cumPlanDisplay)  : '—';
-    const actualDisp  = isFuture ? '—' : hasTsData ? actual      : '?';
-    const cumActDisp  = isFuture ? '—' : hasTsData ? cumActual   : '?';
+    // 階段達成率（本時段單獨表現）
+    const segRate = (!isFuture && hasTsData && segPlans[i] > 0)
+      ? Math.round(actual / segPlans[i] * 100) : null;
 
-    const st = rtStatus(rate);
-    const rateDisp = rate!=null
-      ? `<span style="color:${st.color};font-weight:800;font-size:24px;">${rate}%</span> <span style="font-size:20px;">${st.emoji}</span>`
-      : '<span style="color:#555;font-size:22px;">—</span>';
+    const segPlanDisp = dayTarget > 0 ? Math.round(segPlans[i])   : '—';
+    const cumPlanDisp = dayTarget > 0 ? Math.round(cumPlanDisplay) : '—';
+    const actualDisp  = isFuture ? '—' : hasTsData ? actual    : '?';
+    const cumActDisp  = isFuture ? '—' : hasTsData ? cumActual : '?';
 
     let rowStyle, nameColor, subColor;
     if (isCurrent && isToday) {
@@ -1432,14 +1441,15 @@ function renderRtTableMerged(segActuals, dayTarget, hasTsData, curSegIdx, now, i
     const tr = document.createElement('tr');
     tr.style.cssText = `border-bottom:1px solid #1e2535;height:70px;${rowStyle}`;
     tr.innerHTML = `
-      <td style="padding:0 20px;font-size:20px;font-weight:${fw};color:${nameColor};">${seg.name}<br>
-        <span style="font-size:13px;color:${subColor};">${seg.label}</span></td>
-      <td style="text-align:center;padding:0 12px;font-size:16px;color:#556;">${seg.min}分</td>
-      <td style="text-align:center;padding:0 20px;font-size:22px;color:#888;">${segPlanDisp}</td>
-      <td style="text-align:center;padding:0 20px;font-size:22px;color:#888;">${cumPlanDisp}</td>
-      <td style="text-align:center;padding:0 20px;font-size:22px;font-weight:600;color:${isFuture?'#333':'#e0e0e0'};">${actualDisp}</td>
-      <td style="text-align:center;padding:0 20px;font-size:22px;font-weight:600;color:${isFuture?'#333':'#e0e0e0'};">${cumActDisp}</td>
-      <td style="text-align:center;padding:0 28px;">${rateDisp}</td>`;
+      <td style="padding:0 16px;font-size:19px;font-weight:${fw};color:${nameColor};">${seg.name}<br>
+        <span style="font-size:12px;color:${subColor};">${seg.label}</span></td>
+      <td style="text-align:center;padding:0 10px;font-size:15px;color:#556;">${seg.min}分</td>
+      <td style="text-align:center;padding:0 12px;font-size:20px;color:#888;">${segPlanDisp}</td>
+      <td style="text-align:center;padding:0 12px;font-size:20px;color:#888;">${cumPlanDisp}</td>
+      <td style="text-align:center;padding:0 12px;font-size:20px;font-weight:600;color:${isFuture?'#333':'#e0e0e0'};">${actualDisp}</td>
+      <td style="text-align:center;padding:0 12px;font-size:20px;font-weight:600;color:${isFuture?'#333':'#e0e0e0'};">${cumActDisp}</td>
+      <td style="text-align:center;padding:0 10px;">${rateCell(segRate)}</td>
+      <td style="text-align:center;padding:0 10px;">${rateCell(cumRate)}</td>`;
     tbody.appendChild(tr);
   });
 
