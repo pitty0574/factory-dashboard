@@ -847,6 +847,12 @@ function refreshEfficiency() {
     return '#e74c3c';
   }
 
+  // Paint points disclaimer
+  const ptsDiscEl = document.createElement('div');
+  ptsDiscEl.style.cssText = 'width:100%;flex-basis:100%;font-size:12px;color:#aaa;font-style:italic;margin-bottom:4px;';
+  ptsDiscEl.textContent = '補漆點數高代表該部件品質問題較嚴重，可作為達成率偏低的參考依據';
+  container.appendChild(ptsDiscEl);
+
   persons.forEach(pid => {
     const d = personData[pid];
     const bxQty = d.bx[lastDate] || 0;
@@ -887,6 +893,15 @@ function refreshEfficiency() {
       ? `<div style="font-size:15px;color:#aaa;margin-top:2px;">進度 ${Math.round(planRatio*100)}%</div>`
       : '';
 
+    const bxPts = absent ? null : getPtsStats(pid, lastDate, 'bx');
+    const mzPts = absent ? null : getPtsStats(pid, lastDate, 'mz');
+    const ptsBlock = (!absent && (bxPts || mzPts)) ? `
+      <div style="margin-top:6px;border-top:0.5px solid #eee;padding-top:5px;text-align:left;">
+        <div style="font-size:12px;color:#888;margin-bottom:2px;">今日補漆點數</div>
+        ${bxPts ? `<div style="font-size:12px;line-height:1.6;">保：<span style="color:#e67e22;font-weight:600;">${bxPts.totalPts}</span>點/平均<span style="color:${ptsAvgColor(bxPts.avg)};font-weight:600;">${bxPts.avg.toFixed(1)}</span>點/筆</div>` : ''}
+        ${mzPts ? `<div style="font-size:12px;line-height:1.6;">馬：<span style="color:#e67e22;font-weight:600;">${mzPts.totalPts}</span>點/平均<span style="color:${ptsAvgColor(mzPts.avg)};font-weight:600;">${mzPts.avg.toFixed(1)}</span>點/筆</div>` : ''}
+      </div>` : '';
+
     const card = document.createElement('div');
     card.className = 'eff-card' + (absent?' absent':'') + (selectedEffPid===pid?' selected':'');
     card.onclick = () => toggleEffDetail(pid);
@@ -895,7 +910,7 @@ function refreshEfficiency() {
       <div class="eid">${pid}</div>
       ${absent
         ? '<div style="font-size:15px;color:#aaa;margin-top:3px;">未出勤</div>'
-        : bxRow + mzRow + subLabel}`;
+        : bxRow + mzRow + subLabel + ptsBlock}`;
     container.appendChild(card);
   });
 
@@ -962,11 +977,24 @@ function buildCumulativeStatus(bxTarget, mzTarget) {
     const totalGoal   = bxGoal + mzGoal;
     const overallRate = totalGoal > 0 ? Math.round(totalActual / totalGoal * 100) : 0;
 
-    return { pid, attendDays, bxDays, bxActual, bxGoal, bxRate, mzDays, mzActual, mzGoal, mzRate, totalActual, totalGoal, overallRate };
+    const bxPtsStats = getPtsStatsRange(pid, rangeStart, rangeEnd, 'bx');
+    const mzPtsStats = getPtsStatsRange(pid, rangeStart, rangeEnd, 'mz');
+    const allPtsRecs = allRecords.filter(r => {
+      const iso = dateToISO(r[0]);
+      return r[1] === pid && r[7] != null && iso >= rangeStart && iso <= rangeEnd;
+    });
+    const totalPtsSum = allPtsRecs.reduce((s, r) => s + r[7], 0);
+    const overallPtsStats = allPtsRecs.length ? { totalPts: totalPtsSum, count: allPtsRecs.length, avg: totalPtsSum / allPtsRecs.length } : null;
+
+    return { pid, attendDays, bxDays, bxActual, bxGoal, bxRate, mzDays, mzActual, mzGoal, mzRate, totalActual, totalGoal, overallRate, bxPtsStats, mzPtsStats, overallPtsStats };
   });
   stats.sort((a, b) => b.overallRate - a.overallRate);
 
   container.innerHTML = '';
+  const cumDiscEl = document.createElement('div');
+  cumDiscEl.style.cssText = 'font-size:12px;color:#aaa;font-style:italic;margin-bottom:8px;';
+  cumDiscEl.textContent = '補漆點數高代表該部件品質問題較嚴重，可作為達成率偏低的參考依據';
+  container.appendChild(cumDiscEl);
   stats.forEach(s => {
     // 進度條顏色：≥100% 綠、80-99% 橘、<80% 紅
     const circleColor = s.overallRate >= 100 ? '#1D9E75' : s.overallRate >= 80 ? '#e67e22' : '#e74c3c';
@@ -1016,7 +1044,16 @@ function buildCumulativeStatus(bxTarget, mzTarget) {
           </svg>
           <div style="font-size:15px;color:#888;margin-top:2px;">整體達標率</div>
         </div>
-      </div>`;
+      </div>
+      ${(s.bxPtsStats || s.mzPtsStats || s.overallPtsStats) ? `
+      <div style="margin-top:10px;border-top:0.5px solid #eee;padding-top:8px;">
+        <div style="font-size:13px;color:#888;font-weight:500;margin-bottom:6px;">本月累積點數（截至昨日）</div>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;">
+          ${s.bxPtsStats ? `<div style="font-size:13px;line-height:1.7;">保險桿：<span style="color:#e67e22;font-weight:600;">${s.bxPtsStats.totalPts}</span> 點 / 平均 <span style="color:${ptsAvgColor(s.bxPtsStats.avg)};font-weight:600;">${s.bxPtsStats.avg.toFixed(1)}</span> 點/筆</div>` : ''}
+          ${s.mzPtsStats ? `<div style="font-size:13px;line-height:1.7;">馬自達：<span style="color:#e67e22;font-weight:600;">${s.mzPtsStats.totalPts}</span> 點 / 平均 <span style="color:${ptsAvgColor(s.mzPtsStats.avg)};font-weight:600;">${s.mzPtsStats.avg.toFixed(1)}</span> 點/筆</div>` : ''}
+          ${s.overallPtsStats ? `<div style="font-size:13px;line-height:1.7;">整體：<span style="color:#e67e22;font-weight:600;">${s.overallPtsStats.totalPts}</span> 點 / 平均 <span style="color:${ptsAvgColor(s.overallPtsStats.avg)};font-weight:600;">${s.overallPtsStats.avg.toFixed(1)}</span> 點/筆</div>` : ''}
+        </div>
+      </div>` : ''}`;
     container.appendChild(card);
   });
 }
@@ -1160,6 +1197,30 @@ function buildSummary(bxTarget, mzTarget) {
       <div class="si-val">${trendText}</div>
     </div>
   `;
+}
+
+// ── Paint Points Helpers ─────────────────────────────────────────────────────
+function getPtsStats(pid, date, type) {
+  const recs = allRecords.filter(r => r[0] === date && r[1] === pid && r[2] === type && r[7] != null);
+  if (!recs.length) return null;
+  const totalPts = recs.reduce((s, r) => s + r[7], 0);
+  return { totalPts, count: recs.length, avg: totalPts / recs.length };
+}
+
+function getPtsStatsRange(pid, startISO, endISO, type) {
+  const recs = allRecords.filter(r => {
+    const iso = dateToISO(r[0]);
+    return r[1] === pid && r[2] === type && r[7] != null && iso >= startISO && iso <= endISO;
+  });
+  if (!recs.length) return null;
+  const totalPts = recs.reduce((s, r) => s + r[7], 0);
+  return { totalPts, count: recs.length, avg: totalPts / recs.length };
+}
+
+function ptsAvgColor(avg) {
+  if (avg >= 5) return '#e74c3c';
+  if (avg >= 3) return '#e67e22';
+  return '#aaa';
 }
 
 // ── Realtime Board ───────────────────────────────────────────────────────────
