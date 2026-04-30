@@ -95,6 +95,7 @@
       欄位對應：A=時間戳記、B=記錄日期、C=工號、D=車型、E=種類、F=顏色代號<br>
       馬自達色碼：51、A4D、41W、46V、PZ、TAS，其餘為保險桿
     </div>
+    <div id="filterHint" style="font-size:11px;color:#e67e22;margin-top:6px;display:none;"></div>
   </div>
 </div>
 
@@ -166,7 +167,9 @@
       <input type="number" id="bxTarget" value="40" min="1" onchange="saveTargets();refreshEfficiency();" />
       <label>馬自達目標（隻/天）：</label>
       <input type="number" id="mzTarget" value="25" min="1" onchange="saveTargets();refreshEfficiency();" />
-      <span style="font-size:11px;color:#aaa;">變更後即時更新</span>
+      <label>最小輸入間隔（秒）：</label>
+      <input type="number" id="minInterval" value="30" min="0" onchange="saveTargets();applyMinIntervalChange();" />
+      <div style="flex-basis:100%;font-size:11px;color:#aaa;">同一工號連續輸入間隔小於此秒數的記錄將不納入計算。變更後即時更新所有頁籤。</div>
     </div>
     <div id="effStatusTitle" style="font-size:18px;font-weight:700;margin-bottom:0.75rem;color:#555;">當日人員狀態</div>
     <div class="eff-cards" id="effCards"></div>
@@ -419,8 +422,10 @@ const MZ_CODES = new Set(['51','A4D','41W','46V','PZ','TAS']);
 
 // ── State ────────────────────────────────────────────────────────────────────
 let allRecords = []; // [{date:'2026/04/08', pid:'8623', type:'bx'|'mz'}]
+let filteredRecords = []; // allRecords after anomaly filter
 let filteredDates = []; // sorted unique date strings in current filter range
-let personData = {}; // pid -> {bx:{date:qty}, mz:{date:qty}}
+let personData = {}; // pid -> {bx:{date:qty}, mz:{date:qty}} — from allRecords (for detail tab)
+let filteredPersonData = {}; // same structure — from filteredRecords (for all other tabs)
 let persons = [];
 
 let dailyChartInst = null;
@@ -438,15 +443,58 @@ function getConfig() {
 }
 function loadSettings() {
   const cfg = getConfig();
-  document.getElementById('sheetsId').value  = cfg.id;
-  document.getElementById('apiKey').value    = cfg.key;
-  document.getElementById('sheetName').value = cfg.sheet;
-  document.getElementById('bxTarget').value  = localStorage.getItem('bxTarget') || '40';
-  document.getElementById('mzTarget').value  = localStorage.getItem('mzTarget') || '25';
+  document.getElementById('sheetsId').value   = cfg.id;
+  document.getElementById('apiKey').value     = cfg.key;
+  document.getElementById('sheetName').value  = cfg.sheet;
+  document.getElementById('bxTarget').value   = localStorage.getItem('bxTarget') || '40';
+  document.getElementById('mzTarget').value   = localStorage.getItem('mzTarget') || '25';
+  document.getElementById('minInterval').value = localStorage.getItem('minIntervalSec') || '30';
 }
 function saveTargets() {
   localStorage.setItem('bxTarget', document.getElementById('bxTarget').value);
   localStorage.setItem('mzTarget', document.getElementById('mzTarget').value);
+  localStorage.setItem('minIntervalSec', document.getElementById('minInterval').value);
+}
+function getMinIntervalSec() {
+  return parseInt(localStorage.getItem('minIntervalSec') || '30') || 0;
+}
+function computeFilteredRecords() {
+  const minSec = getMinIntervalSec();
+  if (minSec <= 0) { filteredRecords = allRecords.slice(); return; }
+  // Group indices by pid+date
+  const groups = {};
+  allRecords.forEach((r, idx) => {
+    const key = r[1] + '|' + r[0];
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(idx);
+  });
+  const anomalous = new Set();
+  Object.values(groups).forEach(indices => {
+    const withTs = indices
+      .filter(i => allRecords[i][3] != null)
+      .sort((a, b) => allRecords[a][3] - allRecords[b][3]);
+    for (let i = 1; i < withTs.length; i++) {
+      const diffSec = (allRecords[withTs[i]][3] - allRecords[withTs[i-1]][3]) * 60;
+      if (diffSec < minSec) anomalous.add(withTs[i]);
+    }
+  });
+  filteredRecords = allRecords.filter((_, i) => !anomalous.has(i));
+}
+function updateFilterHint() {
+  const hint = document.getElementById('filterHint');
+  if (!hint) return;
+  const minSec = getMinIntervalSec();
+  const total = allRecords.length;
+  const filtered = filteredRecords.length;
+  const excluded = total - filtered;
+  if (total === 0) { hint.style.display = 'none'; return; }
+  hint.style.display = '';
+  hint.textContent = `目前設定：連續輸入間隔 < ${minSec} 秒的記錄將從計算中排除　原始資料 ${total} 筆，過濾後 ${filtered} 筆，共排除 ${excluded} 筆異常記錄`;
+}
+function applyMinIntervalChange() {
+  computeFilteredRecords();
+  updateFilterHint();
+  applyDateFilter();
 }
 function toggleSettings() {
   document.getElementById('settingsBody').classList.toggle('open');
@@ -547,6 +595,8 @@ async function fetchFromSheets(id, key, sheet) {
     console.log(`[Sheets] 合計 → 保險桿: ${bxTotal} 筆, 馬自達: ${mzTotal} 筆`);
 
     allRecords = records;
+    computeFilteredRecords();
+    updateFilterHint();
     setBadge(`已載入 ${records.length} 筆 (保${bxTotal}/馬${mzTotal})`, 'ok');
     setDefaultDateRange();
     applyDateFilter();
@@ -554,6 +604,8 @@ async function fetchFromSheets(id, key, sheet) {
     console.error(e);
     setBadge('載入失敗，使用示範資料','err');
     allRecords = FALLBACK_RECORDS;
+    computeFilteredRecords();
+    updateFilterHint();
     setDefaultDateRange();
     applyDateFilter();
   }
@@ -616,8 +668,8 @@ function setQuick(mode) {
 function applyDateFilter() {
   const s = document.getElementById('startDate').value;
   const e = document.getElementById('endDate').value;
-  // Build personData & filteredDates from allRecords filtered by [s,e]
-  const pMap = {}; // pid -> {bx:{}, mz:{}}
+  // Build personData from allRecords (detail tab — unfiltered)
+  const pMap = {};
   const dateSet = new Set();
   allRecords.forEach(([date, pid, type]) => {
     const iso = dateToISO(date);
@@ -627,11 +679,20 @@ function applyDateFilter() {
     pMap[pid][type][date] = (pMap[pid][type][date] || 0) + 1;
   });
   personData = pMap;
-  // Exclude any date-like strings that accidentally ended up as person keys
   persons = Object.keys(pMap).filter(k => !/^\d{4}[-\/]/.test(k)).sort();
   filteredDates = Array.from(dateSet).sort();
 
-  // Update title — show full YYYY/MM/DD
+  // Build filteredPersonData from filteredRecords (all other tabs)
+  const fpMap = {};
+  filteredRecords.forEach(([date, pid, type]) => {
+    const iso = dateToISO(date);
+    if ((s && iso < s) || (e && iso > e)) return;
+    if (!fpMap[pid]) fpMap[pid] = {bx:{}, mz:{}};
+    fpMap[pid][type][date] = (fpMap[pid][type][date] || 0) + 1;
+  });
+  filteredPersonData = fpMap;
+
+  // Update title
   if (filteredDates.length) {
     document.getElementById('pageTitle').textContent =
       `個人部件分析 — 保險桿 vs 馬自達（${filteredDates[0]}～${filteredDates[filteredDates.length-1]}）`;
@@ -708,7 +769,7 @@ function buildDailyData() {
   filteredDates.forEach(date => {
     let bxTotal=0, bxPax=0, mzTotal=0, mzPax=0;
     persons.forEach(pid => {
-      const d = personData[pid];
+      const d = filteredPersonData[pid] || {bx:{}, mz:{}};
       if (d.bx[date]) { bxTotal += d.bx[date]; bxPax++; }
       if (d.mz[date]) { mzTotal += d.mz[date]; mzPax++; }
     });
@@ -854,20 +915,27 @@ function refreshEfficiency() {
   container.appendChild(ptsDiscEl);
 
   persons.forEach(pid => {
-    const d = personData[pid];
-    const bxQty = d.bx[lastDate] || 0;
-    const mzQty = d.mz[lastDate] || 0;
+    const df = filteredPersonData[pid] || {bx:{}, mz:{}};
+    const da = personData[pid] || {bx:{}, mz:{}};
+    const bxQty = df.bx[lastDate] || 0;
+    const mzQty = df.mz[lastDate] || 0;
     const absent = bxQty === 0 && mzQty === 0;
 
-    // Per-type instant achievement rate (null when the person didn't work that type)
+    // For hint: compare allRecords vs filteredRecords counts for this person+date
+    const bxQtyAll = da.bx[lastDate] || 0;
+    const mzQtyAll = da.mz[lastDate] || 0;
+    const totalAll = bxQtyAll + mzQtyAll;
+    const totalFiltered = bxQty + mzQty;
+    const excludedCount = totalAll - totalFiltered;
+
+    // Per-type instant achievement rate
     const bxRate = bxQty > 0 && bxCommitted > 0 ? Math.round(bxQty / bxCommitted * 100)
-                 : bxQty > 0                     ? 100   // committed = 0 (pre-shift) but has qty → 100%
-                 : null;                                  // didn't work this type → not counted
+                 : bxQty > 0                     ? 100
+                 : null;
     const mzRate = mzQty > 0 && mzCommitted > 0 ? Math.round(mzQty / mzCommitted * 100)
                  : mzQty > 0                     ? 100
                  : null;
 
-    // Overall light: green if any present type ≥ 100%; yellow if best ≥ 80%; red otherwise
     let overallLight;
     if (absent) {
       overallLight = '⚫';
@@ -877,7 +945,6 @@ function refreshEfficiency() {
       overallLight = best >= 100 ? '🟢' : best >= 80 ? '🟡' : '🔴';
     }
 
-    // Row for each type — only shown when the person actually worked that type today
     function typeRow(label, qty, committed, rate, colorBase) {
       if (qty === 0) return '';
       const goal  = committed > 0 ? Math.round(committed) : '—';
@@ -902,6 +969,10 @@ function refreshEfficiency() {
         ${mzPts ? `<div style="font-size:12px;line-height:1.6;">馬：<span style="color:#e67e22;font-weight:600;">${mzPts.totalPts}</span>點/平均<span style="color:${ptsAvgColor(mzPts.avg)};font-weight:600;">${mzPts.avg.toFixed(1)}</span>點/筆</div>` : ''}
       </div>` : '';
 
+    const hintHtml = (totalAll > 0 && excludedCount > 0)
+      ? `<div style="margin-top:5px;border-top:0.5px solid #eee;padding-top:4px;font-size:10px;color:#888;line-height:1.5;">本日共 ${totalAll} 筆，過濾 <span style="color:#e67e22;font-weight:600;">${excludedCount}</span> 筆異常快速輸入，實際計算 ${totalFiltered} 筆</div>`
+      : '';
+
     const card = document.createElement('div');
     card.className = 'eff-card' + (absent?' absent':'') + (selectedEffPid===pid?' selected':'');
     card.onclick = () => toggleEffDetail(pid);
@@ -910,7 +981,8 @@ function refreshEfficiency() {
       <div class="eid">${pid}</div>
       ${absent
         ? '<div style="font-size:15px;color:#aaa;margin-top:3px;">未出勤</div>'
-        : bxRow + mzRow + subLabel + ptsBlock}`;
+        : bxRow + mzRow + subLabel + ptsBlock}
+      ${hintHtml}`;
     container.appendChild(card);
   });
 
@@ -943,9 +1015,9 @@ function buildCumulativeStatus(bxTarget, mzTarget) {
     titleEl.innerHTML = `本月累積狀態（截至昨日）<div style="font-size:13px;font-weight:400;color:#aaa;margin-top:3px;">${rangeLabel}</div>`;
   }
 
-  // Build per-person stats within rangeStart..rangeEnd
+  // Build per-person stats within rangeStart..rangeEnd (use filteredRecords)
   const pMap = {};
-  allRecords.forEach(([date, pid, type]) => {
+  filteredRecords.forEach(([date, pid, type]) => {
     const iso = dateToISO(date);
     if (iso < rangeStart || iso > rangeEnd) return;
     if (pid && !/^\d{4}[-\/]/.test(pid)) {
@@ -979,7 +1051,7 @@ function buildCumulativeStatus(bxTarget, mzTarget) {
 
     const bxPtsStats = getPtsStatsRange(pid, rangeStart, rangeEnd, 'bx');
     const mzPtsStats = getPtsStatsRange(pid, rangeStart, rangeEnd, 'mz');
-    const allPtsRecs = allRecords.filter(r => {
+    const allPtsRecs = filteredRecords.filter(r => {
       const iso = dateToISO(r[0]);
       return r[1] === pid && r[7] != null && iso >= rangeStart && iso <= rangeEnd;
     });
@@ -1083,7 +1155,7 @@ function closeEffDetail() {
 
 function renderEffChart(pid, bxTarget, mzTarget) {
   document.getElementById('effDetailTitle').textContent = `工號 ${pid} — 每日產量推移`;
-  const d = personData[pid];
+  const d = filteredPersonData[pid] || {bx:{}, mz:{}};
   const labels = filteredDates.map(dt=>dt.slice(5));
   const bxArr = filteredDates.map(dt => d.bx[dt] ?? null);
   const mzArr = filteredDates.map(dt => d.mz[dt] ?? null);
@@ -1137,7 +1209,7 @@ function buildSummary(bxTarget, mzTarget) {
   const last3 = filteredDates.slice(-3);
 
   persons.forEach(pid => {
-    const d = personData[pid];
+    const d = filteredPersonData[pid] || {bx:{}, mz:{}};
     let streak=0, maxStreak=0;
 
     filteredDates.forEach(dt => {
@@ -1177,7 +1249,7 @@ function buildSummary(bxTarget, mzTarget) {
   // 趨勢（近三天全隊總產量）
   let trendText = '→ 持平';
   if (last3.length >= 2) {
-    const vals = last3.map(dt => persons.reduce((s,pid)=>(personData[pid].bx[dt]||0)+(personData[pid].mz[dt]||0)+s,0));
+    const vals = last3.map(dt => persons.reduce((s,pid)=>((filteredPersonData[pid]?.bx[dt]||0)+(filteredPersonData[pid]?.mz[dt]||0)+s),0));
     const first = vals[0], last = vals[vals.length-1];
     trendText = last > first*1.05 ? '↑ 上升' : last < first*0.95 ? '↓ 下降' : '→ 持平';
   }
@@ -1201,14 +1273,14 @@ function buildSummary(bxTarget, mzTarget) {
 
 // ── Paint Points Helpers ─────────────────────────────────────────────────────
 function getPtsStats(pid, date, type) {
-  const recs = allRecords.filter(r => r[0] === date && r[1] === pid && r[2] === type && r[7] != null);
+  const recs = filteredRecords.filter(r => r[0] === date && r[1] === pid && r[2] === type && r[7] != null);
   if (!recs.length) return null;
   const totalPts = recs.reduce((s, r) => s + r[7], 0);
   return { totalPts, count: recs.length, avg: totalPts / recs.length };
 }
 
 function getPtsStatsRange(pid, startISO, endISO, type) {
-  const recs = allRecords.filter(r => {
+  const recs = filteredRecords.filter(r => {
     const iso = dateToISO(r[0]);
     return r[1] === pid && r[2] === type && r[7] != null && iso >= startISO && iso <= endISO;
   });
@@ -1379,8 +1451,8 @@ function buildRealtimeBoard() {
   const now    = isToday ? nowMin() : SHIFT_END;
   const curSeg = isToday ? currentSegIdx() : -1;
 
-  // 該日記錄
-  const dayRecs   = allRecords.filter(r => dateToISO(r[0]) === boardISO);
+  // 該日記錄（使用 filteredRecords 排除異常快速輸入）
+  const dayRecs   = filteredRecords.filter(r => dateToISO(r[0]) === boardISO);
   const hasTsData = dayRecs.some(r => r[3] != null);
 
   // 出勤人數
@@ -1586,7 +1658,7 @@ function setQualitySub(sub) {
 function getQualityRecs() {
   const s = document.getElementById('startDate').value;
   const e = document.getElementById('endDate').value;
-  return allRecords.filter(r => {
+  return filteredRecords.filter(r => {
     const iso = dateToISO(r[0]);
     if ((s && iso < s) || (e && iso > e)) return false;
     if (r[2] !== qualityType) return false;
