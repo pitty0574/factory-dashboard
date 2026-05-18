@@ -204,9 +204,18 @@
         <span id="rtCurSeg" style="font-size:18px;font-weight:600;color:#5b9cf6;">—</span>
       </div>
       <div style="width:1px;height:28px;background:#1e2a40;margin-right:1.6rem;"></div>
-      <div style="display:flex;align-items:center;gap:0.5rem;flex:1;">
+      <div style="display:flex;align-items:center;gap:0.5rem;margin-right:1.6rem;">
         <span style="font-size:13px;color:#445;white-space:nowrap;">距下次休息</span>
         <span id="rtNextBreak" style="font-size:18px;font-weight:600;color:#f0c040;">—</span>
+      </div>
+      <div style="width:1px;height:28px;background:#1e2a40;margin-right:1.6rem;"></div>
+      <div style="display:flex;align-items:center;gap:0.5rem;flex:1;">
+        <span style="font-size:13px;color:#445;white-space:nowrap;">生產班別</span>
+        <select id="shiftSelect" style="font-size:13px;padding:3px 8px;border:1px solid #2a3a55;border-radius:6px;background:#1a2744;color:#e0e0e0;" onchange="onShiftChange()">
+          <option value="normal">正常班（到16:30，4段）</option>
+          <option value="ot2">加班2小時（到18:30，5段）</option>
+          <option value="ot4">加班4小時（到21:00，6段）</option>
+        </select>
       </div>
       <div style="display:flex;align-items:center;gap:1rem;margin-left:auto;">
         <div style="text-align:right;">
@@ -890,8 +899,6 @@ function refreshEfficiency() {
   // Today vs past: ratio used as denominator multiplier
   const isViewingToday = lastDate && dateToISO(lastDate) === today();
   const planRatio = isViewingToday ? getCommittedPlanRatio(nowMin()) : 1.0;
-  const bxCommitted = bxTarget * planRatio;  // cumulative plan target for current moment
-  const mzCommitted = mzTarget * planRatio;
 
   // Update section title
   const titleEl = document.getElementById('effStatusTitle');
@@ -928,33 +935,41 @@ function refreshEfficiency() {
     const totalFiltered = bxQty + mzQty;
     const excludedCount = totalAll - totalFiltered;
 
-    // Per-type instant achievement rate
-    const bxRate = bxQty > 0 && bxCommitted > 0 ? Math.round(bxQty / bxCommitted * 100)
-                 : bxQty > 0                     ? 100
-                 : null;
-    const mzRate = mzQty > 0 && mzCommitted > 0 ? Math.round(mzQty / mzCommitted * 100)
-                 : mzQty > 0                     ? 100
-                 : null;
+    // 依實際部件產出比例分攤個人目標（避免雙料作業員目標疊加）
+    const totalQty = bxQty + mzQty;
+    let blendedDayTarget = 0;
+    if (totalQty > 0) {
+      if (mzQty === 0)      blendedDayTarget = bxTarget;
+      else if (bxQty === 0) blendedDayTarget = mzTarget;
+      else {
+        blendedDayTarget = bxTarget * (bxQty / totalQty) + mzTarget * (mzQty / totalQty);
+      }
+    }
+    const blendedCommitted = blendedDayTarget * planRatio;
+    const overallRate = (!absent && blendedCommitted > 0)
+      ? Math.round(totalQty / blendedCommitted * 100)
+      : (!absent && totalQty > 0 ? 100 : null);
 
     let overallLight;
     if (absent) {
       overallLight = '⚫';
     } else {
-      const rates = [bxRate, mzRate].filter(r => r !== null);
-      const best  = rates.length ? Math.max(...rates) : 0;
-      overallLight = best >= 100 ? '🟢' : best >= 80 ? '🟡' : '🔴';
+      const r = overallRate ?? 0;
+      overallLight = r >= 100 ? '🟢' : r >= 80 ? '🟡' : '🔴';
     }
 
-    function typeRow(label, qty, committed, rate, colorBase) {
-      if (qty === 0) return '';
-      const goal  = committed > 0 ? Math.round(committed) : '—';
-      const color = rateColor(rate ?? 0);
-      const rateStr = rate !== null ? `(${rate}%)` : '';
-      return `<div style="font-size:15px;color:${color};margin-top:3px;">${label} ${qty}/${goal}隻 ${rateStr}</div>`;
-    }
+    // 卡片主行：合計實績 / 分攤後目標
+    const blendedGoalStr = blendedCommitted > 0 ? Math.round(blendedCommitted) : '—';
+    const overallRateColor = rateColor(overallRate ?? 0);
+    const overallRateStr   = overallRate !== null ? ` (${overallRate}%)` : '';
+    const mainRow = absent ? '' : `<div style="font-size:15px;color:${overallRateColor};margin-top:3px;">合計 ${totalQty}/${blendedGoalStr}隻${overallRateStr}</div>`;
 
-    const bxRow = typeRow('保', bxQty, bxCommitted, bxRate, '#378ADD');
-    const mzRow = typeRow('馬', mzQty, mzCommitted, mzRate, '#1D9E75');
+    // 保/馬分解行（只顯示數量，不各自計算達成率）
+    const bxBreak = bxQty > 0 ? `<span style="color:#378ADD;">保 ${bxQty}</span>` : '';
+    const mzBreak = mzQty > 0 ? `<span style="color:#1D9E75;">馬 ${mzQty}</span>` : '';
+    const breakdownRow = (!absent && (bxQty > 0 || mzQty > 0))
+      ? `<div style="font-size:13px;color:#888;margin-top:2px;">${[bxBreak,mzBreak].filter(Boolean).join(' / ')} 隻</div>`
+      : '';
 
     const subLabel = isViewingToday && planRatio > 0
       ? `<div style="font-size:15px;color:#aaa;margin-top:2px;">進度 ${Math.round(planRatio*100)}%</div>`
@@ -981,7 +996,7 @@ function refreshEfficiency() {
       <div class="eid">${pid}</div>
       ${absent
         ? '<div style="font-size:15px;color:#aaa;margin-top:3px;">未出勤</div>'
-        : bxRow + mzRow + subLabel + ptsBlock}
+        : mainRow + breakdownRow + subLabel + ptsBlock}
       ${hintHtml}`;
     container.appendChild(card);
   });
@@ -1300,16 +1315,26 @@ const SEGMENTS = [
   { name:'第一段', label:'08:00～10:00', start: 8*60,      end: 10*60,    min: 120 },
   { name:'第二段', label:'10:10～12:00', start: 10*60+10,  end: 12*60,    min: 110 },
   { name:'第三段', label:'12:30～14:30', start: 12*60+30,  end: 14*60+30, min: 120 },
-  { name:'第四段', label:'14:40～18:30', start: 14*60+40,  end: 18*60+30, min: 230 },
-  { name:'第五段', label:'19:00～21:00', start: 19*60,     end: 21*60,    min: 120 },
+  { name:'第四段', label:'14:40～16:30', start: 14*60+40,  end: 16*60+30, min: 110 },
+  { name:'第五段', label:'16:40～18:30', start: 16*60+40,  end: 18*60+30, min: 110 },
+  { name:'第六段', label:'19:00～21:00', start: 19*60,     end: 21*60,    min: 120 },
 ];
-const TOTAL_WORK_MIN = 700;
-SEGMENTS.forEach(s => { s.ratio = s.min / TOTAL_WORK_MIN; });
+const FULL_WORK_MIN = SEGMENTS.reduce((s, g) => s + g.min, 0); // 690
+
+const SHIFT_TYPES = {
+  'normal': { label: '正常班',     segCount: 4 },
+  'ot2':    { label: '加班2小時',  segCount: 5 },
+  'ot4':    { label: '加班4小時',  segCount: 6 },
+};
+function getActiveShift()      { return localStorage.getItem('shiftType') || 'ot2'; }
+function getActiveSegments()   { return SEGMENTS.slice(0, SHIFT_TYPES[getActiveShift()].segCount); }
+function getActiveTotalWorkMin() { return getActiveSegments().reduce((s, g) => s + g.min, 0); }
 
 const BREAKS = [
   { label:'10:00～10:10', start: 10*60,    end: 10*60+10 },
   { label:'12:00～12:30', start: 12*60,    end: 12*60+30 },
   { label:'14:30～14:40', start: 14*60+30, end: 14*60+40 },
+  { label:'16:30～16:40', start: 16*60+30, end: 16*60+40 },
   { label:'18:30～19:00', start: 18*60+30, end: 19*60    },
 ];
 const SHIFT_START = 8*60, SHIFT_END = 21*60;
@@ -1354,16 +1379,19 @@ function getSegmentIdx(mins) {
 
 function currentSegIdx() { return getSegmentIdx(nowMin()); }
 
-// Returns 0..1: fraction of total work time elapsed as of nowMins
+// Returns 0..1: fraction of active-shift work time elapsed as of nowMins
 function getCommittedPlanRatio(nowMins) {
+  const activeSegs = getActiveSegments();
+  const totalMin   = getActiveTotalWorkMin();
+  if (totalMin === 0) return 0;
   const curSeg = getSegmentIdx(nowMins);
   let elapsed = 0;
-  for (let i = 0; i < SEGMENTS.length; i++) {
-    const seg = SEGMENTS[i];
+  for (let i = 0; i < activeSegs.length; i++) {
+    const seg = activeSegs[i];
     if (nowMins >= seg.end)   { elapsed += seg.min; }
     else if (i === curSeg)    { elapsed += Math.max(0, nowMins - seg.start); }
   }
-  return elapsed / TOTAL_WORK_MIN;
+  return Math.min(elapsed / totalMin, 1);
 }
 
 function minutesToNextEvent() {
@@ -1438,7 +1466,18 @@ function updateRtProgress(rate) {
   label.style.fill  = rtRateColor(rate);
 }
 
+function onShiftChange() {
+  const sel = document.getElementById('shiftSelect');
+  if (sel) localStorage.setItem('shiftType', sel.value);
+  if (currentView === 'realtime') buildRealtimeBoard();
+  refreshEfficiency();
+}
+
 function buildRealtimeBoard() {
+  // 同步班別下拉選單
+  const shiftSel = document.getElementById('shiftSelect');
+  if (shiftSel) shiftSel.value = getActiveShift();
+
   const bxTarget = parseInt(document.getElementById('bxTarget').value) || 40;
   const mzTarget = parseInt(document.getElementById('mzTarget').value) || 25;
 
@@ -1462,7 +1501,14 @@ function buildRealtimeBoard() {
   const mzDayTarget = mzTarget * mzWorkers;
   const dayTarget   = bxDayTarget + mzDayTarget;
 
-  // 時段實績（合計）
+  // 依班別計算當班目標（按工時比例縮放）
+  const activeWorkMin = getActiveTotalWorkMin();
+  const shiftTarget    = Math.round(dayTarget   * activeWorkMin / FULL_WORK_MIN);
+  const bxShiftTarget  = Math.round(bxDayTarget * activeWorkMin / FULL_WORK_MIN);
+  const mzShiftTarget  = Math.round(mzDayTarget * activeWorkMin / FULL_WORK_MIN);
+  const shiftLabel = SHIFT_TYPES[getActiveShift()].label;
+
+  // 時段實績（合計，6個時段）
   const segTotal = SEGMENTS.map(()=>0);
   let noTs = 0;
   dayRecs.forEach(([,, , tsMin]) => {
@@ -1476,6 +1522,7 @@ function buildRealtimeBoard() {
   const rtSeg  = document.getElementById('rtCurSeg');
   const rtNext = document.getElementById('rtNextBreak');
   const rtLU   = document.getElementById('rtLastUpdate');
+  const rtInfo = document.getElementById('rtTableInfo');
   if (rtDate) rtDate.textContent = boardDateSlash + (isToday ? '' : '（歷史）');
   if (rtSeg) {
     if (isToday) {
@@ -1488,11 +1535,16 @@ function buildRealtimeBoard() {
   }
   if (rtNext) rtNext.textContent = isToday ? minutesToNextEvent().text : '—';
   if (rtLU)   rtLU.textContent   = new Date().toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  if (rtInfo) rtInfo.textContent = `${shiftLabel}　班別目標 ${shiftTarget} 隻（保 ${bxShiftTarget} / 馬 ${mzShiftTarget}）`;
 
   renderRtTableMerged(segTotal, dayTarget, hasTsData, curSeg, now, isToday);
 
-  const totalActual = segTotal.reduce((a,b)=>a+b,0) + (hasTsData ? 0 : noTs);
-  renderRtOverall(totalActual, dayTarget, bxDayTarget, mzDayTarget,
+  // 只加總活躍時段的實績
+  const activeSegCount = getActiveSegments().length;
+  const totalActual = hasTsData
+    ? segTotal.slice(0, activeSegCount).reduce((a,b)=>a+b,0)
+    : noTs;
+  renderRtOverall(totalActual, shiftTarget, bxShiftTarget, mzShiftTarget,
     dayRecs.filter(r=>r[2]==='bx').length, dayRecs.filter(r=>r[2]==='mz').length);
 
   // Manage timer: only auto-refresh when viewing today
@@ -1505,24 +1557,30 @@ function renderRtTableMerged(segActuals, dayTarget, hasTsData, curSegIdx, now, i
   if (!tbody) return;
   tbody.innerHTML = '';
 
-  const segPlans = SEGMENTS.map(s => dayTarget * s.ratio);
+  const activeSegs = getActiveSegments();
+
+  // 每段計畫目標：相對於全量工時（FULL_WORK_MIN = 690）
+  const segPlans = activeSegs.map(s => dayTarget * s.min / FULL_WORK_MIN);
+
+  // 當前時間已提交的累計計畫（供當前時段顯示用）
+  // 若 curSegIdx >= activeSegs.length，視為班別已結束
+  const effectiveCurSeg = (curSegIdx >= 0 && curSegIdx < activeSegs.length) ? curSegIdx : -1;
 
   let committedPlan = 0;
-  for (let i=0; i<SEGMENTS.length; i++) {
-    const seg = SEGMENTS[i];
+  for (let i = 0; i < activeSegs.length; i++) {
+    const seg = activeSegs[i];
     if (now >= seg.end) {
       committedPlan += segPlans[i];
-    } else if (i === curSegIdx) {
+    } else if (i === effectiveCurSeg) {
       const elapsed = Math.max(0, now - seg.start);
-      committedPlan += dayTarget * (elapsed / TOTAL_WORK_MIN);
+      committedPlan += dayTarget * (elapsed / FULL_WORK_MIN);
     }
   }
 
   const endCumPlan = [];
   let acc = 0;
-  SEGMENTS.forEach((s,i) => { acc += segPlans[i]; endCumPlan.push(acc); });
+  activeSegs.forEach((s, i) => { acc += segPlans[i]; endCumPlan.push(acc); });
 
-  // Helper: render a rate cell with colour + emoji
   function rateCell(r) {
     if (r === null) return '<span style="color:#555;font-size:20px;">—</span>';
     const st = rtStatus(r);
@@ -1532,9 +1590,9 @@ function renderRtTableMerged(segActuals, dayTarget, hasTsData, curSegIdx, now, i
   let cumActual = 0;
   let lastRate = null;
 
-  SEGMENTS.forEach((seg, i) => {
+  activeSegs.forEach((seg, i) => {
     const isPast    = now >= seg.end;
-    const isCurrent = i === curSegIdx;
+    const isCurrent = i === effectiveCurSeg;
     const isFuture  = !isPast && !isCurrent;
 
     const actual = (!isFuture && hasTsData) ? segActuals[i] : 0;
@@ -1543,12 +1601,10 @@ function renderRtTableMerged(segActuals, dayTarget, hasTsData, curSegIdx, now, i
     const cumPlanDisplay = isCurrent ? committedPlan : endCumPlan[i];
     const planForRate = isPast ? endCumPlan[i] : isCurrent ? committedPlan : null;
 
-    // 累積達成率（截至本段的整體進度）
     const cumRate = (planForRate != null && planForRate > 0 && hasTsData)
       ? Math.round(cumActual / planForRate * 100) : null;
     if (cumRate !== null) lastRate = cumRate;
 
-    // 階段達成率（本時段單獨表現）
     const segRate = (!isFuture && hasTsData && segPlans[i] > 0)
       ? Math.round(actual / segPlans[i] * 100) : null;
 
