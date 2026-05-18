@@ -1494,18 +1494,33 @@ function buildRealtimeBoard() {
   const dayRecs   = filteredRecords.filter(r => dateToISO(r[0]) === boardISO);
   const hasTsData = dayRecs.some(r => r[3] != null);
 
-  // 出勤人數
-  const bxWorkers = new Set(dayRecs.filter(r=>r[2]==='bx').map(r=>r[1])).size;
-  const mzWorkers = new Set(dayRecs.filter(r=>r[2]==='mz').map(r=>r[1])).size;
-  const bxDayTarget = bxTarget * bxWorkers;
-  const mzDayTarget = mzTarget * mzWorkers;
-  const dayTarget   = bxDayTarget + mzDayTarget;
+  // 每人分攤目標加總（與人員效率頁一致，避免雙料作業員目標疊加）
+  const pidBxQty = {}, pidMzQty = {};
+  dayRecs.forEach(r => {
+    if (r[2] === 'bx') pidBxQty[r[1]] = (pidBxQty[r[1]] || 0) + 1;
+    else               pidMzQty[r[1]] = (pidMzQty[r[1]] || 0) + 1;
+  });
+  const dayPids = new Set([...Object.keys(pidBxQty), ...Object.keys(pidMzQty)]);
+  let dayTarget = 0, bxTotalTarget = 0, mzTotalTarget = 0;
+  dayPids.forEach(pid => {
+    const bx = pidBxQty[pid] || 0;
+    const mz = pidMzQty[pid] || 0;
+    const tot = bx + mz;
+    if (tot === 0) return;
+    let bxT, mzT;
+    if (mz === 0)      { bxT = bxTarget; mzT = 0; }
+    else if (bx === 0) { bxT = 0;        mzT = mzTarget; }
+    else               { bxT = bxTarget * bx / tot; mzT = mzTarget * mz / tot; }
+    bxTotalTarget += bxT;
+    mzTotalTarget += mzT;
+    dayTarget     += bxT + mzT;
+  });
 
-  // 依班別計算當班目標（按工時比例縮放）
-  const activeWorkMin = getActiveTotalWorkMin();
-  const shiftTarget    = Math.round(dayTarget   * activeWorkMin / FULL_WORK_MIN);
-  const bxShiftTarget  = Math.round(bxDayTarget * activeWorkMin / FULL_WORK_MIN);
-  const mzShiftTarget  = Math.round(mzDayTarget * activeWorkMin / FULL_WORK_MIN);
+  // 依班別按工時比例縮放
+  const activeWorkMin  = getActiveTotalWorkMin();
+  const shiftTarget    = Math.round(dayTarget      * activeWorkMin / FULL_WORK_MIN);
+  const bxShiftTarget  = Math.round(bxTotalTarget  * activeWorkMin / FULL_WORK_MIN);
+  const mzShiftTarget  = Math.round(mzTotalTarget  * activeWorkMin / FULL_WORK_MIN);
   const shiftLabel = SHIFT_TYPES[getActiveShift()].label;
 
   // 時段實績（合計，6個時段）
