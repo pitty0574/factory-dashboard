@@ -270,6 +270,9 @@
     <!-- 底部四大數字卡片 -->
     <div id="rtOverall" style="display:flex;gap:12px;"></div>
 
+    <!-- 當月累積區塊 -->
+    <div id="rtMonthly"></div>
+
   </div><!-- /dark wrapper -->
   </div>
 
@@ -1562,6 +1565,8 @@ function buildRealtimeBoard() {
   renderRtOverall(totalActual, shiftTarget, bxShiftTarget, mzShiftTarget,
     dayRecs.filter(r=>r[2]==='bx').length, dayRecs.filter(r=>r[2]==='mz').length);
 
+  renderRtMonthly(bxTarget, mzTarget);
+
   // Manage timer: only auto-refresh when viewing today
   if (isToday) startRealtimeTimer();
   else stopRealtimeTimer();
@@ -1699,6 +1704,107 @@ function renderRtOverall(total, totalTarget, bxTarget, mzTarget, bxActual, mzAct
     card('累計目標', totalTarget) +
     rateCard +
     breakdown;
+}
+
+function renderRtMonthly(bxTarget, mzTarget) {
+  const el = document.getElementById('rtMonthly');
+  if (!el) return;
+
+  const todayISO  = today();
+  const monthStart = todayISO.slice(0, 7) + '-01';
+  const nowMins   = nowMin();
+  const planRatio = getCommittedPlanRatio(nowMins);
+
+  // 從 filteredRecords（異常過濾後全量）取當月資料
+  const monthRecs = filteredRecords.filter(r => {
+    const iso = dateToISO(r[0]);
+    return iso >= monthStart && iso <= todayISO;
+  });
+
+  // 依日期分組
+  const dateMap = {};
+  monthRecs.forEach(r => {
+    const iso = dateToISO(r[0]);
+    if (!dateMap[iso]) dateMap[iso] = [];
+    dateMap[iso].push(r);
+  });
+
+  let monthlyTarget = 0;
+  let monthlyActual = 0;
+
+  Object.entries(dateMap).forEach(([iso, recs]) => {
+    monthlyActual += recs.length;
+
+    // 每人分攤目標加總（與即時看板當日計算一致）
+    const pidBx = {}, pidMz = {};
+    recs.forEach(r => {
+      if (r[2] === 'bx') pidBx[r[1]] = (pidBx[r[1]] || 0) + 1;
+      else               pidMz[r[1]] = (pidMz[r[1]] || 0) + 1;
+    });
+    const pids = new Set([...Object.keys(pidBx), ...Object.keys(pidMz)]);
+    let blendedTotal = 0;
+    pids.forEach(pid => {
+      const bx = pidBx[pid] || 0, mz = pidMz[pid] || 0, tot = bx + mz;
+      if (tot === 0) return;
+      if (mz === 0)      blendedTotal += bxTarget;
+      else if (bx === 0) blendedTotal += mzTarget;
+      else               blendedTotal += bxTarget * bx / tot + mzTarget * mz / tot;
+    });
+
+    if (iso === todayISO) {
+      // 今天：只算到目前已過的計畫比例
+      monthlyTarget += blendedTotal * planRatio;
+    } else {
+      // 過去日期：依該天最晚時間戳自動判斷班別
+      const tsRecs = recs.filter(r => r[3] != null);
+      let shiftRatio;
+      if (tsRecs.length > 0) {
+        const maxTs = Math.max(...tsRecs.map(r => r[3]));
+        shiftRatio = maxTs <= 16*60+30 ? 460/FULL_WORK_MIN
+                   : maxTs <= 18*60+30 ? 570/FULL_WORK_MIN
+                   : 1;
+      } else {
+        // 無時間戳 → 沿用目前下拉班別
+        shiftRatio = getActiveTotalWorkMin() / FULL_WORK_MIN;
+      }
+      monthlyTarget += blendedTotal * shiftRatio;
+    }
+  });
+
+  monthlyTarget = Math.round(monthlyTarget);
+  const monthlyRate = monthlyTarget > 0 ? Math.round(monthlyActual / monthlyTarget * 100) : null;
+
+  const d = new Date();
+  const monthLabel = `${d.getFullYear()}年${d.getMonth()+1}月`;
+  const rateColor = monthlyRate === null ? '#888'
+    : monthlyRate >= 100 ? '#1D9E75'
+    : monthlyRate >= 80  ? '#e67e22' : '#e74c3c';
+  const rateEmoji = monthlyRate === null ? ''
+    : monthlyRate >= 100 ? '😀' : monthlyRate >= 80 ? '😐' : '😢';
+
+  const cb = 'flex:1;background:#131929;border-radius:16px;padding:0 1rem;text-align:center;display:flex;flex-direction:column;justify-content:center;align-items:center;height:180px;';
+
+  el.innerHTML = `
+    <div style="border-top:1px solid #1e2a40;margin-top:16px;padding-top:14px;">
+      <div style="font-size:14px;color:#445;margin-bottom:10px;letter-spacing:1px;">📅 當月累積（${monthLabel}）</div>
+      <div style="display:flex;gap:12px;">
+        <div style="${cb}border:1px solid #1e2d50;">
+          <div style="font-size:13px;color:#8ab4f8;margin-bottom:6px;letter-spacing:1px;">當月累積目標</div>
+          <div style="font-size:64px;font-weight:800;line-height:1;color:#ffffff;">${monthlyTarget || '—'}</div>
+          <div style="font-size:13px;color:#556;margin-top:6px;">隻</div>
+        </div>
+        <div style="${cb}border:1px solid #1e2d50;">
+          <div style="font-size:13px;color:#8ab4f8;margin-bottom:6px;letter-spacing:1px;">當月累積實績</div>
+          <div style="font-size:64px;font-weight:800;line-height:1;color:#ffffff;">${monthlyActual || '—'}</div>
+          <div style="font-size:13px;color:#556;margin-top:6px;">隻</div>
+        </div>
+        <div style="${cb}border:2px solid ${rateColor};">
+          <div style="font-size:13px;color:#8ab4f8;margin-bottom:6px;letter-spacing:1px;">當月累積達成率</div>
+          <div style="font-size:56px;font-weight:800;line-height:1;color:${rateColor};">${monthlyRate !== null ? monthlyRate + '%' : '—'}</div>
+          <div style="font-size:20px;color:${rateColor};margin-top:10px;">${rateEmoji}</div>
+        </div>
+      </div>
+    </div>`;
 }
 
 // ── Quality Tab ──────────────────────────────────────────────────────────────
