@@ -279,6 +279,23 @@
   <!-- Quality -->
   <div id="view-quality" style="display:none;">
 
+    <!-- 每日平均補漆點數推移 -->
+    <div class="person-card" style="margin-bottom:1rem;">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:0.75rem;">
+        <div id="qTrendTitle" style="font-size:18px;font-weight:700;">每日平均補漆點數推移 — 保險桿</div>
+        <div style="display:flex;gap:6px;">
+          <button id="qTrendBtnBx" class="quick-btn active" onclick="setQTrend('bx')">保險桿</button>
+          <button id="qTrendBtnMz" class="quick-btn" onclick="setQTrend('mz')">馬自達</button>
+        </div>
+      </div>
+      <div id="qTrendNoData" style="display:none;font-size:13px;color:#aaa;padding:1.5rem 0;text-align:center;">
+        目前篩選範圍內無補漆點數資料
+      </div>
+      <div id="qTrendChartWrap" style="position:relative;width:100%;height:260px;">
+        <canvas id="qDailyTrendChart"></canvas>
+      </div>
+    </div>
+
     <!-- BX/MZ toggle -->
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:0.75rem;">
       <span style="font-size:12px;color:#888;">部件類型：</span>
@@ -1808,11 +1825,89 @@ function renderRtMonthly(bxTarget, mzTarget) {
 }
 
 // ── Quality Tab ──────────────────────────────────────────────────────────────
-let qualityType     = 'bx';
-let qualitySub      = 'model';
-const qCharts       = {};
-const qModelChecked = new Set();
-const qColorChecked = new Set();
+let qualityType         = 'bx';
+let qualitySub          = 'model';
+let qTrendType          = 'bx';
+let qDailyTrendChartInst = null;
+const qCharts           = {};
+const qModelChecked     = new Set();
+const qColorChecked     = new Set();
+
+function setQTrend(type) {
+  qTrendType = type;
+  document.getElementById('qTrendBtnBx').classList.toggle('active', type === 'bx');
+  document.getElementById('qTrendBtnMz').classList.toggle('active', type === 'mz');
+  buildQDailyTrend();
+}
+
+function getQTrendRecs() {
+  const s = document.getElementById('startDate').value;
+  const e = document.getElementById('endDate').value;
+  return filteredRecords.filter(r => {
+    const iso = dateToISO(r[0]);
+    if ((s && iso < s) || (e && iso > e)) return false;
+    if (r[2] !== qTrendType) return false;
+    return r[7] !== null && r[7] !== undefined;
+  });
+}
+
+function buildQDailyTrend() {
+  const recs      = getQTrendRecs();
+  const noDataEl  = document.getElementById('qTrendNoData');
+  const wrapEl    = document.getElementById('qTrendChartWrap');
+  const titleEl   = document.getElementById('qTrendTitle');
+  const partName  = qTrendType === 'bx' ? '保險桿' : '馬自達';
+  const lineColor = qTrendType === 'bx' ? '#378ADD' : '#e67e22';
+
+  if (titleEl) titleEl.textContent = `每日平均補漆點數推移 — ${partName}`;
+
+  if (!recs.length) {
+    if (noDataEl) noDataEl.style.display = '';
+    if (wrapEl)   wrapEl.style.display   = 'none';
+    if (qDailyTrendChartInst) { qDailyTrendChartInst.destroy(); qDailyTrendChartInst = null; }
+    return;
+  }
+  if (noDataEl) noDataEl.style.display = 'none';
+  if (wrapEl)   wrapEl.style.display   = '';
+
+  const labels = filteredDates.map(d => d.slice(5));
+  const data   = filteredDates.map(dt => {
+    const dr = recs.filter(r => r[0] === dt);
+    if (!dr.length) return null;
+    return +(dr.reduce((s, r) => s + (r[7] || 0), 0) / dr.length).toFixed(2);
+  });
+
+  if (qDailyTrendChartInst) { qDailyTrendChartInst.destroy(); qDailyTrendChartInst = null; }
+  qDailyTrendChartInst = new Chart(document.getElementById('qDailyTrendChart'), {
+    type: 'line',
+    data: { labels, datasets: [{
+      label: `${partName} 每日平均點數`,
+      data,
+      borderColor: lineColor,
+      backgroundColor: lineColor + '18',
+      borderWidth: 2.5,
+      pointRadius: 5,
+      pointBackgroundColor: lineColor,
+      fill: true,
+      tension: 0.3,
+      spanGaps: false,
+    }]},
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: {
+          title: ctx => ctx.length ? `日期：${ctx[0].label}` : '',
+          label: ctx => ctx.parsed.y !== null ? `平均 ${ctx.parsed.y.toFixed(1)} 點/隻` : '',
+        }}
+      },
+      scales: {
+        x: { grid: { color: 'rgba(136,135,128,0.12)' }, ticks: { font: { size: 12 }, autoSkip: true, maxTicksLimit: 15 } },
+        y: { min: 0, grid: { color: 'rgba(136,135,128,0.12)' }, ticks: { font: { size: 12 }, callback: v => v + ' 點' } }
+      }
+    }
+  });
+}
 
 function setQualityType(t) {
   qualityType = t;
@@ -1893,6 +1988,7 @@ function qHeatFg(avg) { return avg >= 3 ? '#fff' : '#1a1a18'; }
 
 // ── Main entry ────────────────────────────────────────────────────────────────
 function buildQualityView() {
+  buildQDailyTrend();
   const allRecs = getQualityRecs();
   if (!allRecs.length) {
     document.getElementById('qNoData').style.display = '';
