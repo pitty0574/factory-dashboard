@@ -281,11 +281,19 @@
 
     <!-- 每日平均補漆點數推移 -->
     <div class="person-card" style="margin-bottom:1rem;">
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:0.75rem;">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:0.75rem;">
         <div id="qTrendTitle" style="font-size:18px;font-weight:700;">每日平均補漆點數推移 — 保險桿</div>
-        <div style="display:flex;gap:6px;">
-          <button id="qTrendBtnBx" class="quick-btn active" onclick="setQTrend('bx')">保險桿</button>
-          <button id="qTrendBtnMz" class="quick-btn" onclick="setQTrend('mz')">馬自達</button>
+        <div style="display:flex;flex-direction:column;gap:5px;align-items:flex-end;">
+          <div style="display:flex;gap:5px;align-items:center;">
+            <span style="font-size:11px;color:#888;">部件：</span>
+            <button id="qTrendBtnBx" class="quick-btn active" onclick="setQTrend('bx')">保險桿</button>
+            <button id="qTrendBtnMz" class="quick-btn" onclick="setQTrend('mz')">馬自達</button>
+          </div>
+          <div style="display:flex;gap:5px;align-items:center;">
+            <span style="font-size:11px;color:#888;">粒度：</span>
+            <button id="qTrendBtnDay"  class="quick-btn active" onclick="setQTrendGran('day')">日推移</button>
+            <button id="qTrendBtnWeek" class="quick-btn" onclick="setQTrendGran('week')">週推移</button>
+          </div>
         </div>
       </div>
       <div id="qTrendNoData" style="display:none;font-size:13px;color:#aaa;padding:1.5rem 0;text-align:center;">
@@ -1827,16 +1835,24 @@ function renderRtMonthly(bxTarget, mzTarget) {
 // ── Quality Tab ──────────────────────────────────────────────────────────────
 let qualityType         = 'bx';
 let qualitySub          = 'model';
-let qTrendType          = 'bx';
+let qTrendType           = 'bx';
+let qTrendGran           = 'day';
 let qDailyTrendChartInst = null;
-const qCharts           = {};
-const qModelChecked     = new Set();
-const qColorChecked     = new Set();
+const qCharts            = {};
+const qModelChecked      = new Set();
+const qColorChecked      = new Set();
 
 function setQTrend(type) {
   qTrendType = type;
   document.getElementById('qTrendBtnBx').classList.toggle('active', type === 'bx');
   document.getElementById('qTrendBtnMz').classList.toggle('active', type === 'mz');
+  buildQDailyTrend();
+}
+
+function setQTrendGran(gran) {
+  qTrendGran = gran;
+  document.getElementById('qTrendBtnDay').classList.toggle('active',  gran === 'day');
+  document.getElementById('qTrendBtnWeek').classList.toggle('active', gran === 'week');
   buildQDailyTrend();
 }
 
@@ -1851,15 +1867,31 @@ function getQTrendRecs() {
   });
 }
 
+function qWeekMonday(isoDate) {
+  const d = new Date(isoDate);
+  const day = d.getDay() || 7;
+  d.setDate(d.getDate() - day + 1);
+  return d.toISOString().slice(0, 10);
+}
+
+function qWeekLabel(mondayISO) {
+  const mon = new Date(mondayISO);
+  const sun = new Date(mondayISO);
+  sun.setDate(sun.getDate() + 6);
+  const fmt = d => `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
+  return `${fmt(mon)}~${fmt(sun)}`;
+}
+
 function buildQDailyTrend() {
   const recs      = getQTrendRecs();
   const noDataEl  = document.getElementById('qTrendNoData');
   const wrapEl    = document.getElementById('qTrendChartWrap');
   const titleEl   = document.getElementById('qTrendTitle');
   const partName  = qTrendType === 'bx' ? '保險桿' : '馬自達';
-  const lineColor = qTrendType === 'bx' ? '#378ADD' : '#e67e22';
+  const granLabel = qTrendGran  === 'day' ? '日推移' : '週推移';
+  const lineColor = qTrendType  === 'bx' ? '#378ADD' : '#e67e22';
 
-  if (titleEl) titleEl.textContent = `每日平均補漆點數推移 — ${partName}`;
+  if (titleEl) titleEl.textContent = `平均補漆點數推移（${granLabel}）— ${partName}`;
 
   if (!recs.length) {
     if (noDataEl) noDataEl.style.display = '';
@@ -1870,18 +1902,37 @@ function buildQDailyTrend() {
   if (noDataEl) noDataEl.style.display = 'none';
   if (wrapEl)   wrapEl.style.display   = '';
 
-  const labels = filteredDates.map(d => d.slice(5));
-  const data   = filteredDates.map(dt => {
-    const dr = recs.filter(r => r[0] === dt);
-    if (!dr.length) return null;
-    return +(dr.reduce((s, r) => s + (r[7] || 0), 0) / dr.length).toFixed(2);
-  });
+  let labels, data, tooltipTitleFn;
+
+  if (qTrendGran === 'day') {
+    // 只保留有實績的日期，剔除空日
+    const activeDates = filteredDates.filter(dt => recs.some(r => r[0] === dt));
+    labels = activeDates.map(d => d.slice(5));
+    data   = activeDates.map(dt => {
+      const dr = recs.filter(r => r[0] === dt);
+      return +(dr.reduce((s, r) => s + (r[7] || 0), 0) / dr.length).toFixed(2);
+    });
+    tooltipTitleFn = ctx => ctx.length ? `日期：${ctx[0].label}` : '';
+  } else {
+    // 週推移：依 ISO 週聚合
+    const weekMap = {};
+    recs.forEach(r => {
+      const mon = qWeekMonday(dateToISO(r[0]));
+      if (!weekMap[mon]) weekMap[mon] = { sum: 0, count: 0 };
+      weekMap[mon].sum   += r[7] || 0;
+      weekMap[mon].count += 1;
+    });
+    const weekKeys = Object.keys(weekMap).sort();
+    labels = weekKeys.map(k => qWeekLabel(k));
+    data   = weekKeys.map(k => +(weekMap[k].sum / weekMap[k].count).toFixed(2));
+    tooltipTitleFn = ctx => ctx.length ? `週區間：${ctx[0].label}` : '';
+  }
 
   if (qDailyTrendChartInst) { qDailyTrendChartInst.destroy(); qDailyTrendChartInst = null; }
   qDailyTrendChartInst = new Chart(document.getElementById('qDailyTrendChart'), {
     type: 'line',
     data: { labels, datasets: [{
-      label: `${partName} 每日平均點數`,
+      label: `${partName} 平均點數`,
       data,
       borderColor: lineColor,
       backgroundColor: lineColor + '18',
@@ -1890,15 +1941,14 @@ function buildQDailyTrend() {
       pointBackgroundColor: lineColor,
       fill: true,
       tension: 0.3,
-      spanGaps: false,
     }]},
     options: {
       responsive: true, maintainAspectRatio: false,
       plugins: {
         legend: { display: false },
         tooltip: { callbacks: {
-          title: ctx => ctx.length ? `日期：${ctx[0].label}` : '',
-          label: ctx => ctx.parsed.y !== null ? `平均 ${ctx.parsed.y.toFixed(1)} 點/隻` : '',
+          title: tooltipTitleFn,
+          label: ctx => `平均 ${ctx.parsed.y.toFixed(1)} 點/隻`,
         }}
       },
       scales: {
