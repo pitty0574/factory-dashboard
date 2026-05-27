@@ -296,6 +296,7 @@
           </div>
         </div>
       </div>
+      <div id="qTrendInfo" style="font-size:13px;margin-bottom:8px;min-height:20px;"></div>
       <div id="qTrendNoData" style="display:none;font-size:13px;color:#aaa;padding:1.5rem 0;text-align:center;">
         目前篩選範圍內無補漆點數資料
       </div>
@@ -1882,13 +1883,27 @@ function qWeekLabel(mondayISO) {
   return `${fmt(mon)}~${fmt(sun)}`;
 }
 
+function linReg(ys) {
+  const n = ys.length;
+  if (n < 2) return null;
+  let sx = 0, sy = 0, sxy = 0, sx2 = 0;
+  for (let i = 0; i < n; i++) { sx += i; sy += ys[i]; sxy += i * ys[i]; sx2 += i * i; }
+  const denom = n * sx2 - sx * sx;
+  if (denom === 0) return null;
+  const a = (n * sxy - sx * sy) / denom;
+  const b = (sy - a * sx) / n;
+  return { a, b };
+}
+
 function buildQDailyTrend() {
   const recs      = getQTrendRecs();
   const noDataEl  = document.getElementById('qTrendNoData');
   const wrapEl    = document.getElementById('qTrendChartWrap');
   const titleEl   = document.getElementById('qTrendTitle');
+  const infoEl    = document.getElementById('qTrendInfo');
   const partName  = qTrendType === 'bx' ? '保險桿' : '馬自達';
   const granLabel = qTrendGran  === 'day' ? '日推移' : '週推移';
+  const granUnit  = qTrendGran  === 'day' ? '日' : '週';
   const lineColor = qTrendType  === 'bx' ? '#378ADD' : '#e67e22';
 
   if (titleEl) titleEl.textContent = `平均補漆點數推移（${granLabel}）— ${partName}`;
@@ -1896,6 +1911,7 @@ function buildQDailyTrend() {
   if (!recs.length) {
     if (noDataEl) noDataEl.style.display = '';
     if (wrapEl)   wrapEl.style.display   = 'none';
+    if (infoEl)   infoEl.innerHTML       = '';
     if (qDailyTrendChartInst) { qDailyTrendChartInst.destroy(); qDailyTrendChartInst = null; }
     return;
   }
@@ -1905,7 +1921,6 @@ function buildQDailyTrend() {
   let labels, data, tooltipTitleFn;
 
   if (qTrendGran === 'day') {
-    // 只保留有實績的日期，剔除空日
     const activeDates = filteredDates.filter(dt => recs.some(r => r[0] === dt));
     labels = activeDates.map(d => d.slice(5));
     data   = activeDates.map(dt => {
@@ -1914,7 +1929,6 @@ function buildQDailyTrend() {
     });
     tooltipTitleFn = ctx => ctx.length ? `日期：${ctx[0].label}` : '';
   } else {
-    // 週推移：依 ISO 週聚合
     const weekMap = {};
     recs.forEach(r => {
       const mon = qWeekMonday(dateToISO(r[0]));
@@ -1928,28 +1942,80 @@ function buildQDailyTrend() {
     tooltipTitleFn = ctx => ctx.length ? `週區間：${ctx[0].label}` : '';
   }
 
+  // 線性回歸
+  const reg = linReg(data);
+  let trendDataset = null;
+  if (infoEl) {
+    if (!reg || data.length < 2) {
+      infoEl.innerHTML = '<span style="color:#aaa;">資料點不足，無法分析趨勢</span>';
+    } else {
+      const { a, b } = reg;
+      const n = data.length;
+      const yStart = b;
+      const yEnd   = a * (n - 1) + b;
+      const total  = yEnd - yStart;
+      const absThr = 0.01;
+      const isUp   = a >  absThr;
+      const isDn   = a < -absThr;
+      const tColor = isUp ? '#e74c3c' : isDn ? '#1D9E75' : '#888';
+      const tArrow = isUp ? '↑' : isDn ? '↓' : '→';
+      const tWord  = isUp ? '上升趨勢' : isDn ? '下降趨勢' : '持平';
+      const sign   = total >= 0 ? '+' : '';
+      infoEl.innerHTML =
+        `<span style="color:${tColor};font-weight:600;">${tArrow} ${tWord}</span>` +
+        `<span style="color:#888;margin:0 8px;">｜</span>` +
+        `<span style="color:${tColor};font-weight:600;">${sign}${total.toFixed(2)} 點/隻</span>` +
+        `<span style="color:#aaa;font-size:12px;"> (${yStart.toFixed(2)} → ${yEnd.toFixed(2)})</span>` +
+        `<span style="color:#888;margin:0 8px;">｜</span>` +
+        `<span style="color:#888;font-size:12px;">每${granUnit} ${a >= 0 ? '+' : ''}${a.toFixed(3)}</span>`;
+
+      const trendColor = isUp ? '#e74c3c' : isDn ? '#1D9E75' : '#888888';
+      // 趨勢線只有兩端點，其餘補 null 讓 Chart.js 畫直線
+      const trendPts = data.map((_, i) => +(a * i + b).toFixed(3));
+      trendDataset = {
+        label: '趨勢線',
+        data: trendPts,
+        borderColor: trendColor,
+        borderWidth: 3,
+        borderDash: [8, 5],
+        pointRadius: 0,
+        fill: false,
+        tension: 0,
+        order: 1,
+        tooltip: { enabled: false },
+      };
+    }
+  }
+
   if (qDailyTrendChartInst) { qDailyTrendChartInst.destroy(); qDailyTrendChartInst = null; }
+  const datasets = [{
+    label: `${partName} 平均點數`,
+    data,
+    borderColor: lineColor,
+    backgroundColor: lineColor + '18',
+    borderWidth: 2.5,
+    pointRadius: 5,
+    pointBackgroundColor: lineColor,
+    fill: true,
+    tension: 0.3,
+    order: 2,
+  }];
+  if (trendDataset) datasets.push(trendDataset);
+
   qDailyTrendChartInst = new Chart(document.getElementById('qDailyTrendChart'), {
     type: 'line',
-    data: { labels, datasets: [{
-      label: `${partName} 平均點數`,
-      data,
-      borderColor: lineColor,
-      backgroundColor: lineColor + '18',
-      borderWidth: 2.5,
-      pointRadius: 5,
-      pointBackgroundColor: lineColor,
-      fill: true,
-      tension: 0.3,
-    }]},
+    data: { labels, datasets },
     options: {
       responsive: true, maintainAspectRatio: false,
       plugins: {
         legend: { display: false },
-        tooltip: { callbacks: {
-          title: tooltipTitleFn,
-          label: ctx => `平均 ${ctx.parsed.y.toFixed(1)} 點/隻`,
-        }}
+        tooltip: {
+          filter: item => item.datasetIndex === 0,
+          callbacks: {
+            title: tooltipTitleFn,
+            label: ctx => `平均 ${ctx.parsed.y.toFixed(1)} 點/隻`,
+          }
+        }
       },
       scales: {
         x: { grid: { color: 'rgba(136,135,128,0.12)' }, ticks: { font: { size: 12 }, autoSkip: true, maxTicksLimit: 15 } },
