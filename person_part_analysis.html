@@ -517,7 +517,7 @@ const MZ_CODES = new Set(['51','A4D','41W','46V','PZ','TAS']);
 let allRecords = []; // [{date:'2026/04/08', pid:'8623', type:'bx'|'mz'}] — raw, as loaded from Sheets
 let cleanRecords = []; // allRecords after 異常資料過濾（非法值/低頻率/Z-score，Rule A→B→C）
 let excludedRecords = []; // 被剔除的原始資料列，含剔除原因，用於「異常資料檢視」
-let anomalyStats = { illegal:0, lowFreqModel:0, lowFreqColor:0, lowFreqPid:0, zscorePerf:0, zscorePoints:0, total:0 };
+let anomalyStats = { illegal:0, lowFreqModel:0, lowFreqColor:0, lowFreqPid:0, zscorePoints:0, total:0 };
 let filteredRecords = []; // cleanRecords after 連續輸入間隔過濾
 let filteredDates = []; // sorted unique date strings in current filter range
 let personData = {}; // pid -> {bx:{date:qty}, mz:{date:qty}} — from cleanRecords (for detail tab)
@@ -572,7 +572,7 @@ function meanStd(arr) {
 
 function computeAnomalyFilter() {
   excludedRecords = [];
-  anomalyStats = { illegal:0, lowFreqModel:0, lowFreqColor:0, lowFreqPid:0, zscorePerf:0, zscorePoints:0, total:0 };
+  anomalyStats = { illegal:0, lowFreqModel:0, lowFreqColor:0, lowFreqPid:0, zscorePoints:0, total:0 };
 
   function pushExcluded(r, reasons, cats, actualOverride) {
     const [date, pid, , , carModel, , code, points] = r;
@@ -614,50 +614,25 @@ function computeAnomalyFilter() {
     const modelPct = totalA > 0 ? modelCount[carModel] / totalA * 100 : 0;
     const colorPct = totalA > 0 ? colorCount[code]     / totalA * 100 : 0;
     if (modelPct < 2)        { reasons.push(`低頻率：車型 ${carModel} 佔比 ${modelPct.toFixed(1)}%`); cats.push('lowFreqModel'); }
-    if (colorPct < 2)        { reasons.push(`低頻率：顏色 ${code} 佔比 ${colorPct.toFixed(1)}%`);     cats.push('lowFreqColor'); }
+    if (colorPct < 1.5)      { reasons.push(`低頻率：顏色 ${code} 佔比 ${colorPct.toFixed(1)}%`);     cats.push('lowFreqColor'); }
     if (pidCount[pid] < 30)  { reasons.push(`低頻率：工號 ${pid} 全部歷史僅出現 ${pidCount[pid]} 次`); cats.push('lowFreqPid'); }
 
     if (reasons.length) pushExcluded(r, reasons, cats);
     else stepB.push(r);
   });
 
-  // ── Rule C：統計極端值（Z-score > 3，以 Rule A+B 通過後的資料做全域比較）
-  // 單人單日總實績
-  const dayGroups = {}; // 'pid|date' -> [record,...]
-  stepB.forEach(r => {
-    const key = r[1] + '|' + r[0];
-    (dayGroups[key] = dayGroups[key] || []).push(r);
-  });
-  const dayTotals = Object.values(dayGroups).map(g => g.length);
-  const perfStat = meanStd(dayTotals);
-  const dayZ = {};
-  Object.entries(dayGroups).forEach(([key, g]) => {
-    dayZ[key] = perfStat.std > 0 ? (g.length - perfStat.mean) / perfStat.std : 0;
-  });
-
-  // 單筆補漆點數
-  const ptsValues = stepB.filter(r => r[7] != null).map(r => r[7]);
-  const ptsStat = meanStd(ptsValues);
-
+  // ── Rule C：補漆點數固定門檻（單筆補漆點數 > 15 點即剔除，以 Rule A+B 通過後的資料為基礎）
+  const PTS_THRESHOLD = 15;
   const stepC = [];
   stepB.forEach(r => {
-    const [date, pid, , , , , , points] = r;
-    const key = pid + '|' + date;
+    const points = r[7];
     const reasons = [], cats = [];
-    const z = dayZ[key];
-    if (Math.abs(z) > 3) {
-      reasons.push(`統計極端值：單日實績 Z-score=${z.toFixed(2)}（當日共 ${dayGroups[key].length} 筆）`);
-      cats.push('zscorePerf');
-    }
-    if (points != null && ptsStat.std > 0) {
-      const pz = (points - ptsStat.mean) / ptsStat.std;
-      if (Math.abs(pz) > 3) {
-        reasons.push(`統計極端值：補漆點數 Z-score=${pz.toFixed(2)}`);
-        cats.push('zscorePoints');
-      }
+    if (points != null && points > PTS_THRESHOLD) {
+      reasons.push(`補漆點數過高：${points} 點（門檻 ${PTS_THRESHOLD} 點）`);
+      cats.push('zscorePoints');
     }
 
-    if (reasons.length) pushExcluded(r, reasons, cats, dayGroups[key].length);
+    if (reasons.length) pushExcluded(r, reasons, cats);
     else stepC.push(r);
   });
 
@@ -2593,7 +2568,6 @@ const ANOMALY_CAT_LABELS = {
   lowFreqModel:  '低頻率車型',
   lowFreqColor:  '低頻率顏色',
   lowFreqPid:    '低頻率工號',
-  zscorePerf:    '統計極端值（實績）',
   zscorePoints:  '統計極端值（補漆點數）',
 };
 
@@ -2624,7 +2598,6 @@ function renderAnomalyStats() {
     ['lowFreqModel', ANOMALY_CAT_LABELS.lowFreqModel],
     ['lowFreqColor', ANOMALY_CAT_LABELS.lowFreqColor],
     ['lowFreqPid',   ANOMALY_CAT_LABELS.lowFreqPid],
-    ['zscorePerf',   ANOMALY_CAT_LABELS.zscorePerf],
     ['zscorePoints', ANOMALY_CAT_LABELS.zscorePoints],
   ];
   grid.innerHTML = items.map(([key,label]) =>
