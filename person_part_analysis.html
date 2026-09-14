@@ -230,11 +230,7 @@
       <div style="width:1px;height:28px;background:#1e2a40;margin-right:1.6rem;"></div>
       <div style="display:flex;align-items:center;gap:0.5rem;flex:1;">
         <span style="font-size:13px;color:#445;white-space:nowrap;">生產班別</span>
-        <select id="shiftSelect" style="font-size:13px;padding:3px 8px;border:1px solid #2a3a55;border-radius:6px;background:#1a2744;color:#e0e0e0;" onchange="onShiftChange()">
-          <option value="normal">正常班（到16:30，4段）</option>
-          <option value="ot2">加班2小時（到18:30，5段）</option>
-          <option value="ot4">加班4小時（到21:00，6段）</option>
-        </select>
+        <span style="font-size:13px;color:#8ab4f8;">班別依個人最後實績時間自動判定</span>
       </div>
       <div style="display:flex;align-items:center;gap:1rem;margin-left:auto;">
         <div style="text-align:right;">
@@ -1075,14 +1071,13 @@ function refreshEfficiency() {
 
   // Today vs past: ratio used as denominator multiplier
   const isViewingToday = lastDate && dateToISO(lastDate) === today();
-  const planRatio = isViewingToday ? getCommittedPlanRatio(nowMin()) : 1.0;
 
   // Update section title
   const titleEl = document.getElementById('effStatusTitle');
   if (titleEl) {
     titleEl.textContent = isViewingToday
-      ? `即時人員狀態（今天 ${lastDate} — 依目前時段累計目標）`
-      : `人員狀態（${lastDate||'—'} 全天結果）`;
+      ? `即時人員狀態（今天 ${lastDate} — 依個人班別累計目標）`
+      : `人員狀態（${lastDate||'—'} 全天結果，依個人班別）`;
   }
 
   // Rate colour for a row
@@ -1098,53 +1093,43 @@ function refreshEfficiency() {
   ptsDiscEl.textContent = '補漆點數高代表該部件品質問題較嚴重，可作為達成率偏低的參考依據';
   container.appendChild(ptsDiscEl);
 
-  persons.forEach(pid => {
-    const df = filteredPersonData[pid] || {bx:{}, mz:{}};
+  // 每位作業員依「當天最後一筆實績時間」自動判定個人班別，並計算已依班別工時比例縮放後的個人目標
+  const dayRecs = filteredRecords.filter(r => r[0] === lastDate);
+  const breakdown = getPersonsDailyBreakdown(dayRecs, bxTarget, mzTarget);
+  const dayPids = Object.keys(breakdown).filter(pid => breakdown[pid].totalQty > 0).sort();
+
+  // 若當天實績筆數 = 0，該作業員不顯示卡片
+  dayPids.forEach(pid => {
+    const p = breakdown[pid];
     const da = personData[pid] || {bx:{}, mz:{}};
-    const bxQty = df.bx[lastDate] || 0;
-    const mzQty = df.mz[lastDate] || 0;
-    const absent = bxQty === 0 && mzQty === 0;
+    const bxQty = p.bxQty, mzQty = p.mzQty, totalQty = p.totalQty;
 
     // For hint: compare allRecords vs filteredRecords counts for this person+date
     const bxQtyAll = da.bx[lastDate] || 0;
     const mzQtyAll = da.mz[lastDate] || 0;
     const totalAll = bxQtyAll + mzQtyAll;
-    const totalFiltered = bxQty + mzQty;
+    const totalFiltered = totalQty;
     const excludedCount = totalAll - totalFiltered;
 
-    // 依實際部件產出比例分攤個人目標（避免雙料作業員目標疊加）
-    const totalQty = bxQty + mzQty;
-    let blendedDayTarget = 0;
-    if (totalQty > 0) {
-      if (mzQty === 0)      blendedDayTarget = bxTarget;
-      else if (bxQty === 0) blendedDayTarget = mzTarget;
-      else {
-        blendedDayTarget = bxTarget * (bxQty / totalQty) + mzTarget * (mzQty / totalQty);
-      }
-    }
-    const blendedCommitted = blendedDayTarget * planRatio;
-    const overallRate = (!absent && blendedCommitted > 0)
+    const planRatio = isViewingToday ? getCommittedPlanRatioForSegs(nowMin(), p.segCount) : 1.0;
+    const blendedCommitted = p.dayTarget * planRatio;
+    const overallRate = blendedCommitted > 0
       ? Math.round(totalQty / blendedCommitted * 100)
-      : (!absent && totalQty > 0 ? 100 : null);
+      : (totalQty > 0 ? 100 : null);
 
-    let overallLight;
-    if (absent) {
-      overallLight = '⚫';
-    } else {
-      const r = overallRate ?? 0;
-      overallLight = r >= 100 ? '🟢' : r >= 80 ? '🟡' : '🔴';
-    }
+    const r = overallRate ?? 0;
+    const overallLight = r >= 100 ? '🟢' : r >= 80 ? '🟡' : '🔴';
 
     // 卡片主行：合計實績 / 分攤後目標
     const blendedGoalStr = blendedCommitted > 0 ? Math.round(blendedCommitted) : '—';
     const overallRateColor = rateColor(overallRate ?? 0);
     const overallRateStr   = overallRate !== null ? ` (${overallRate}%)` : '';
-    const mainRow = absent ? '' : `<div style="font-size:15px;color:${overallRateColor};margin-top:3px;">合計 ${totalQty}/${blendedGoalStr}隻${overallRateStr}</div>`;
+    const mainRow = `<div style="font-size:15px;color:${overallRateColor};margin-top:3px;">合計 ${totalQty}/${blendedGoalStr}隻${overallRateStr}</div>`;
 
     // 保/馬分解行（只顯示數量，不各自計算達成率）
     const bxBreak = bxQty > 0 ? `<span style="color:#378ADD;">保 ${bxQty}</span>` : '';
     const mzBreak = mzQty > 0 ? `<span style="color:#1D9E75;">馬 ${mzQty}</span>` : '';
-    const breakdownRow = (!absent && (bxQty > 0 || mzQty > 0))
+    const breakdownRow = (bxQty > 0 || mzQty > 0)
       ? `<div style="font-size:13px;color:#888;margin-top:2px;">${[bxBreak,mzBreak].filter(Boolean).join(' / ')} 隻</div>`
       : '';
 
@@ -1152,9 +1137,9 @@ function refreshEfficiency() {
       ? `<div style="font-size:15px;color:#aaa;margin-top:2px;">進度 ${Math.round(planRatio*100)}%</div>`
       : '';
 
-    const bxPts = absent ? null : getPtsStats(pid, lastDate, 'bx');
-    const mzPts = absent ? null : getPtsStats(pid, lastDate, 'mz');
-    const ptsBlock = (!absent && (bxPts || mzPts)) ? `
+    const bxPts = getPtsStats(pid, lastDate, 'bx');
+    const mzPts = getPtsStats(pid, lastDate, 'mz');
+    const ptsBlock = (bxPts || mzPts) ? `
       <div style="margin-top:6px;border-top:0.5px solid #eee;padding-top:5px;text-align:left;">
         <div style="font-size:12px;color:#888;margin-bottom:2px;">今日補漆點數</div>
         ${bxPts ? `<div style="font-size:12px;line-height:1.6;">保：<span style="color:#e67e22;font-weight:600;">${bxPts.totalPts}</span>點/平均<span style="color:${ptsAvgColor(bxPts.avg)};font-weight:600;">${bxPts.avg.toFixed(1)}</span>點/筆</div>` : ''}
@@ -1166,14 +1151,14 @@ function refreshEfficiency() {
       : '';
 
     const card = document.createElement('div');
-    card.className = 'eff-card' + (absent?' absent':'') + (selectedEffPid===pid?' selected':'');
+    card.className = 'eff-card' + (selectedEffPid===pid?' selected':'');
+    card.dataset.pid = pid;
     card.onclick = () => toggleEffDetail(pid);
     card.innerHTML = `
       <div class="light">${overallLight}</div>
       <div class="eid">${pid}</div>
-      ${absent
-        ? '<div style="font-size:15px;color:#aaa;margin-top:3px;">未出勤</div>'
-        : mainRow + breakdownRow + subLabel + ptsBlock}
+      ${shiftBadgeHtml(p.shiftKey)}
+      ${mainRow + breakdownRow + subLabel + ptsBlock}
       ${hintHtml}`;
     container.appendChild(card);
   });
@@ -1334,8 +1319,8 @@ function toggleEffDetail(pid) {
     renderEffChart(pid, bxTarget, mzTarget);
   }
   // Update card selection
-  document.querySelectorAll('.eff-card').forEach((c,i) => {
-    c.classList.toggle('selected', persons[i]===selectedEffPid);
+  document.querySelectorAll('.eff-card').forEach(c => {
+    c.classList.toggle('selected', c.dataset.pid===selectedEffPid);
   });
 }
 
@@ -1499,13 +1484,54 @@ const SEGMENTS = [
 const FULL_WORK_MIN = SEGMENTS.reduce((s, g) => s + g.min, 0); // 690
 
 const SHIFT_TYPES = {
-  'normal': { label: '正常班',     segCount: 4 },
-  'ot2':    { label: '加班2小時',  segCount: 5 },
-  'ot4':    { label: '加班4小時',  segCount: 6 },
+  'normal': { label: '正常班',    shortLabel: '正常班',   segCount: 4, badgeBg: '#eee',    badgeColor: '#777' },
+  'ot2':    { label: '加班2小時', shortLabel: '加班2h',   segCount: 5, badgeBg: '#fde3cc', badgeColor: '#c8641a' },
+  'ot4':    { label: '加班4小時', shortLabel: '加班4h',   segCount: 6, badgeBg: '#e67e22', badgeColor: '#fff' },
 };
-function getActiveShift()      { return localStorage.getItem('shiftType') || 'ot2'; }
-function getActiveSegments()   { return SEGMENTS.slice(0, SHIFT_TYPES[getActiveShift()].segCount); }
-function getActiveTotalWorkMin() { return getActiveSegments().reduce((s, g) => s + g.min, 0); }
+
+// 依「當天最後一筆實績時間戳記」判定該作業員的個人班別
+// ≤16:30 → 正常班；16:30~18:30 → 加班2小時；>18:30 → 加班4小時；無時間戳一律視為正常班
+function determineShiftKey(lastTsMin) {
+  if (lastTsMin == null)        return 'normal';
+  if (lastTsMin <= 16*60+30)    return 'normal';
+  if (lastTsMin <= 18*60+30)    return 'ot2';
+  return 'ot4';
+}
+
+// 將某一天的原始記錄依工號彙整，計算每人當天的個人班別與已依班別工時比例縮放後的個人目標
+// dayRecs: filteredRecords 中屬於同一天的記錄陣列；回傳 { pid: {bxQty,mzQty,totalQty,lastTs,shiftKey,segCount,workMin,blendedDayTarget,dayTarget,bxDayTarget,mzDayTarget} }
+function getPersonsDailyBreakdown(dayRecs, bxTarget, mzTarget) {
+  const map = {};
+  dayRecs.forEach(r => {
+    const pid = r[1], type = r[2], tsMin = r[3];
+    if (!pid || /^\d{4}[-\/]/.test(pid)) return;
+    if (!map[pid]) map[pid] = { pid, bxQty: 0, mzQty: 0, lastTs: null };
+    const p = map[pid];
+    if (type === 'bx') p.bxQty++; else p.mzQty++;
+    if (tsMin != null && (p.lastTs == null || tsMin > p.lastTs)) p.lastTs = tsMin;
+  });
+  Object.values(map).forEach(p => {
+    p.totalQty = p.bxQty + p.mzQty;
+    if (p.totalQty === 0)      p.blendedDayTarget = 0;
+    else if (p.mzQty === 0)    p.blendedDayTarget = bxTarget;
+    else if (p.bxQty === 0)    p.blendedDayTarget = mzTarget;
+    else                       p.blendedDayTarget = bxTarget * (p.bxQty / p.totalQty) + mzTarget * (p.mzQty / p.totalQty);
+
+    p.shiftKey = determineShiftKey(p.lastTs);
+    p.segCount = SHIFT_TYPES[p.shiftKey].segCount;
+    p.workMin  = SEGMENTS.slice(0, p.segCount).reduce((s, g) => s + g.min, 0);
+    p.dayTarget = p.blendedDayTarget * p.workMin / FULL_WORK_MIN;
+
+    p.bxDayTarget = (p.totalQty > 0 && p.bxQty > 0) ? bxTarget * (p.bxQty / p.totalQty) * p.workMin / FULL_WORK_MIN : 0;
+    p.mzDayTarget = (p.totalQty > 0 && p.mzQty > 0) ? mzTarget * (p.mzQty / p.totalQty) * p.workMin / FULL_WORK_MIN : 0;
+  });
+  return map;
+}
+
+function shiftBadgeHtml(shiftKey) {
+  const meta = SHIFT_TYPES[shiftKey] || SHIFT_TYPES.normal;
+  return `<span style="display:inline-block;font-size:11px;padding:2px 9px;border-radius:10px;background:${meta.badgeBg};color:${meta.badgeColor};margin-top:4px;font-weight:600;">班別：${meta.shortLabel}</span>`;
+}
 
 const BREAKS = [
   { label:'10:00～10:10', start: 10*60,    end: 10*60+10 },
@@ -1556,10 +1582,10 @@ function getSegmentIdx(mins) {
 
 function currentSegIdx() { return getSegmentIdx(nowMin()); }
 
-// Returns 0..1: fraction of active-shift work time elapsed as of nowMins
-function getCommittedPlanRatio(nowMins) {
-  const activeSegs = getActiveSegments();
-  const totalMin   = getActiveTotalWorkMin();
+// Returns 0..1: fraction of a shift's (segCount segments) work time elapsed as of nowMins
+function getCommittedPlanRatioForSegs(nowMins, segCount) {
+  const activeSegs = SEGMENTS.slice(0, segCount);
+  const totalMin   = activeSegs.reduce((s, g) => s + g.min, 0);
   if (totalMin === 0) return 0;
   const curSeg = getSegmentIdx(nowMins);
   let elapsed = 0;
@@ -1643,18 +1669,7 @@ function updateRtProgress(rate) {
   label.style.fill  = rtRateColor(rate);
 }
 
-function onShiftChange() {
-  const sel = document.getElementById('shiftSelect');
-  if (sel) localStorage.setItem('shiftType', sel.value);
-  if (currentView === 'realtime') buildRealtimeBoard();
-  refreshEfficiency();
-}
-
 function buildRealtimeBoard() {
-  // 同步班別下拉選單
-  const shiftSel = document.getElementById('shiftSelect');
-  if (shiftSel) shiftSel.value = getActiveShift();
-
   const bxTarget = parseInt(document.getElementById('bxTarget').value) || 40;
   const mzTarget = parseInt(document.getElementById('mzTarget').value) || 25;
 
@@ -1671,36 +1686,23 @@ function buildRealtimeBoard() {
   const dayRecs   = filteredRecords.filter(r => dateToISO(r[0]) === boardISO);
   const hasTsData = dayRecs.some(r => r[3] != null);
 
-  // 每人分攤目標加總（與人員效率頁一致，避免雙料作業員目標疊加）
-  const pidBxQty = {}, pidMzQty = {};
-  dayRecs.forEach(r => {
-    if (r[2] === 'bx') pidBxQty[r[1]] = (pidBxQty[r[1]] || 0) + 1;
-    else               pidMzQty[r[1]] = (pidMzQty[r[1]] || 0) + 1;
-  });
-  const dayPids = new Set([...Object.keys(pidBxQty), ...Object.keys(pidMzQty)]);
-  let dayTarget = 0, bxTotalTarget = 0, mzTotalTarget = 0;
-  dayPids.forEach(pid => {
-    const bx = pidBxQty[pid] || 0;
-    const mz = pidMzQty[pid] || 0;
-    const tot = bx + mz;
-    if (tot === 0) return;
-    let bxT, mzT;
-    if (mz === 0)      { bxT = bxTarget; mzT = 0; }
-    else if (bx === 0) { bxT = 0;        mzT = mzTarget; }
-    else               { bxT = bxTarget * bx / tot; mzT = mzTarget * mz / tot; }
-    bxTotalTarget += bxT;
-    mzTotalTarget += mzT;
-    dayTarget     += bxT + mzT;
-  });
+  // 每位作業員：依當天最後一筆實績時間自動判定個人班別，並算出已依班別工時比例縮放後的個人目標
+  const breakdown = getPersonsDailyBreakdown(dayRecs, bxTarget, mzTarget);
+  const activeBreakdowns = Object.values(breakdown).filter(p => p.totalQty > 0);
 
-  // 依班別按工時比例縮放
-  const activeWorkMin  = getActiveTotalWorkMin();
-  const shiftTarget    = Math.round(dayTarget      * activeWorkMin / FULL_WORK_MIN);
-  const bxShiftTarget  = Math.round(bxTotalTarget  * activeWorkMin / FULL_WORK_MIN);
-  const mzShiftTarget  = Math.round(mzTotalTarget  * activeWorkMin / FULL_WORK_MIN);
-  const shiftLabel = SHIFT_TYPES[getActiveShift()].label;
+  const dayTarget      = activeBreakdowns.reduce((s, p) => s + p.dayTarget, 0);
+  const shiftTarget    = Math.round(dayTarget);
+  const bxShiftTarget  = Math.round(activeBreakdowns.reduce((s, p) => s + p.bxDayTarget, 0));
+  const mzShiftTarget  = Math.round(activeBreakdowns.reduce((s, p) => s + p.mzDayTarget, 0));
 
-  // 時段實績（合計，6個時段）
+  const shiftCounts = { normal: 0, ot2: 0, ot4: 0 };
+  activeBreakdowns.forEach(p => shiftCounts[p.shiftKey]++);
+  const shiftCountsLabel = Object.keys(SHIFT_TYPES)
+    .filter(k => shiftCounts[k] > 0)
+    .map(k => `${SHIFT_TYPES[k].shortLabel} ${shiftCounts[k]}人`)
+    .join('・');
+
+  // 時段實績（合計，6個時段，與個人班別無關，純粹依實際打卡時間分桶）
   const segTotal = SEGMENTS.map(()=>0);
   let noTs = 0;
   dayRecs.forEach(([,, , tsMin]) => {
@@ -1727,15 +1729,13 @@ function buildRealtimeBoard() {
   }
   if (rtNext) rtNext.textContent = isToday ? minutesToNextEvent().text : '—';
   if (rtLU)   rtLU.textContent   = new Date().toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-  if (rtInfo) rtInfo.textContent = `${shiftLabel}　班別目標 ${shiftTarget} 隻（保 ${bxShiftTarget} / 馬 ${mzShiftTarget}）`;
+  if (rtInfo) rtInfo.textContent = shiftCountsLabel
+    ? `${shiftCountsLabel}　全隊目標 ${shiftTarget} 隻（保 ${bxShiftTarget} / 馬 ${mzShiftTarget}）`
+    : `尚無出勤資料`;
 
-  renderRtTableMerged(segTotal, dayTarget, hasTsData, curSeg, now, isToday);
+  renderRtTableMerged(segTotal, activeBreakdowns, hasTsData, curSeg, now, isToday);
 
-  // 只加總活躍時段的實績
-  const activeSegCount = getActiveSegments().length;
-  const totalActual = hasTsData
-    ? segTotal.slice(0, activeSegCount).reduce((a,b)=>a+b,0)
-    : noTs;
+  const totalActual = dayRecs.length;
   renderRtOverall(totalActual, shiftTarget, bxShiftTarget, mzShiftTarget,
     dayRecs.filter(r=>r[2]==='bx').length, dayRecs.filter(r=>r[2]==='mz').length);
 
@@ -1746,34 +1746,26 @@ function buildRealtimeBoard() {
   else stopRealtimeTimer();
 }
 
-function renderRtTableMerged(segActuals, dayTarget, hasTsData, curSegIdx, now, isToday=true) {
+function renderRtTableMerged(segActuals, activeBreakdowns, hasTsData, curSegIdx, now, isToday=true) {
   const tbody = document.getElementById('rtTbody');
   if (!tbody) return;
   tbody.innerHTML = '';
 
-  const activeSegs = getActiveSegments();
-
-  // 每段計畫目標：相對於全量工時（FULL_WORK_MIN = 690）
-  const segPlans = activeSegs.map(s => dayTarget * s.min / FULL_WORK_MIN);
-
-  // 當前時間已提交的累計計畫（供當前時段顯示用）
-  // 若 curSegIdx >= activeSegs.length，視為班別已結束
-  const effectiveCurSeg = (curSegIdx >= 0 && curSegIdx < activeSegs.length) ? curSegIdx : -1;
-
-  let committedPlan = 0;
-  for (let i = 0; i < activeSegs.length; i++) {
-    const seg = activeSegs[i];
-    if (now >= seg.end) {
-      committedPlan += segPlans[i];
-    } else if (i === effectiveCurSeg) {
-      const elapsed = Math.max(0, now - seg.start);
-      committedPlan += dayTarget * (elapsed / FULL_WORK_MIN);
+  // 每段計畫目標：每位作業員依自己的個人班別（只在班別涵蓋的時段內）分攤其個人目標
+  const segPlans = SEGMENTS.map(() => 0);
+  activeBreakdowns.forEach(p => {
+    for (let i = 0; i < p.segCount; i++) {
+      segPlans[i] += p.dayTarget * SEGMENTS[i].min / p.workMin;
     }
-  }
+  });
+
+  // 當前時間已提交的累計計畫：每位作業員依自己班別的時間流逝比例計算後加總
+  const committedPlan = activeBreakdowns.reduce(
+    (s, p) => s + p.dayTarget * getCommittedPlanRatioForSegs(now, p.segCount), 0);
 
   const endCumPlan = [];
   let acc = 0;
-  activeSegs.forEach((s, i) => { acc += segPlans[i]; endCumPlan.push(acc); });
+  SEGMENTS.forEach((s, i) => { acc += segPlans[i]; endCumPlan.push(acc); });
 
   function rateCell(r) {
     if (r === null) return '<span style="color:#555;font-size:20px;">—</span>';
@@ -1784,9 +1776,9 @@ function renderRtTableMerged(segActuals, dayTarget, hasTsData, curSegIdx, now, i
   let cumActual = 0;
   let lastRate = null;
 
-  activeSegs.forEach((seg, i) => {
+  SEGMENTS.forEach((seg, i) => {
     const isPast    = now >= seg.end;
-    const isCurrent = i === effectiveCurSeg;
+    const isCurrent = i === curSegIdx;
     const isFuture  = !isPast && !isCurrent;
 
     const actual = (!isFuture && hasTsData) ? segActuals[i] : 0;
@@ -1802,8 +1794,8 @@ function renderRtTableMerged(segActuals, dayTarget, hasTsData, curSegIdx, now, i
     const segRate = (!isFuture && hasTsData && segPlans[i] > 0)
       ? Math.round(actual / segPlans[i] * 100) : null;
 
-    const segPlanDisp = dayTarget > 0 ? Math.round(segPlans[i])   : '—';
-    const cumPlanDisp = dayTarget > 0 ? Math.round(cumPlanDisplay) : '—';
+    const segPlanDisp = segPlans[i] > 0 ? Math.round(segPlans[i])   : '—';
+    const cumPlanDisp = cumPlanDisplay > 0 ? Math.round(cumPlanDisplay) : '—';
     const actualDisp  = isFuture ? '—' : hasTsData ? actual    : '?';
     const cumActDisp  = isFuture ? '—' : hasTsData ? cumActual : '?';
 
@@ -1887,7 +1879,6 @@ function renderRtMonthly(bxTarget, mzTarget) {
   const todayISO  = today();
   const monthStart = todayISO.slice(0, 7) + '-01';
   const nowMins   = nowMin();
-  const planRatio = getCommittedPlanRatio(nowMins);
 
   // 從 filteredRecords（異常過濾後全量）取當月資料
   const monthRecs = filteredRecords.filter(r => {
@@ -1906,43 +1897,21 @@ function renderRtMonthly(bxTarget, mzTarget) {
   let monthlyTarget = 0;
   let monthlyActual = 0;
 
+  // 全體累積目標 = Σ(每位作業員的個人當日目標)；每人依「該天最後一筆實績時間」自動判定個人班別
   Object.entries(dateMap).forEach(([iso, recs]) => {
     monthlyActual += recs.length;
 
-    // 每人分攤目標加總（與即時看板當日計算一致）
-    const pidBx = {}, pidMz = {};
-    recs.forEach(r => {
-      if (r[2] === 'bx') pidBx[r[1]] = (pidBx[r[1]] || 0) + 1;
-      else               pidMz[r[1]] = (pidMz[r[1]] || 0) + 1;
-    });
-    const pids = new Set([...Object.keys(pidBx), ...Object.keys(pidMz)]);
-    let blendedTotal = 0;
-    pids.forEach(pid => {
-      const bx = pidBx[pid] || 0, mz = pidMz[pid] || 0, tot = bx + mz;
-      if (tot === 0) return;
-      if (mz === 0)      blendedTotal += bxTarget;
-      else if (bx === 0) blendedTotal += mzTarget;
-      else               blendedTotal += bxTarget * bx / tot + mzTarget * mz / tot;
-    });
-
-    if (iso === todayISO) {
-      // 今天：只算到目前已過的計畫比例
-      monthlyTarget += blendedTotal * planRatio;
-    } else {
-      // 過去日期：依該天最晚時間戳自動判斷班別
-      const tsRecs = recs.filter(r => r[3] != null);
-      let shiftRatio;
-      if (tsRecs.length > 0) {
-        const maxTs = Math.max(...tsRecs.map(r => r[3]));
-        shiftRatio = maxTs <= 16*60+30 ? 460/FULL_WORK_MIN
-                   : maxTs <= 18*60+30 ? 570/FULL_WORK_MIN
-                   : 1;
+    const breakdown = getPersonsDailyBreakdown(recs, bxTarget, mzTarget);
+    Object.values(breakdown).forEach(p => {
+      if (p.totalQty === 0) return;
+      if (iso === todayISO) {
+        // 今天：只算到目前已過的計畫比例（依該人自己班別的工時流逝比例）
+        monthlyTarget += p.dayTarget * getCommittedPlanRatioForSegs(nowMins, p.segCount);
       } else {
-        // 無時間戳 → 沿用目前下拉班別
-        shiftRatio = getActiveTotalWorkMin() / FULL_WORK_MIN;
+        // 過去日期：整天已結束，直接採計該人依自己班別縮放後的個人當日目標
+        monthlyTarget += p.dayTarget;
       }
-      monthlyTarget += blendedTotal * shiftRatio;
-    }
+    });
   });
 
   monthlyTarget = Math.round(monthlyTarget);
