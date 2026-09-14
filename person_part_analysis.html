@@ -62,6 +62,25 @@
   .summary-item .si-val { font-size: 26px; font-weight: 700; }
   .q-sub-btn { background: none; border: 0.5px solid #bbb; border-radius: 6px; padding: 4px 14px; font-size: 16px; font-weight: 700; cursor: pointer; color: #666; }
   .q-sub-btn.active { background: #e6f1fb; color: #185fa5; border-color: #185fa5; font-weight: 700; }
+
+  /* Anomaly Filter Footer */
+  .anomaly-footer { display: flex; justify-content: center; margin: 2rem 0 1rem; }
+  .anomaly-btn { background: linear-gradient(135deg,#e67e22,#d35400); color: #fff; border: none; border-radius: 24px; padding: 10px 22px; font-size: 14px; font-weight: 700; cursor: pointer; box-shadow: 0 3px 12px rgba(211,84,0,0.35); }
+  .anomaly-btn:hover { box-shadow: 0 4px 16px rgba(211,84,0,0.5); }
+  .anomaly-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 1000; align-items: center; justify-content: center; padding: 2rem; }
+  .anomaly-overlay.open { display: flex; }
+  .anomaly-modal { background: #1a1a24; color: #e6e6ea; border-radius: 16px; padding: 1.25rem 1.5rem; max-width: 1100px; width: 100%; max-height: 85vh; display: flex; flex-direction: column; box-shadow: 0 10px 50px rgba(0,0,0,0.5); }
+  .anomaly-stat-card { background: #22222e; border: 0.5px solid #333; border-radius: 10px; padding: 8px 14px; min-width: 108px; text-align: center; }
+  .anomaly-stat-card .as-label { font-size: 11px; color: #999; margin-bottom: 2px; }
+  .anomaly-stat-card .as-val { font-size: 18px; font-weight: 700; color: #e6e6ea; }
+  .anomaly-stat-card.total { background: #3a2a1a; border-color: #e67e22; }
+  .anomaly-stat-card.total .as-val { color: #f0a050; }
+  .anomaly-filter-btn { font-size: 12px; padding: 4px 12px; border-radius: 14px; border: 1px solid #444; background: #22222e; color: #aaa; cursor: pointer; }
+  .anomaly-filter-btn.active { border-color: #e67e22; background: rgba(230,126,34,0.2); color: #f0a050; }
+  .anomaly-table-wrap { overflow: auto; flex: 1; border: 0.5px solid #333; border-radius: 8px; }
+  .anomaly-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .anomaly-table thead th { position: sticky; top: 0; background: #22222e; text-align: left; padding: 8px 10px; color: #999; border-bottom: 1px solid #333; font-weight: 700; }
+  .anomaly-table td { padding: 6px 10px; border-bottom: 0.5px solid #2a2a35; }
 </style>
 </head>
 <body>
@@ -423,6 +442,39 @@
 
 </div><!-- /tab container -->
 
+<!-- 異常資料檢視按鈕 -->
+<div class="anomaly-footer">
+  <button class="anomaly-btn" onclick="openAnomalyModal()">已剔除 <span id="anomalyCount">0</span> 筆異常資料 🔍</button>
+</div>
+
+<!-- 異常資料檢視 Modal -->
+<div class="anomaly-overlay" id="anomalyOverlay" onclick="if(event.target===this) closeAnomalyModal()">
+  <div class="anomaly-modal">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+      <div style="font-size:18px;font-weight:700;">異常資料檢視</div>
+      <button class="btn btn-secondary" onclick="closeAnomalyModal()">關閉</button>
+    </div>
+    <div id="anomalyStatsGrid" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:1rem;"></div>
+    <div id="anomalyFilterBtns" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:1rem;"></div>
+    <div class="anomaly-table-wrap">
+      <table class="anomaly-table">
+        <thead>
+          <tr>
+            <th>日期</th>
+            <th>工號</th>
+            <th>車型</th>
+            <th>顏色</th>
+            <th style="text-align:right;">實績數字</th>
+            <th style="text-align:right;">補漆點數</th>
+            <th>剔除原因</th>
+          </tr>
+        </thead>
+        <tbody id="anomalyTbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script>
 // ── Default config (built-in, used when localStorage is empty) ────────────────
@@ -450,7 +502,10 @@ const FALLBACK_RECORDS = [
   Object.entries(raw).forEach(([pid, parts]) => {
     ['bx','mz'].forEach(type => {
       Object.entries(parts[type]).forEach(([date, qty]) => {
-        for(let i=0;i<qty;i++) FALLBACK_RECORDS.push([date, pid, type, null]);
+        // 示範資料補上車型/顏色代號，避免被「異常資料過濾」誤判為非法值/低頻率值
+        const carModel = type === 'mz' ? 'CX-5' : 'CX-3';
+        const code     = type === 'mz' ? '51'   : 'W3S';
+        for(let i=0;i<qty;i++) FALLBACK_RECORDS.push([date, pid, type, null, carModel, type==='mz'?'烤漆':'鈑金', code, null]);
       });
     });
   });
@@ -459,10 +514,13 @@ const FALLBACK_RECORDS = [
 const MZ_CODES = new Set(['51','A4D','41W','46V','PZ','TAS']);
 
 // ── State ────────────────────────────────────────────────────────────────────
-let allRecords = []; // [{date:'2026/04/08', pid:'8623', type:'bx'|'mz'}]
-let filteredRecords = []; // allRecords after anomaly filter
+let allRecords = []; // [{date:'2026/04/08', pid:'8623', type:'bx'|'mz'}] — raw, as loaded from Sheets
+let cleanRecords = []; // allRecords after 異常資料過濾（非法值/低頻率/Z-score，Rule A→B→C）
+let excludedRecords = []; // 被剔除的原始資料列，含剔除原因，用於「異常資料檢視」
+let anomalyStats = { illegal:0, lowFreqModel:0, lowFreqColor:0, lowFreqPid:0, zscorePerf:0, zscorePoints:0, total:0 };
+let filteredRecords = []; // cleanRecords after 連續輸入間隔過濾
 let filteredDates = []; // sorted unique date strings in current filter range
-let personData = {}; // pid -> {bx:{date:qty}, mz:{date:qty}} — from allRecords (for detail tab)
+let personData = {}; // pid -> {bx:{date:qty}, mz:{date:qty}} — from cleanRecords (for detail tab)
 let filteredPersonData = {}; // same structure — from filteredRecords (for all other tabs)
 let persons = [];
 
@@ -496,12 +554,125 @@ function saveTargets() {
 function getMinIntervalSec() {
   return parseInt(localStorage.getItem('minIntervalSec') || '30') || 0;
 }
+
+// ── 異常資料過濾（非法值 / 低頻率值 / 統計極端值）─────────────────────────────
+// record 欄位: [date, pid, type, tsMin, carModel, partType, code, points]
+function isBlankVal(v) { return v === null || v === undefined || String(v).trim() === ''; }
+function hasTestKeyword(v) {
+  if (isBlankVal(v)) return false;
+  const s = String(v);
+  return /test/i.test(s) || s.includes('測試');
+}
+function meanStd(arr) {
+  if (!arr.length) return { mean: 0, std: 0 };
+  const mean = arr.reduce((a, b) => a + b, 0) / arr.length;
+  const variance = arr.reduce((a, b) => a + (b - mean) * (b - mean), 0) / arr.length;
+  return { mean, std: Math.sqrt(variance) };
+}
+
+function computeAnomalyFilter() {
+  excludedRecords = [];
+  anomalyStats = { illegal:0, lowFreqModel:0, lowFreqColor:0, lowFreqPid:0, zscorePerf:0, zscorePoints:0, total:0 };
+
+  function pushExcluded(r, reasons, cats, actualOverride) {
+    const [date, pid, , , carModel, , code, points] = r;
+    excludedRecords.push({ date, pid, carModel, code, points, actual: actualOverride ?? 1, reasons, cats });
+    cats.forEach(c => anomalyStats[c]++);
+  }
+
+  // ── Rule A：非法值（工號/車型/顏色空白或含測試關鍵字、工號=0、補漆點數為負或非數字）
+  const stepA = [];
+  allRecords.forEach(r => {
+    const [, pid, , , carModel, , code, points] = r;
+    const reasons = [];
+    if (isBlankVal(pid))            reasons.push('非法值：工號空白');
+    else if (String(pid).trim()==='0') reasons.push('非法值：工號為0');
+    else if (hasTestKeyword(pid))   reasons.push('非法值：工號含測試關鍵字');
+    if (isBlankVal(carModel))       reasons.push('非法值：車型空白');
+    else if (hasTestKeyword(carModel)) reasons.push('非法值：車型含測試關鍵字');
+    if (isBlankVal(code))           reasons.push('非法值：顏色空白');
+    else if (hasTestKeyword(code))  reasons.push('非法值：顏色含測試關鍵字');
+    if (points != null && (isNaN(points) || points < 0)) reasons.push('非法值：補漆點數為負數或非數字');
+
+    if (reasons.length) pushExcluded(r, reasons, ['illegal']);
+    else stepA.push(r);
+  });
+
+  // ── Rule B：低頻率值（以 Rule A 通過後的「全部歷史資料」為基準，不受日期篩選影響）
+  const totalA = stepA.length;
+  const modelCount = {}, colorCount = {}, pidCount = {};
+  stepA.forEach(r => {
+    const [, pid, , , carModel, , code] = r;
+    modelCount[carModel] = (modelCount[carModel] || 0) + 1;
+    colorCount[code]     = (colorCount[code]     || 0) + 1;
+    pidCount[pid]        = (pidCount[pid]        || 0) + 1;
+  });
+  const stepB = [];
+  stepA.forEach(r => {
+    const [, pid, , , carModel, , code] = r;
+    const reasons = [], cats = [];
+    const modelPct = totalA > 0 ? modelCount[carModel] / totalA * 100 : 0;
+    const colorPct = totalA > 0 ? colorCount[code]     / totalA * 100 : 0;
+    if (modelPct < 2)        { reasons.push(`低頻率：車型 ${carModel} 佔比 ${modelPct.toFixed(1)}%`); cats.push('lowFreqModel'); }
+    if (colorPct < 2)        { reasons.push(`低頻率：顏色 ${code} 佔比 ${colorPct.toFixed(1)}%`);     cats.push('lowFreqColor'); }
+    if (pidCount[pid] < 30)  { reasons.push(`低頻率：工號 ${pid} 全部歷史僅出現 ${pidCount[pid]} 次`); cats.push('lowFreqPid'); }
+
+    if (reasons.length) pushExcluded(r, reasons, cats);
+    else stepB.push(r);
+  });
+
+  // ── Rule C：統計極端值（Z-score > 3，以 Rule A+B 通過後的資料做全域比較）
+  // 單人單日總實績
+  const dayGroups = {}; // 'pid|date' -> [record,...]
+  stepB.forEach(r => {
+    const key = r[1] + '|' + r[0];
+    (dayGroups[key] = dayGroups[key] || []).push(r);
+  });
+  const dayTotals = Object.values(dayGroups).map(g => g.length);
+  const perfStat = meanStd(dayTotals);
+  const dayZ = {};
+  Object.entries(dayGroups).forEach(([key, g]) => {
+    dayZ[key] = perfStat.std > 0 ? (g.length - perfStat.mean) / perfStat.std : 0;
+  });
+
+  // 單筆補漆點數
+  const ptsValues = stepB.filter(r => r[7] != null).map(r => r[7]);
+  const ptsStat = meanStd(ptsValues);
+
+  const stepC = [];
+  stepB.forEach(r => {
+    const [date, pid, , , , , , points] = r;
+    const key = pid + '|' + date;
+    const reasons = [], cats = [];
+    const z = dayZ[key];
+    if (Math.abs(z) > 3) {
+      reasons.push(`統計極端值：單日實績 Z-score=${z.toFixed(2)}（當日共 ${dayGroups[key].length} 筆）`);
+      cats.push('zscorePerf');
+    }
+    if (points != null && ptsStat.std > 0) {
+      const pz = (points - ptsStat.mean) / ptsStat.std;
+      if (Math.abs(pz) > 3) {
+        reasons.push(`統計極端值：補漆點數 Z-score=${pz.toFixed(2)}`);
+        cats.push('zscorePoints');
+      }
+    }
+
+    if (reasons.length) pushExcluded(r, reasons, cats, dayGroups[key].length);
+    else stepC.push(r);
+  });
+
+  cleanRecords = stepC;
+  anomalyStats.total = excludedRecords.length;
+  updateAnomalyButton();
+}
+
 function computeFilteredRecords() {
   const minSec = getMinIntervalSec();
-  if (minSec <= 0) { filteredRecords = allRecords.slice(); return; }
+  const base = cleanRecords; // 已通過 Rule A/B/C 異常過濾的資料
+  if (minSec <= 0) { filteredRecords = base.slice(); return; }
   // Group indices by pid+date
   const groups = {};
-  allRecords.forEach((r, idx) => {
+  base.forEach((r, idx) => {
     const key = r[1] + '|' + r[0];
     if (!groups[key]) groups[key] = [];
     groups[key].push(idx);
@@ -509,25 +680,25 @@ function computeFilteredRecords() {
   const anomalous = new Set();
   Object.values(groups).forEach(indices => {
     const withTs = indices
-      .filter(i => allRecords[i][3] != null)
-      .sort((a, b) => allRecords[a][3] - allRecords[b][3]);
+      .filter(i => base[i][3] != null)
+      .sort((a, b) => base[a][3] - base[b][3]);
     for (let i = 1; i < withTs.length; i++) {
-      const diffSec = (allRecords[withTs[i]][3] - allRecords[withTs[i-1]][3]) * 60;
+      const diffSec = (base[withTs[i]][3] - base[withTs[i-1]][3]) * 60;
       if (diffSec < minSec) anomalous.add(withTs[i]);
     }
   });
-  filteredRecords = allRecords.filter((_, i) => !anomalous.has(i));
+  filteredRecords = base.filter((_, i) => !anomalous.has(i));
 }
 function updateFilterHint() {
   const hint = document.getElementById('filterHint');
   if (!hint) return;
   const minSec = getMinIntervalSec();
-  const total = allRecords.length;
+  const total = cleanRecords.length;
   const filtered = filteredRecords.length;
   const excluded = total - filtered;
   if (total === 0) { hint.style.display = 'none'; return; }
   hint.style.display = '';
-  hint.textContent = `目前設定：連續輸入間隔 < ${minSec} 秒的記錄將從計算中排除　原始資料 ${total} 筆，過濾後 ${filtered} 筆，共排除 ${excluded} 筆異常記錄`;
+  hint.textContent = `目前設定：連續輸入間隔 < ${minSec} 秒的記錄將從計算中排除（已排除異常資料的基準上）　基準 ${total} 筆，過濾後 ${filtered} 筆，共排除 ${excluded} 筆異常記錄`;
 }
 function applyMinIntervalChange() {
   computeFilteredRecords();
@@ -607,7 +778,7 @@ async function fetchFromSheets(id, key, sheet) {
       const rawDate = (row[dateCol] || '').trim();
       const pid     = (row[pidCol]  || '').trim();
       const code    = (row[codeCol] || '').trim().toUpperCase();
-      if (!rawDate || !pid || !code) return;
+      if (!rawDate) return; // 無日期無法歸類，直接略過；工號/顏色為空則留給「異常資料過濾」(Rule A) 判定並記錄剔除原因
       const date = normalizeDate(rawDate);
       if (!/^\d{4}\/\d{2}\/\d{2}$/.test(date)) {
         console.warn(`[Sheets] 日期無法解析，跳過: "${rawDate}"`);
@@ -633,6 +804,7 @@ async function fetchFromSheets(id, key, sheet) {
     console.log(`[Sheets] 合計 → 保險桿: ${bxTotal} 筆, 馬自達: ${mzTotal} 筆`);
 
     allRecords = records;
+    computeAnomalyFilter();
     computeFilteredRecords();
     updateFilterHint();
     setBadge(`已載入 ${records.length} 筆 (保${bxTotal}/馬${mzTotal})`, 'ok');
@@ -642,6 +814,7 @@ async function fetchFromSheets(id, key, sheet) {
     console.error(e);
     setBadge('載入失敗，使用示範資料','err');
     allRecords = FALLBACK_RECORDS;
+    computeAnomalyFilter();
     computeFilteredRecords();
     updateFilterHint();
     setDefaultDateRange();
@@ -693,8 +866,8 @@ function setQuick(mode) {
   else if (mode==='week')  { s = mondayOfWeek(t); }
   else if (mode==='lastweek') { const m=mondayOfWeek(t); s=addDays(m,-7); e=addDays(m,-1); }
   else if (mode==='month') { s = t.slice(0,7)+'-01'; }
-  else { // all — use extent of data
-    const all = allRecords.map(r=>dateToISO(r[0])).sort();
+  else { // all — use extent of data（已剔除異常資料的基準）
+    const all = cleanRecords.map(r=>dateToISO(r[0])).sort();
     s = all[0] || addDays(t,-30); e = all[all.length-1] || t;
   }
   document.getElementById('startDate').value = s;
@@ -706,10 +879,10 @@ function setQuick(mode) {
 function applyDateFilter() {
   const s = document.getElementById('startDate').value;
   const e = document.getElementById('endDate').value;
-  // Build personData from allRecords (detail tab — unfiltered)
+  // Build personData from cleanRecords（已剔除異常資料，detail tab 不套用連續輸入間隔過濾）
   const pMap = {};
   const dateSet = new Set();
-  allRecords.forEach(([date, pid, type]) => {
+  cleanRecords.forEach(([date, pid, type]) => {
     const iso = dateToISO(date);
     if ((s && iso < s) || (e && iso > e)) return;
     dateSet.add(date);
@@ -2406,11 +2579,90 @@ function buildQHeatmap(cid, rowKeys, colKeys, getCellFn, getTitleFn) {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 function setDefaultDateRange() {
-  const isos = allRecords.map(r => dateToISO(r[0])).filter(Boolean).sort();
+  const isos = cleanRecords.map(r => dateToISO(r[0])).filter(Boolean).sort();
   if (isos.length) {
     document.getElementById('startDate').value = isos[0];
     document.getElementById('endDate').value   = isos[isos.length - 1];
   }
+}
+
+// ── 異常資料檢視 Modal ─────────────────────────────────────────────────────────
+let anomalyFilterCat = 'all';
+const ANOMALY_CAT_LABELS = {
+  illegal:       '非法值',
+  lowFreqModel:  '低頻率車型',
+  lowFreqColor:  '低頻率顏色',
+  lowFreqPid:    '低頻率工號',
+  zscorePerf:    '統計極端值（實績）',
+  zscorePoints:  '統計極端值（補漆點數）',
+};
+
+function updateAnomalyButton() {
+  const el = document.getElementById('anomalyCount');
+  if (el) el.textContent = anomalyStats.total;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function openAnomalyModal() {
+  anomalyFilterCat = 'all';
+  renderAnomalyStats();
+  renderAnomalyFilterBtns();
+  renderAnomalyTable();
+  document.getElementById('anomalyOverlay').classList.add('open');
+}
+function closeAnomalyModal() {
+  document.getElementById('anomalyOverlay').classList.remove('open');
+}
+
+function renderAnomalyStats() {
+  const grid = document.getElementById('anomalyStatsGrid');
+  const items = [
+    ['illegal',      ANOMALY_CAT_LABELS.illegal],
+    ['lowFreqModel', ANOMALY_CAT_LABELS.lowFreqModel],
+    ['lowFreqColor', ANOMALY_CAT_LABELS.lowFreqColor],
+    ['lowFreqPid',   ANOMALY_CAT_LABELS.lowFreqPid],
+    ['zscorePerf',   ANOMALY_CAT_LABELS.zscorePerf],
+    ['zscorePoints', ANOMALY_CAT_LABELS.zscorePoints],
+  ];
+  grid.innerHTML = items.map(([key,label]) =>
+    `<div class="anomaly-stat-card"><div class="as-label">${label}</div><div class="as-val">${anomalyStats[key]}</div></div>`
+  ).join('') + `<div class="anomaly-stat-card total"><div class="as-label">總計</div><div class="as-val">${anomalyStats.total}</div></div>`;
+}
+
+function renderAnomalyFilterBtns() {
+  const cats = [['all','全部'], ...Object.entries(ANOMALY_CAT_LABELS)];
+  const wrap = document.getElementById('anomalyFilterBtns');
+  wrap.innerHTML = cats.map(([key,label]) =>
+    `<button class="anomaly-filter-btn${key===anomalyFilterCat?' active':''}" onclick="setAnomalyFilter('${key}')">${label}</button>`
+  ).join('');
+}
+
+function setAnomalyFilter(cat) {
+  anomalyFilterCat = cat;
+  renderAnomalyFilterBtns();
+  renderAnomalyTable();
+}
+
+function renderAnomalyTable() {
+  const tbody = document.getElementById('anomalyTbody');
+  const rows = anomalyFilterCat === 'all' ? excludedRecords : excludedRecords.filter(r => r.cats.includes(anomalyFilterCat));
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:#666;padding:2rem;">無符合資料</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = rows.map(r => `
+    <tr>
+      <td>${escapeHtml(r.date || '')}</td>
+      <td>${escapeHtml(r.pid || '')}</td>
+      <td>${escapeHtml(r.carModel || '')}</td>
+      <td>${escapeHtml(r.code || '')}</td>
+      <td style="text-align:right;">${r.actual ?? '-'}</td>
+      <td style="text-align:right;">${r.points != null ? r.points : '-'}</td>
+      <td style="color:#f0a050;">${r.reasons.map(escapeHtml).join('；')}</td>
+    </tr>`).join('');
 }
 
 function init() {
