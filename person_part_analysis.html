@@ -41,6 +41,7 @@
   .date-filter { background: #fff; border: 0.5px solid #ddd; border-radius: 12px; padding: 0.75rem 1.25rem; margin-bottom: 1rem; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
   .quick-btn { font-size: 11px; padding: 3px 10px; border: 0.5px solid #aaa; border-radius: 6px; cursor: pointer; background: #f5f5f3; color: #555; }
   .quick-btn.active { background: #e6f1fb; color: #185fa5; border-color: #185fa5; }
+  .quick-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
   /* Efficiency Tab */
   .target-bar { background: #fff; border: 0.5px solid #ddd; border-radius: 12px; padding: 0.75rem 1.25rem; margin-bottom: 1rem; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
@@ -201,7 +202,14 @@
         <canvas id="effChart"></canvas>
       </div>
     </div>
-    <div id="cumStatusTitle" style="font-size:18px;font-weight:700;margin:1.5rem 0 0.75rem;color:#555;">本月累積狀態（截至昨日）</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin:1.5rem 0 0.75rem;">
+      <div id="cumStatusTitle" style="font-size:18px;font-weight:700;color:#555;">本月累積狀態</div>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <button id="cumMonthPrev" class="quick-btn" onclick="shiftCumMonth(-1)">◀ 上月</button>
+        <select id="cumMonthSelect" onchange="onCumMonthChange()" style="font-size:12px;padding:4px 10px;border:0.5px solid #185fa5;border-radius:6px;background:#e6f1fb;color:#185fa5;font-weight:700;"></select>
+        <button id="cumMonthNext" class="quick-btn" onclick="shiftCumMonth(1)">下月 ▶</button>
+      </div>
+    </div>
     <div id="cumStatusCards"></div>
     <div style="font-size:18px;font-weight:700;margin:1.5rem 0 0.75rem;color:#555;">統計摘要</div>
     <div class="summary-grid" id="summaryGrid"></div>
@@ -525,6 +533,7 @@ let dailyChartInst = null;
 let effChartInst = null;
 let currentView = 'detail';
 let selectedEffPid = null;
+let selectedCumMonth = null; // 'YYYY-MM'，null = 尚未初始化，會於首次 buildCumulativeStatus 設為當月
 
 // ── LocalStorage helpers ─────────────────────────────────────────────────────
 function getConfig() {
@@ -1150,61 +1159,128 @@ function refreshEfficiency() {
   buildCumulativeStatus(bxTarget, mzTarget);
 }
 
+// 資料範圍內所有月份：從 allRecords 最早月份 到 當月
+function getCumMonthBounds() {
+  const curMonth = today().slice(0, 7);
+  const dates = allRecords.map(r => dateToISO(r[0])).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d));
+  const minMonth = dates.length ? dates.reduce((a, b) => a < b ? a : b).slice(0, 7) : curMonth;
+  return { minMonth, curMonth: curMonth < minMonth ? minMonth : curMonth };
+}
+function enumerateMonths(minYM, maxYM) {
+  const out = [];
+  let [y, m] = minYM.split('-').map(Number);
+  const [ey, em] = maxYM.split('-').map(Number);
+  while (y < ey || (y === ey && m <= em)) {
+    out.push(`${y}-${String(m).padStart(2, '0')}`);
+    m++; if (m > 12) { m = 1; y++; }
+  }
+  return out;
+}
+function renderCumMonthControls(minMonth, curMonth) {
+  const months = enumerateMonths(minMonth, curMonth);
+  const sel = document.getElementById('cumMonthSelect');
+  const prevBtn = document.getElementById('cumMonthPrev');
+  const nextBtn = document.getElementById('cumMonthNext');
+  if (sel) {
+    sel.innerHTML = months.map(ym => {
+      const [y, m] = ym.split('-');
+      return `<option value="${ym}">${y}年${m}月</option>`;
+    }).join('');
+    sel.value = selectedCumMonth;
+  }
+  const idx = months.indexOf(selectedCumMonth);
+  if (prevBtn) prevBtn.disabled = idx <= 0;
+  if (nextBtn) nextBtn.disabled = idx < 0 || idx >= months.length - 1;
+}
+function shiftCumMonth(delta) {
+  const { minMonth, curMonth } = getCumMonthBounds();
+  const months = enumerateMonths(minMonth, curMonth);
+  const idx = months.indexOf(selectedCumMonth);
+  if (idx < 0) return;
+  const newIdx = Math.min(Math.max(idx + delta, 0), months.length - 1);
+  if (months[newIdx] === selectedCumMonth) return;
+  selectedCumMonth = months[newIdx];
+  refreshEfficiency();
+}
+function onCumMonthChange() {
+  const sel = document.getElementById('cumMonthSelect');
+  if (sel && sel.value) selectedCumMonth = sel.value;
+  refreshEfficiency();
+}
+
 function buildCumulativeStatus(bxTarget, mzTarget) {
   const container = document.getElementById('cumStatusCards');
   const titleEl   = document.getElementById('cumStatusTitle');
   if (!container) return;
 
-  // Calculate date range: this month 1st → yesterday; if today is 1st → last full month
-  const todayISO  = today();
-  const todayDate = new Date(todayISO);
+  const { minMonth, curMonth } = getCumMonthBounds();
+  if (!selectedCumMonth) selectedCumMonth = curMonth;
+  if (selectedCumMonth < minMonth) selectedCumMonth = minMonth;
+  if (selectedCumMonth > curMonth) selectedCumMonth = curMonth;
+  renderCumMonthControls(minMonth, curMonth);
+
+  const isCurMonth = selectedCumMonth === curMonth;
+  const todayISO = today();
+
+  // 當月：1號～昨天（今天資料由「即時人員狀態」呈現）；歷史月份：整月 1 號～月底
   let rangeStart, rangeEnd;
-  if (todayDate.getDate() === 1) {
-    rangeEnd   = addDays(todayISO, -1); // last day of previous month
-    rangeStart = rangeEnd.slice(0, 7) + '-01';
-  } else {
-    rangeStart = todayISO.slice(0, 7) + '-01';
+  if (isCurMonth) {
+    rangeStart = selectedCumMonth + '-01';
     rangeEnd   = addDays(todayISO, -1);
+  } else {
+    rangeStart = selectedCumMonth + '-01';
+    const [y, m] = selectedCumMonth.split('-').map(Number);
+    rangeEnd = `${selectedCumMonth}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;
   }
   const rangeLabel = `${rangeStart.replace(/-/g,'/')} ～ ${rangeEnd.replace(/-/g,'/')}`;
+  const [my, mm] = selectedCumMonth.split('-');
+  const monthLabelText = `${my}年${mm}月`;
 
   if (titleEl) {
-    titleEl.innerHTML = `本月累積狀態（截至昨日）<div style="font-size:13px;font-weight:400;color:#aaa;margin-top:3px;">${rangeLabel}</div>`;
+    const heading = isCurMonth ? '本月累積狀態' : '歷史月份累積狀態';
+    titleEl.innerHTML = `${heading}（${monthLabelText}）<div style="font-size:13px;font-weight:400;color:#aaa;margin-top:3px;">${rangeLabel}</div>`;
   }
 
-  // Build per-person stats within rangeStart..rangeEnd（使用原始資料 allRecords）
-  const pMap = {};
-  allRecords.forEach(([date, pid, type]) => {
-    const iso = dateToISO(date);
+  if (rangeEnd < rangeStart) {
+    container.innerHTML = '<div style="font-size:15px;color:#aaa;padding:1rem;">該月份無資料</div>';
+    return;
+  }
+
+  // 逐日以「個人班別自動判定」邏輯計算每人當日目標，再加總整月（使用原始資料 allRecords，與人員效率頁其他區塊一致）
+  const dateMap = {};
+  allRecords.forEach(r => {
+    const iso = dateToISO(r[0]);
     if (iso < rangeStart || iso > rangeEnd) return;
-    if (pid && !/^\d{4}[-\/]/.test(pid)) {
-      if (!pMap[pid]) pMap[pid] = { bx: {}, mz: {} };
-      pMap[pid][type][date] = (pMap[pid][type][date] || 0) + 1;
-    }
+    if (!dateMap[iso]) dateMap[iso] = [];
+    dateMap[iso].push(r);
   });
 
-  const pids = Object.keys(pMap).sort();
-  if (!pids.length) { container.innerHTML = '<div style="font-size:15px;color:#aaa;padding:1rem;">此區間無資料</div>'; return; }
+  const pidAgg = {};
+  Object.values(dateMap).forEach(dayRecs => {
+    const breakdown = getPersonsDailyBreakdown(dayRecs, bxTarget, mzTarget);
+    Object.values(breakdown).forEach(p => {
+      if (p.totalQty === 0) return;
+      if (!pidAgg[p.pid]) pidAgg[p.pid] = { pid: p.pid, attendDays: 0, bxDays: 0, mzDays: 0, bxActual: 0, mzActual: 0, bxGoal: 0, mzGoal: 0, totalGoal: 0 };
+      const a = pidAgg[p.pid];
+      a.attendDays++;
+      if (p.bxQty > 0) { a.bxDays++; a.bxActual += p.bxQty; a.bxGoal += p.bxDayTarget; }
+      if (p.mzQty > 0) { a.mzDays++; a.mzActual += p.mzQty; a.mzGoal += p.mzDayTarget; }
+      a.totalGoal += p.dayTarget;
+    });
+  });
+
+  const pids = Object.keys(pidAgg).sort();
+  if (!pids.length) { container.innerHTML = '<div style="font-size:15px;color:#aaa;padding:1rem;">該月份無資料</div>'; return; }
 
   const stats = pids.map(pid => {
-    const d = pMap[pid];
-    const allDays    = new Set([...Object.keys(d.bx), ...Object.keys(d.mz)]);
-    const attendDays = allDays.size;
-
-    // 累積量計算：每出勤一天就累加一天目標與當天實績
-    const bxDays   = Object.keys(d.bx).length;
-    const bxActual = Object.values(d.bx).reduce((s, v) => s + v, 0);
-    const bxGoal   = bxDays * bxTarget;
-    const bxRate   = bxGoal > 0 ? Math.round(bxActual / bxGoal * 100) : null;
-
-    const mzDays   = Object.keys(d.mz).length;
-    const mzActual = Object.values(d.mz).reduce((s, v) => s + v, 0);
-    const mzGoal   = mzDays * mzTarget;
-    const mzRate   = mzGoal > 0 ? Math.round(mzActual / mzGoal * 100) : null;
-
-    const totalActual = bxActual + mzActual;
-    const totalGoal   = bxGoal + mzGoal;
-    const overallRate = totalGoal > 0 ? Math.round(totalActual / totalGoal * 100) : 0;
+    const a = pidAgg[pid];
+    const bxGoal = Math.round(a.bxGoal);
+    const mzGoal = Math.round(a.mzGoal);
+    const totalGoal = Math.round(a.totalGoal);
+    const bxRate = a.bxGoal > 0 ? Math.round(a.bxActual / a.bxGoal * 100) : null;
+    const mzRate = a.mzGoal > 0 ? Math.round(a.mzActual / a.mzGoal * 100) : null;
+    const totalActual = a.bxActual + a.mzActual;
+    const overallRate = a.totalGoal > 0 ? Math.round(totalActual / a.totalGoal * 100) : 0;
 
     const bxPtsStats = getPtsStatsRange(pid, rangeStart, rangeEnd, 'bx');
     const mzPtsStats = getPtsStatsRange(pid, rangeStart, rangeEnd, 'mz');
@@ -1215,7 +1291,7 @@ function buildCumulativeStatus(bxTarget, mzTarget) {
     const totalPtsSum = allPtsRecs.reduce((s, r) => s + r[7], 0);
     const overallPtsStats = allPtsRecs.length ? { totalPts: totalPtsSum, count: allPtsRecs.length, avg: totalPtsSum / allPtsRecs.length } : null;
 
-    return { pid, attendDays, bxDays, bxActual, bxGoal, bxRate, mzDays, mzActual, mzGoal, mzRate, totalActual, totalGoal, overallRate, bxPtsStats, mzPtsStats, overallPtsStats };
+    return { pid, attendDays: a.attendDays, bxDays: a.bxDays, bxActual: a.bxActual, bxGoal, bxRate, mzDays: a.mzDays, mzActual: a.mzActual, mzGoal, mzRate, totalActual, totalGoal, overallRate, bxPtsStats, mzPtsStats, overallPtsStats };
   });
   stats.sort((a, b) => b.overallRate - a.overallRate);
 
@@ -1276,7 +1352,7 @@ function buildCumulativeStatus(bxTarget, mzTarget) {
       </div>
       ${(s.bxPtsStats || s.mzPtsStats || s.overallPtsStats) ? `
       <div style="margin-top:10px;border-top:0.5px solid #eee;padding-top:8px;">
-        <div style="font-size:13px;color:#888;font-weight:500;margin-bottom:6px;">本月累積點數（截至昨日）</div>
+        <div style="font-size:13px;color:#888;font-weight:500;margin-bottom:6px;">${monthLabelText}累積點數${isCurMonth ? '（截至昨日）' : ''}</div>
         <div style="display:flex;gap:16px;flex-wrap:wrap;">
           ${s.bxPtsStats ? `<div style="font-size:13px;line-height:1.7;">保險桿：<span style="color:#e67e22;font-weight:600;">${s.bxPtsStats.totalPts}</span> 點 / 平均 <span style="color:${ptsAvgColor(s.bxPtsStats.avg)};font-weight:600;">${s.bxPtsStats.avg.toFixed(1)}</span> 點/筆</div>` : ''}
           ${s.mzPtsStats ? `<div style="font-size:13px;line-height:1.7;">馬自達：<span style="color:#e67e22;font-weight:600;">${s.mzPtsStats.totalPts}</span> 點 / 平均 <span style="color:${ptsAvgColor(s.mzPtsStats.avg)};font-weight:600;">${s.mzPtsStats.avg.toFixed(1)}</span> 點/筆</div>` : ''}
