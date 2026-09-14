@@ -188,7 +188,7 @@
       <input type="number" id="mzTarget" value="25" min="1" onchange="saveTargets();refreshEfficiency();" />
       <label>最小輸入間隔（秒）：</label>
       <input type="number" id="minInterval" value="30" min="0" onchange="saveTargets();applyMinIntervalChange();" />
-      <div style="flex-basis:100%;font-size:11px;color:#aaa;">同一工號連續輸入間隔小於此秒數的記錄將不納入計算。變更後即時更新所有頁籤。</div>
+      <div style="flex-basis:100%;font-size:11px;color:#aaa;">同一工號連續輸入間隔小於此秒數的記錄將不納入計算（僅套用於品質情報分頁）。變更後即時更新品質情報頁籤。</div>
     </div>
     <div id="effStatusTitle" style="font-size:18px;font-weight:700;margin-bottom:0.75rem;color:#555;">當日人員狀態</div>
     <div class="eff-cards" id="effCards"></div>
@@ -440,7 +440,7 @@
 
 <!-- 異常資料檢視按鈕 -->
 <div class="anomaly-footer">
-  <button class="anomaly-btn" onclick="openAnomalyModal()">已剔除 <span id="anomalyCount">0</span> 筆異常資料 🔍</button>
+  <button class="anomaly-btn" onclick="openAnomalyModal()">品質情報已剔除 <span id="anomalyCount">0</span> 筆異常資料 🔍</button>
 </div>
 
 <!-- 異常資料檢視 Modal -->
@@ -450,6 +450,7 @@
       <div style="font-size:18px;font-weight:700;">異常資料檢視</div>
       <button class="btn btn-secondary" onclick="closeAnomalyModal()">關閉</button>
     </div>
+    <div style="font-size:12px;color:#f0a050;margin-bottom:1rem;">此過濾僅套用於「品質情報」分頁，不影響其他分頁的產量統計</div>
     <div id="anomalyStatsGrid" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:1rem;"></div>
     <div id="anomalyFilterBtns" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:1rem;"></div>
     <div class="anomaly-table-wrap">
@@ -511,13 +512,13 @@ const MZ_CODES = new Set(['51','A4D','41W','46V','PZ','TAS']);
 
 // ── State ────────────────────────────────────────────────────────────────────
 let allRecords = []; // [{date:'2026/04/08', pid:'8623', type:'bx'|'mz'}] — raw, as loaded from Sheets
-let cleanRecords = []; // allRecords after 異常資料過濾（非法值/低頻率/Z-score，Rule A→B→C）
+let cleanRecords = []; // allRecords after 異常資料過濾（非法值/低頻率/Z-score，Rule A→B→C）— 僅供「品質情報」分頁使用
 let excludedRecords = []; // 被剔除的原始資料列，含剔除原因，用於「異常資料檢視」
 let anomalyStats = { illegal:0, lowFreqModel:0, lowFreqColor:0, lowFreqPid:0, zscorePoints:0, total:0 };
-let filteredRecords = []; // cleanRecords after 連續輸入間隔過濾
-let filteredDates = []; // sorted unique date strings in current filter range
-let personData = {}; // pid -> {bx:{date:qty}, mz:{date:qty}} — from cleanRecords (for detail tab)
-let filteredPersonData = {}; // same structure — from filteredRecords (for all other tabs)
+let filteredRecords = []; // cleanRecords after 連續輸入間隔過濾 — 僅供「品質情報」分頁使用（getQualityRecs/getQTrendRecs）
+let filteredDates = []; // sorted unique date strings in current filter range（依原始資料 allRecords 計算）
+let personData = {}; // pid -> {bx:{date:qty}, mz:{date:qty}} — from allRecords，供「個人詳細」使用
+let filteredPersonData = {}; // 與 personData 相同（皆為原始資料）— 供「每日產量／人員效率／即時看板」使用
 let persons = [];
 
 let dailyChartInst = null;
@@ -669,7 +670,7 @@ function updateFilterHint() {
   const excluded = total - filtered;
   if (total === 0) { hint.style.display = 'none'; return; }
   hint.style.display = '';
-  hint.textContent = `目前設定：連續輸入間隔 < ${minSec} 秒的記錄將從計算中排除（已排除異常資料的基準上）　基準 ${total} 筆，過濾後 ${filtered} 筆，共排除 ${excluded} 筆異常記錄`;
+  hint.textContent = `（僅套用於品質情報分頁）目前設定：連續輸入間隔 < ${minSec} 秒的記錄將從計算中排除（已排除異常資料的基準上）　基準 ${total} 筆，過濾後 ${filtered} 筆，共排除 ${excluded} 筆異常記錄`;
 }
 function applyMinIntervalChange() {
   computeFilteredRecords();
@@ -837,8 +838,8 @@ function setQuick(mode) {
   else if (mode==='week')  { s = mondayOfWeek(t); }
   else if (mode==='lastweek') { const m=mondayOfWeek(t); s=addDays(m,-7); e=addDays(m,-1); }
   else if (mode==='month') { s = t.slice(0,7)+'-01'; }
-  else { // all — use extent of data（已剔除異常資料的基準）
-    const all = cleanRecords.map(r=>dateToISO(r[0])).sort();
+  else { // all — use extent of raw data
+    const all = allRecords.map(r=>dateToISO(r[0])).sort();
     s = all[0] || addDays(t,-30); e = all[all.length-1] || t;
   }
   document.getElementById('startDate').value = s;
@@ -850,10 +851,10 @@ function setQuick(mode) {
 function applyDateFilter() {
   const s = document.getElementById('startDate').value;
   const e = document.getElementById('endDate').value;
-  // Build personData from cleanRecords（已剔除異常資料，detail tab 不套用連續輸入間隔過濾）
+  // 異常資料過濾只套用於「品質情報」分頁；個人詳細／每日產量／人員效率／即時看板一律使用原始資料 allRecords
   const pMap = {};
   const dateSet = new Set();
-  cleanRecords.forEach(([date, pid, type]) => {
+  allRecords.forEach(([date, pid, type]) => {
     const iso = dateToISO(date);
     if ((s && iso < s) || (e && iso > e)) return;
     dateSet.add(date);
@@ -861,18 +862,9 @@ function applyDateFilter() {
     pMap[pid][type][date] = (pMap[pid][type][date] || 0) + 1;
   });
   personData = pMap;
+  filteredPersonData = pMap; // 兩者皆為原始資料，品質情報以外的分頁共用同一份
   persons = Object.keys(pMap).filter(k => !/^\d{4}[-\/]/.test(k)).sort();
   filteredDates = Array.from(dateSet).sort();
-
-  // Build filteredPersonData from filteredRecords (all other tabs)
-  const fpMap = {};
-  filteredRecords.forEach(([date, pid, type]) => {
-    const iso = dateToISO(date);
-    if ((s && iso < s) || (e && iso > e)) return;
-    if (!fpMap[pid]) fpMap[pid] = {bx:{}, mz:{}};
-    fpMap[pid][type][date] = (fpMap[pid][type][date] || 0) + 1;
-  });
-  filteredPersonData = fpMap;
 
   // Update title
   if (filteredDates.length) {
@@ -1094,22 +1086,15 @@ function refreshEfficiency() {
   container.appendChild(ptsDiscEl);
 
   // 每位作業員依「當天最後一筆實績時間」自動判定個人班別，並計算已依班別工時比例縮放後的個人目標
-  const dayRecs = filteredRecords.filter(r => r[0] === lastDate);
+  // 人員效率頁使用原始資料 allRecords（不套用異常資料過濾／連續輸入間隔過濾，該過濾僅限品質情報分頁）
+  const dayRecs = allRecords.filter(r => r[0] === lastDate);
   const breakdown = getPersonsDailyBreakdown(dayRecs, bxTarget, mzTarget);
   const dayPids = Object.keys(breakdown).filter(pid => breakdown[pid].totalQty > 0).sort();
 
   // 若當天實績筆數 = 0，該作業員不顯示卡片
   dayPids.forEach(pid => {
     const p = breakdown[pid];
-    const da = personData[pid] || {bx:{}, mz:{}};
     const bxQty = p.bxQty, mzQty = p.mzQty, totalQty = p.totalQty;
-
-    // For hint: compare allRecords vs filteredRecords counts for this person+date
-    const bxQtyAll = da.bx[lastDate] || 0;
-    const mzQtyAll = da.mz[lastDate] || 0;
-    const totalAll = bxQtyAll + mzQtyAll;
-    const totalFiltered = totalQty;
-    const excludedCount = totalAll - totalFiltered;
 
     const planRatio = isViewingToday ? getCommittedPlanRatioForSegs(nowMin(), p.segCount) : 1.0;
     const blendedCommitted = p.dayTarget * planRatio;
@@ -1146,10 +1131,6 @@ function refreshEfficiency() {
         ${mzPts ? `<div style="font-size:12px;line-height:1.6;">馬：<span style="color:#e67e22;font-weight:600;">${mzPts.totalPts}</span>點/平均<span style="color:${ptsAvgColor(mzPts.avg)};font-weight:600;">${mzPts.avg.toFixed(1)}</span>點/筆</div>` : ''}
       </div>` : '';
 
-    const hintHtml = (totalAll > 0 && excludedCount > 0)
-      ? `<div style="margin-top:5px;border-top:0.5px solid #eee;padding-top:4px;font-size:10px;color:#888;line-height:1.5;">本日共 ${totalAll} 筆，過濾 <span style="color:#e67e22;font-weight:600;">${excludedCount}</span> 筆異常快速輸入，實際計算 ${totalFiltered} 筆</div>`
-      : '';
-
     const card = document.createElement('div');
     card.className = 'eff-card' + (selectedEffPid===pid?' selected':'');
     card.dataset.pid = pid;
@@ -1158,8 +1139,7 @@ function refreshEfficiency() {
       <div class="light">${overallLight}</div>
       <div class="eid">${pid}</div>
       ${shiftBadgeHtml(p.shiftKey)}
-      ${mainRow + breakdownRow + subLabel + ptsBlock}
-      ${hintHtml}`;
+      ${mainRow + breakdownRow + subLabel + ptsBlock}`;
     container.appendChild(card);
   });
 
@@ -1192,9 +1172,9 @@ function buildCumulativeStatus(bxTarget, mzTarget) {
     titleEl.innerHTML = `本月累積狀態（截至昨日）<div style="font-size:13px;font-weight:400;color:#aaa;margin-top:3px;">${rangeLabel}</div>`;
   }
 
-  // Build per-person stats within rangeStart..rangeEnd (use filteredRecords)
+  // Build per-person stats within rangeStart..rangeEnd（使用原始資料 allRecords）
   const pMap = {};
-  filteredRecords.forEach(([date, pid, type]) => {
+  allRecords.forEach(([date, pid, type]) => {
     const iso = dateToISO(date);
     if (iso < rangeStart || iso > rangeEnd) return;
     if (pid && !/^\d{4}[-\/]/.test(pid)) {
@@ -1228,7 +1208,7 @@ function buildCumulativeStatus(bxTarget, mzTarget) {
 
     const bxPtsStats = getPtsStatsRange(pid, rangeStart, rangeEnd, 'bx');
     const mzPtsStats = getPtsStatsRange(pid, rangeStart, rangeEnd, 'mz');
-    const allPtsRecs = filteredRecords.filter(r => {
+    const allPtsRecs = allRecords.filter(r => {
       const iso = dateToISO(r[0]);
       return r[1] === pid && r[7] != null && iso >= rangeStart && iso <= rangeEnd;
     });
@@ -1449,15 +1429,16 @@ function buildSummary(bxTarget, mzTarget) {
 }
 
 // ── Paint Points Helpers ─────────────────────────────────────────────────────
+// 人員效率頁使用原始資料 allRecords（品質情報以外的分頁不套用異常資料過濾）
 function getPtsStats(pid, date, type) {
-  const recs = filteredRecords.filter(r => r[0] === date && r[1] === pid && r[2] === type && r[7] != null);
+  const recs = allRecords.filter(r => r[0] === date && r[1] === pid && r[2] === type && r[7] != null);
   if (!recs.length) return null;
   const totalPts = recs.reduce((s, r) => s + r[7], 0);
   return { totalPts, count: recs.length, avg: totalPts / recs.length };
 }
 
 function getPtsStatsRange(pid, startISO, endISO, type) {
-  const recs = filteredRecords.filter(r => {
+  const recs = allRecords.filter(r => {
     const iso = dateToISO(r[0]);
     return r[1] === pid && r[2] === type && r[7] != null && iso >= startISO && iso <= endISO;
   });
@@ -1499,7 +1480,7 @@ function determineShiftKey(lastTsMin) {
 }
 
 // 將某一天的原始記錄依工號彙整，計算每人當天的個人班別與已依班別工時比例縮放後的個人目標
-// dayRecs: filteredRecords 中屬於同一天的記錄陣列；回傳 { pid: {bxQty,mzQty,totalQty,lastTs,shiftKey,segCount,workMin,blendedDayTarget,dayTarget,bxDayTarget,mzDayTarget} }
+// dayRecs: 原始資料（allRecords）中屬於同一天的記錄陣列；回傳 { pid: {bxQty,mzQty,totalQty,lastTs,shiftKey,segCount,workMin,blendedDayTarget,dayTarget,bxDayTarget,mzDayTarget} }
 function getPersonsDailyBreakdown(dayRecs, bxTarget, mzTarget) {
   const map = {};
   dayRecs.forEach(r => {
@@ -1682,8 +1663,8 @@ function buildRealtimeBoard() {
   const now    = isToday ? nowMin() : SHIFT_END;
   const curSeg = isToday ? currentSegIdx() : -1;
 
-  // 該日記錄（使用 filteredRecords 排除異常快速輸入）
-  const dayRecs   = filteredRecords.filter(r => dateToISO(r[0]) === boardISO);
+  // 該日記錄（即時看板使用原始資料 allRecords，異常資料過濾僅套用於品質情報分頁）
+  const dayRecs   = allRecords.filter(r => dateToISO(r[0]) === boardISO);
   const hasTsData = dayRecs.some(r => r[3] != null);
 
   // 每位作業員：依當天最後一筆實績時間自動判定個人班別，並算出已依班別工時比例縮放後的個人目標
@@ -1880,8 +1861,8 @@ function renderRtMonthly(bxTarget, mzTarget) {
   const monthStart = todayISO.slice(0, 7) + '-01';
   const nowMins   = nowMin();
 
-  // 從 filteredRecords（異常過濾後全量）取當月資料
-  const monthRecs = filteredRecords.filter(r => {
+  // 從 allRecords 取當月資料（即時看板使用原始資料，異常資料過濾僅套用於品質情報分頁）
+  const monthRecs = allRecords.filter(r => {
     const iso = dateToISO(r[0]);
     return iso >= monthStart && iso <= todayISO;
   });
