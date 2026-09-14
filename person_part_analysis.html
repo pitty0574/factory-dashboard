@@ -128,7 +128,7 @@
     <button class="quick-btn" onclick="setQuick('week')">本週</button>
     <button class="quick-btn" onclick="setQuick('lastweek')">上週</button>
     <button class="quick-btn" onclick="setQuick('month')">本月</button>
-    <button class="quick-btn active" id="qbtn-14" onclick="setQuick('14')">近14天</button>
+    <button class="quick-btn" id="qbtn-14" onclick="setQuick('14')">近14天</button>
     <button class="quick-btn" onclick="setQuick('all')">全部</button>
   </div>
 </div>
@@ -2554,11 +2554,9 @@ function buildQHeatmap(cid, rowKeys, colKeys, getCellFn, getTitleFn) {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 function setDefaultDateRange() {
-  const isos = cleanRecords.map(r => dateToISO(r[0])).filter(Boolean).sort();
-  if (isos.length) {
-    document.getElementById('startDate').value = isos[0];
-    document.getElementById('endDate').value   = isos[isos.length - 1];
-  }
+  const t = today();
+  document.getElementById('startDate').value = t;
+  document.getElementById('endDate').value   = t;
 }
 
 // ── 異常資料檢視 Modal ─────────────────────────────────────────────────────────
