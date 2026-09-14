@@ -614,7 +614,7 @@ function computeAnomalyFilter() {
     const modelPct = totalA > 0 ? modelCount[carModel] / totalA * 100 : 0;
     const colorPct = totalA > 0 ? colorCount[code]     / totalA * 100 : 0;
     if (modelPct < 2)        { reasons.push(`低頻率：車型 ${carModel} 佔比 ${modelPct.toFixed(1)}%`); cats.push('lowFreqModel'); }
-    if (colorPct < 1.5)      { reasons.push(`低頻率：顏色 ${code} 佔比 ${colorPct.toFixed(1)}%`);     cats.push('lowFreqColor'); }
+    if (colorPct < 0.5)      { reasons.push(`低頻率：顏色 ${code} 佔比 ${colorPct.toFixed(1)}%`);     cats.push('lowFreqColor'); }
     if (pidCount[pid] < 30)  { reasons.push(`低頻率：工號 ${pid} 全部歷史僅出現 ${pidCount[pid]} 次`); cats.push('lowFreqPid'); }
 
     if (reasons.length) pushExcluded(r, reasons, cats);
