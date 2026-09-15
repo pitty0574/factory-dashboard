@@ -294,7 +294,17 @@
     <div id="rtOverall" style="display:flex;gap:12px;"></div>
 
     <!-- 當月累積區塊 -->
-    <div id="rtMonthly"></div>
+    <div style="border-top:1px solid #1e2a40;margin-top:16px;padding-top:14px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:10px;">
+        <div id="rtMonthlyTitle" style="font-size:14px;color:#445;letter-spacing:1px;">📅 當月累積</div>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <button id="rtMonthPrev" class="quick-btn" onclick="shiftRtMonth(-1)">◀ 上月</button>
+          <select id="rtMonthSelect" onchange="onRtMonthChange()" style="font-size:12px;padding:4px 10px;border:0.5px solid #185fa5;border-radius:6px;background:#e6f1fb;color:#185fa5;font-weight:700;"></select>
+          <button id="rtMonthNext" class="quick-btn" onclick="shiftRtMonth(1)">下月 ▶</button>
+        </div>
+      </div>
+      <div id="rtMonthlyCards" style="display:flex;gap:12px;"></div>
+    </div>
 
   </div><!-- /dark wrapper -->
   </div>
@@ -598,6 +608,7 @@ let effChartInst = null;
 let currentView = 'detail';
 let selectedEffPid = null;
 let selectedCumMonth = null; // 'YYYY-MM'，null = 尚未初始化，會於首次 buildCumulativeStatus 設為當月
+let selectedRtMonth = null; // 'YYYY-MM'，null = 尚未初始化，會於首次 renderRtMonthly 設為當月（即時看板「當月累積」區塊，與人員效率頁的 selectedCumMonth 各自獨立）
 
 // ── LocalStorage helpers ─────────────────────────────────────────────────────
 function getConfig() {
@@ -1270,6 +1281,46 @@ function onCumMonthChange() {
   const sel = document.getElementById('cumMonthSelect');
   if (sel && sel.value) selectedCumMonth = sel.value;
   refreshEfficiency();
+}
+
+// ── 即時看板「當月累積」區塊的月份切換（獨立於人員效率頁的 selectedCumMonth） ──
+function renderRtMonthControls(minMonth, curMonth) {
+  const months = enumerateMonths(minMonth, curMonth);
+  const sel = document.getElementById('rtMonthSelect');
+  const prevBtn = document.getElementById('rtMonthPrev');
+  const nextBtn = document.getElementById('rtMonthNext');
+  if (sel) {
+    sel.innerHTML = months.map(ym => {
+      const [y, m] = ym.split('-');
+      return `<option value="${ym}">${y}年${m}月</option>`;
+    }).join('');
+    sel.value = selectedRtMonth;
+  }
+  const idx = months.indexOf(selectedRtMonth);
+  if (prevBtn) prevBtn.disabled = idx <= 0;
+  if (nextBtn) nextBtn.disabled = idx < 0 || idx >= months.length - 1;
+}
+function rtCurrentTargets() {
+  const bxTarget = parseInt(document.getElementById('bxTarget').value) || 40;
+  const mzTarget = parseInt(document.getElementById('mzTarget').value) || 25;
+  return { bxTarget, mzTarget };
+}
+function shiftRtMonth(delta) {
+  const { minMonth, curMonth } = getCumMonthBounds();
+  const months = enumerateMonths(minMonth, curMonth);
+  const idx = months.indexOf(selectedRtMonth);
+  if (idx < 0) return;
+  const newIdx = Math.min(Math.max(idx + delta, 0), months.length - 1);
+  if (months[newIdx] === selectedRtMonth) return;
+  selectedRtMonth = months[newIdx];
+  const { bxTarget, mzTarget } = rtCurrentTargets();
+  renderRtMonthly(bxTarget, mzTarget);
+}
+function onRtMonthChange() {
+  const sel = document.getElementById('rtMonthSelect');
+  if (sel && sel.value) selectedRtMonth = sel.value;
+  const { bxTarget, mzTarget } = rtCurrentTargets();
+  renderRtMonthly(bxTarget, mzTarget);
 }
 
 function buildCumulativeStatus(bxTarget, mzTarget) {
@@ -1994,17 +2045,32 @@ function renderRtOverall(total, totalTarget, bxTarget, mzTarget, bxActual, mzAct
 }
 
 function renderRtMonthly(bxTarget, mzTarget) {
-  const el = document.getElementById('rtMonthly');
+  const el = document.getElementById('rtMonthlyCards');
+  const titleEl = document.getElementById('rtMonthlyTitle');
   if (!el) return;
 
-  const todayISO  = today();
-  const monthStart = todayISO.slice(0, 7) + '-01';
-  const nowMins   = nowMin();
+  const todayISO = today();
+  const { minMonth, curMonth } = getCumMonthBounds();
+  if (!selectedRtMonth) selectedRtMonth = curMonth;
+  if (selectedRtMonth < minMonth) selectedRtMonth = minMonth;
+  if (selectedRtMonth > curMonth) selectedRtMonth = curMonth;
+  renderRtMonthControls(minMonth, curMonth);
 
-  // 從 allRecords 取當月資料（即時看板使用原始資料，異常資料過濾僅套用於品質情報分頁）
+  const isCurMonth = selectedRtMonth === curMonth;
+  const monthStart = selectedRtMonth + '-01';
+  let monthEnd;
+  if (isCurMonth) {
+    monthEnd = todayISO;
+  } else {
+    const [y, m] = selectedRtMonth.split('-').map(Number);
+    monthEnd = `${selectedRtMonth}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;
+  }
+  const nowMins = nowMin();
+
+  // 從 allRecords 取選定月份資料（即時看板使用原始資料，異常資料過濾僅套用於品質情報分頁）
   const monthRecs = allRecords.filter(r => {
     const iso = dateToISO(r[0]);
-    return iso >= monthStart && iso <= todayISO;
+    return iso >= monthStart && iso <= monthEnd;
   });
 
   // 依日期分組
@@ -2029,7 +2095,7 @@ function renderRtMonthly(bxTarget, mzTarget) {
         // 今天：只算到目前已過的計畫比例（依該人自己班別的工時流逝比例）
         monthlyTarget += p.dayTarget * getCommittedPlanRatioForSegs(nowMins, p.segCount);
       } else {
-        // 過去日期：整天已結束，直接採計該人依自己班別縮放後的個人當日目標
+        // 過去日期（含歷史月份整月）：整天已結束，直接採計該人依自己班別縮放後的個人當日目標
         monthlyTarget += p.dayTarget;
       }
     });
@@ -2038,36 +2104,33 @@ function renderRtMonthly(bxTarget, mzTarget) {
   monthlyTarget = Math.round(monthlyTarget);
   const monthlyRate = monthlyTarget > 0 ? Math.round(monthlyActual / monthlyTarget * 100) : null;
 
-  const d = new Date();
-  const monthLabel = `${d.getFullYear()}年${d.getMonth()+1}月`;
+  const [ry, rm] = selectedRtMonth.split('-');
+  const monthLabel = `${ry}年${rm}月`;
   const rateColor = monthlyRate === null ? '#888'
     : monthlyRate >= 100 ? '#1D9E75'
     : monthlyRate >= 80  ? '#e67e22' : '#e74c3c';
   const rateEmoji = monthlyRate === null ? ''
     : monthlyRate >= 100 ? '😀' : monthlyRate >= 80 ? '😐' : '😢';
 
+  if (titleEl) titleEl.textContent = isCurMonth ? `📅 當月累積（${monthLabel}）` : `📅 歷史月份累積（${monthLabel}）`;
+
   const cb = 'flex:1;background:#131929;border-radius:16px;padding:0 1rem;text-align:center;display:flex;flex-direction:column;justify-content:center;align-items:center;height:180px;';
 
   el.innerHTML = `
-    <div style="border-top:1px solid #1e2a40;margin-top:16px;padding-top:14px;">
-      <div style="font-size:14px;color:#445;margin-bottom:10px;letter-spacing:1px;">📅 當月累積（${monthLabel}）</div>
-      <div style="display:flex;gap:12px;">
-        <div style="${cb}border:1px solid #1e2d50;">
-          <div style="font-size:13px;color:#8ab4f8;margin-bottom:6px;letter-spacing:1px;">當月累積目標</div>
-          <div style="font-size:64px;font-weight:800;line-height:1;color:#ffffff;">${monthlyTarget || '—'}</div>
-          <div style="font-size:13px;color:#556;margin-top:6px;">隻</div>
-        </div>
-        <div style="${cb}border:1px solid #1e2d50;">
-          <div style="font-size:13px;color:#8ab4f8;margin-bottom:6px;letter-spacing:1px;">當月累積實績</div>
-          <div style="font-size:64px;font-weight:800;line-height:1;color:#ffffff;">${monthlyActual || '—'}</div>
-          <div style="font-size:13px;color:#556;margin-top:6px;">隻</div>
-        </div>
-        <div style="${cb}border:2px solid ${rateColor};">
-          <div style="font-size:13px;color:#8ab4f8;margin-bottom:6px;letter-spacing:1px;">當月累積達成率</div>
-          <div style="font-size:56px;font-weight:800;line-height:1;color:${rateColor};">${monthlyRate !== null ? monthlyRate + '%' : '—'}</div>
-          <div style="font-size:20px;color:${rateColor};margin-top:10px;">${rateEmoji}</div>
-        </div>
-      </div>
+    <div style="${cb}border:1px solid #1e2d50;">
+      <div style="font-size:13px;color:#8ab4f8;margin-bottom:6px;letter-spacing:1px;">當月累積目標</div>
+      <div style="font-size:64px;font-weight:800;line-height:1;color:#ffffff;">${monthlyTarget || '—'}</div>
+      <div style="font-size:13px;color:#556;margin-top:6px;">隻</div>
+    </div>
+    <div style="${cb}border:1px solid #1e2d50;">
+      <div style="font-size:13px;color:#8ab4f8;margin-bottom:6px;letter-spacing:1px;">當月累積實績</div>
+      <div style="font-size:64px;font-weight:800;line-height:1;color:#ffffff;">${monthlyActual || '—'}</div>
+      <div style="font-size:13px;color:#556;margin-top:6px;">隻</div>
+    </div>
+    <div style="${cb}border:2px solid ${rateColor};">
+      <div style="font-size:13px;color:#8ab4f8;margin-bottom:6px;letter-spacing:1px;">當月累積達成率</div>
+      <div style="font-size:56px;font-weight:800;line-height:1;color:${rateColor};">${monthlyRate !== null ? monthlyRate + '%' : '—'}</div>
+      <div style="font-size:20px;color:${rateColor};margin-top:10px;">${rateEmoji}</div>
     </div>`;
 }
 
