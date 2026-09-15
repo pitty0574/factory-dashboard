@@ -82,6 +82,20 @@
   .anomaly-table { width: 100%; border-collapse: collapse; font-size: 13px; }
   .anomaly-table thead th { position: sticky; top: 0; background: #22222e; text-align: left; padding: 8px 10px; color: #999; border-bottom: 1px solid #333; font-weight: 700; }
   .anomaly-table td { padding: 6px 10px; border-bottom: 0.5px solid #2a2a35; }
+
+  /* AI Quality Analysis (copy-to-clipboard) */
+  .ai-copy-panel { background: linear-gradient(135deg,#f5f3ff,#eef2ff); border: 2px solid #6c5ce7; border-radius: 14px; padding: 1.25rem 1.5rem; margin-bottom: 1.5rem; }
+  .ai-copy-btn-primary { background: linear-gradient(135deg,#6c5ce7,#185fa5); color: #fff; border: none; border-radius: 10px; padding: 12px 22px; font-size: 16px; font-weight: 700; cursor: pointer; box-shadow: 0 3px 14px rgba(108,92,231,0.35); display: inline-flex; align-items: center; gap: 8px; }
+  .ai-copy-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
+  .ai-copy-btn-link { background: #fff; color: #6c5ce7; border: 1px solid #6c5ce7; border-radius: 10px; padding: 12px 18px; font-size: 14px; font-weight: 700; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
+  .ai-copy-howto { background: #fff; border-radius: 10px; padding: 0.85rem 1rem; margin-top: 1rem; font-size: 12px; color: #555; line-height: 1.7; }
+  .ai-copy-howto b { color: #3d2f80; }
+  .ai-copy-fallback { margin-top: 0.75rem; }
+  .ai-copy-fallback textarea { width: 100%; height: 180px; font-size: 12px; font-family: ui-monospace, "Consolas", monospace; padding: 10px; border: 0.5px solid #aaa; border-radius: 8px; resize: vertical; }
+  @media (max-width: 480px) {
+    .ai-copy-panel { padding: 1rem; }
+    .ai-copy-btn-primary, .ai-copy-btn-link { width: 100%; justify-content: center; }
+  }
 </style>
 </head>
 <body>
@@ -311,6 +325,26 @@
 
   <!-- Quality -->
   <div id="view-quality" style="display:none;">
+
+    <!-- AI 品質分析 -->
+    <div class="ai-copy-panel">
+      <div style="font-size:18px;font-weight:700;margin-bottom:0.75rem;color:#3d2f80;">🤖 AI 品質分析</div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <button id="aiCopyBtn" class="ai-copy-btn-primary" onclick="copyAIQualityData()">📋 複製品質資料以進行 AI 分析</button>
+        <a class="ai-copy-btn-link" href="https://claude.ai" target="_blank" rel="noopener">🔗 開啟 claude.ai</a>
+      </div>
+      <div id="aiCopyHint" style="font-size:12px;color:#888;margin-top:8px;">將複製當前日期範圍的品質統計資料，可直接貼到 claude.ai 產生分析報告</div>
+      <div class="ai-copy-howto">
+        <b>使用方式：</b><br>
+        1. 點擊上方按鈕複製品質資料<br>
+        2. 開啟 claude.ai（新分頁）<br>
+        3. 貼上內容並送出，Claude 會產出完整分析報告
+      </div>
+      <div id="aiCopyFallback" class="ai-copy-fallback" style="display:none;">
+        <div style="font-size:12px;color:#e67e22;margin-bottom:4px;">瀏覽器不支援自動複製，請手動全選以下內容並複製（Ctrl+C / Cmd+C）：</div>
+        <textarea id="aiCopyFallbackText" readonly onclick="this.select()"></textarea>
+      </div>
+    </div>
 
     <!-- 每日平均補漆點數推移 -->
     <div class="person-card" style="margin-bottom:1rem;">
@@ -2619,6 +2653,7 @@ function qHeatFg(avg) { return avg >= 3 ? '#fff' : '#1a1a18'; }
 
 // ── Main entry ────────────────────────────────────────────────────────────────
 function buildQualityView() {
+  updateAICopyHint();
   buildQDailyTrend();
   buildLongTrendAnalysis();
   const allRecs = getQualityRecs();
@@ -3002,6 +3037,174 @@ function renderAnomalyTable() {
       <td style="text-align:right;">${r.points != null ? r.points : '-'}</td>
       <td style="color:#f0a050;">${r.reasons.map(escapeHtml).join('；')}</td>
     </tr>`).join('');
+}
+
+// ── AI 品質分析（複製資料到剪貼簿，供貼到 claude.ai 使用）──────────────────────
+function getAIQualityRecs() {
+  const s = document.getElementById('startDate').value;
+  const e = document.getElementById('endDate').value;
+  return filteredRecords.filter(r => {
+    const iso = dateToISO(r[0]);
+    if ((s && iso < s) || (e && iso > e)) return false;
+    return r[7] !== null && r[7] !== undefined;
+  });
+}
+
+function updateAICopyHint() {
+  const btn = document.getElementById('aiCopyBtn');
+  const hint = document.getElementById('aiCopyHint');
+  const fallback = document.getElementById('aiCopyFallback');
+  if (!btn || !hint) return;
+  if (fallback) fallback.style.display = 'none';
+
+  const s = document.getElementById('startDate').value;
+  const e = document.getElementById('endDate').value;
+  if (!s || !e) {
+    btn.disabled = true;
+    hint.innerHTML = '請先選擇日期範圍';
+    return;
+  }
+  const recs = getAIQualityRecs();
+  if (!recs.length) {
+    btn.disabled = true;
+    hint.innerHTML = '<span style="color:#e67e22;">日期範圍內無資料</span>';
+  } else {
+    btn.disabled = false;
+    hint.textContent = '將複製當前日期範圍的品質統計資料，可直接貼到 claude.ai 產生分析報告';
+  }
+}
+
+// 期初/期末（依日期範圍對半切）用於車型／顏色趨勢方向判斷
+function aiQualityHalfSplit(s, e, days, recs) {
+  const firstDays = Math.ceil(days / 2);
+  const midEndDate = new Date(s); midEndDate.setDate(midEndDate.getDate() + firstDays - 1);
+  const midEnd = midEndDate.toISOString().slice(0, 10);
+  const secondStartDate = new Date(midEndDate); secondStartDate.setDate(secondStartDate.getDate() + 1);
+  const secondStart = secondStartDate.toISOString().slice(0, 10);
+  const inRange = (r, a, b) => { const d = dateToISO(r[0]); return d >= a && d <= b; };
+  return {
+    firstAll:  recs.filter(r => inRange(r, s, midEnd)),
+    secondAll: recs.filter(r => inRange(r, secondStart, e)),
+  };
+}
+
+function aiQualityDimTable(recs, firstAll, secondAll, keyFn) {
+  const ov     = qAvgByKey(recs, keyFn);
+  const first  = qAvgByKey(firstAll, keyFn);
+  const second = qAvgByKey(secondAll, keyFn);
+  return Object.keys(ov).map(k => {
+    const f = first[k], se = second[k];
+    const dir = (f && se) ? qLongTrendDir(se.avg - f.avg) : null;
+    return {
+      key: k,
+      count: ov[k].count,
+      avg: ov[k].avg,
+      first: f ? f.avg : null,
+      second: se ? se.avg : null,
+      trendLabel: dir ? dir.label : '資料不足',
+    };
+  }).sort((a, b) => b.avg - a.avg);
+}
+
+function buildAIQualityText() {
+  const s = document.getElementById('startDate').value;
+  const e = document.getElementById('endDate').value;
+  const days = Math.round((new Date(e) - new Date(s)) / 86400000) + 1;
+  const recs = getAIQualityRecs();
+
+  const avgOf = arr => arr.length ? (arr.reduce((a, r) => a + (r[7] || 0), 0) / arr.length) : null;
+  const bxRecs = recs.filter(r => r[2] === 'bx');
+  const mzRecs = recs.filter(r => r[2] === 'mz');
+  const bxAvg = avgOf(bxRecs), mzAvg = avgOf(mzRecs);
+
+  const dailyLines = (typeRecs) => {
+    const dates = [...new Set(typeRecs.map(r => r[0]))].sort();
+    return dates.map(dt => {
+      const dayRecs = typeRecs.filter(r => r[0] === dt);
+      return `${dt}: ${avgOf(dayRecs).toFixed(2)}`;
+    }).join('\n');
+  };
+
+  const { firstAll, secondAll } = aiQualityHalfSplit(s, e, days, recs);
+  const modelRows = aiQualityDimTable(recs, firstAll, secondAll, r => r[4] || '—');
+  const colorRows = aiQualityDimTable(recs, firstAll, secondAll, r => r[6] || '—');
+  const dimTableText = rows => rows.map(row => {
+    const change = (row.first !== null && row.second !== null)
+      ? `${row.first.toFixed(1)} → ${row.second.toFixed(1)}`
+      : '資料不足';
+    return `| ${row.key} | ${row.count} | ${row.avg.toFixed(1)} | ${change} | ${row.trendLabel} |`;
+  }).join('\n');
+
+  const dates = [...new Set(recs.map(r => r[0]))].sort();
+  const dayAvgCombined = dates.map(dt => {
+    const dayRecs = recs.filter(r => r[0] === dt);
+    return { date: dt, avg: avgOf(dayRecs), count: dayRecs.length };
+  });
+  const highest = [...dayAvgCombined].sort((a, b) => b.avg - a.avg).slice(0, 3);
+  const anomalyText = highest.map(d => `- ${d.date}: ${d.avg.toFixed(1)} 點/隻（樣本 ${d.count} 筆）`).join('\n');
+
+  return `請根據以下補漆房品質數據，寫一份正式的品質分析報告，包含五個章節：
+1. 整體品質趨勢
+2. 車型別分析
+3. 顏色別分析
+4. 異常樣本觀察
+5. 改善建議（至少 3 項具體可執行）
+
+語氣要專業、書面，適合給工廠主管閱讀。長度控制在 800~1500 字。使用 Markdown 格式。
+
+【資料開始】
+
+## 分析期間
+${isoToSlash(s)} ~ ${isoToSlash(e)}（共 ${days} 天）
+
+## 樣本統計
+- 保險桿：${bxRecs.length} 筆、平均補漆點數 ${bxAvg !== null ? bxAvg.toFixed(2) : '—'} 點/隻
+- 馬自達：${mzRecs.length} 筆、平均補漆點數 ${mzAvg !== null ? mzAvg.toFixed(2) : '—'} 點/隻
+
+## 每日平均補漆點數趨勢（保險桿）
+${dailyLines(bxRecs) || '（無資料）'}
+
+## 每日平均補漆點數趨勢（馬自達）
+${dailyLines(mzRecs) || '（無資料）'}
+
+## 車型別分析
+| 車型 | 樣本數 | 平均補漆點數 | 期初→期末 | 趨勢 |
+${dimTableText(modelRows) || '（無資料）'}
+
+## 顏色別分析
+| 顏色 | 樣本數 | 平均補漆點數 | 期初→期末 | 趨勢 |
+${dimTableText(colorRows) || '（無資料）'}
+
+## 異常日觀察（平均補漆點數最高的 3 天）
+${anomalyText || '（無資料）'}
+
+【資料結束】`;
+}
+
+function fallbackShowCopyText(text) {
+  const box = document.getElementById('aiCopyFallback');
+  const ta  = document.getElementById('aiCopyFallbackText');
+  ta.value = text;
+  box.style.display = '';
+  ta.focus();
+  ta.select();
+}
+
+function copyAIQualityData() {
+  const recs = getAIQualityRecs();
+  if (!recs.length) return;
+  const text = buildAIQualityText();
+  const btn = document.getElementById('aiCopyBtn');
+  const orig = btn.textContent;
+  const flash = () => {
+    btn.textContent = '✅ 已複製！請開啟 claude.ai 貼上';
+    setTimeout(() => { btn.textContent = orig; }, 3000);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(flash).catch(() => fallbackShowCopyText(text));
+  } else {
+    fallbackShowCopyText(text);
+  }
 }
 
 function init() {
