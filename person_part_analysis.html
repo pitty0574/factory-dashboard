@@ -96,6 +96,25 @@
     .ai-copy-panel { padding: 1rem; }
     .ai-copy-btn-primary, .ai-copy-btn-link { width: 100%; justify-content: center; }
   }
+
+  /* Employee Scoring (試跑階段) */
+  .score-weight-field { display: flex; flex-direction: column; gap: 3px; }
+  .score-weight-field label { font-size: 12px; color: #666; }
+  .score-weight-field .score-weight-input-wrap { display: flex; align-items: center; gap: 4px; }
+  .score-weight-field input { width: 64px; }
+  .score-rule-table th, .score-rule-table td { padding: 6px 8px; font-size: 13px; }
+  .score-rule-table thead th { border-bottom: 1px solid #ddd; color: #888; text-align: left; font-weight: 700; }
+  .score-rule-table tbody tr { border-bottom: 0.5px solid #eee; }
+  .score-rule-table select { margin-right: 6px; }
+  .score-rule-table input[type=text] { width: 72px; margin-right: 4px; }
+  .score-bar-track { background: #eee; border-radius: 6px; overflow: hidden; height: 10px; }
+  .score-bar-fill { height: 100%; background: linear-gradient(90deg, #7fb3e8, #185fa5); }
+  .score-result-row { cursor: pointer; }
+  .score-result-row:hover { background: #f5f9fd !important; }
+  .score-row-gold { background: #fdf3d0 !important; }
+  .score-row-silver { background: #eef1f3 !important; }
+  .score-detail-row td { padding: 0 !important; }
+  .score-expand-icon { display: inline-block; width: 14px; color: #185fa5; }
 </style>
 </head>
 <body>
@@ -157,6 +176,7 @@
     <button class="tab-btn" onclick="showView('efficiency')">人員效率</button>
     <button class="tab-btn" onclick="showView('realtime')">即時看板</button>
     <button class="tab-btn" onclick="showView('quality')">品質情報</button>
+    <button class="tab-btn" onclick="showView('scoring')">作業員評分</button>
   </div>
 
   <!-- Detail -->
@@ -552,6 +572,103 @@
 
   </div><!-- /view-quality -->
 
+  <!-- Employee Scoring（試跑階段：僅本機使用，尚未 commit）-->
+  <div id="view-scoring" style="display:none;">
+    <div style="background:#fff8ef;border:1px solid #e67e22;border-radius:10px;padding:0.6rem 1rem;margin-bottom:1rem;font-size:12px;color:#c8641a;">
+      ⚠️ 試跑階段：評分規則與權重可隨時調整，結果僅供內部評估參考，尚未做為正式獎勵依據。
+    </div>
+
+    <!-- Section 1：時間範圍選擇 -->
+    <div class="person-card" style="margin-bottom:1rem;">
+      <div style="font-size:18px;font-weight:700;margin-bottom:0.75rem;">⏱ 評分期間</div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+        <select id="scoreRangeMode" onchange="onScoreRangeModeChange()">
+          <option value="month">當月</option>
+          <option value="lastmonth">上月</option>
+          <option value="30">近 30 天</option>
+          <option value="60">近 60 天</option>
+          <option value="90">近 90 天</option>
+          <option value="custom">自訂範圍</option>
+        </select>
+        <span id="scoreCustomWrap" style="display:none;gap:6px;align-items:center;">
+          <input type="date" id="scoreCustomStart" onchange="onScoreRangeModeChange()" />
+          <span style="font-size:12px;color:#aaa;">～</span>
+          <input type="date" id="scoreCustomEnd" onchange="onScoreRangeModeChange()" />
+        </span>
+      </div>
+      <div id="scoreRangeLabel" style="font-size:13px;color:#888;margin-top:8px;"></div>
+    </div>
+
+    <!-- Section 2：權重設定 -->
+    <div class="person-card" style="margin-bottom:1rem;">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:0.75rem;">
+        <div style="font-size:18px;font-weight:700;">⚖️ 權重設定（總和必須為 100%）</div>
+        <div id="scoreWeightSum" style="font-size:12px;color:#888;">目前總和：100%</div>
+      </div>
+      <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;">
+        <div class="score-weight-field"><label>產量分</label><div class="score-weight-input-wrap"><input type="number" id="wQty" onchange="onScoreWeightChange()" />%</div></div>
+        <div class="score-weight-field"><label>車型多樣性</label><div class="score-weight-input-wrap"><input type="number" id="wDiv" onchange="onScoreWeightChange()" />%</div></div>
+        <div class="score-weight-field"><label>顏色多樣性</label><div class="score-weight-input-wrap"><input type="number" id="wCDiv" onchange="onScoreWeightChange()" />%</div></div>
+        <div class="score-weight-field"><label>效率分</label><div class="score-weight-input-wrap"><input type="number" id="wEff" onchange="onScoreWeightChange()" />%</div></div>
+        <div class="score-weight-field"><label>出勤分</label><div class="score-weight-input-wrap"><input type="number" id="wAtt" onchange="onScoreWeightChange()" />%</div></div>
+        <button class="btn btn-secondary" onclick="resetScoreWeights()">🔄 恢復預設</button>
+      </div>
+      <div id="scoreWeightWarn" style="display:none;color:#c0392b;font-size:12px;margin-top:8px;">權重總和需為 100%</div>
+    </div>
+
+    <!-- Section 3：難度規則設定 -->
+    <div class="person-card" style="margin-bottom:1rem;">
+      <div style="font-size:18px;font-weight:700;margin-bottom:0.5rem;">🎯 難度規則設定</div>
+      <div style="font-size:12px;color:#888;margin-bottom:0.75rem;">符合規則的實績會被賦予加權分數。若一筆實績同時符合多個規則，取分數最高的規則覆蓋。</div>
+      <div style="overflow-x:auto;">
+        <table class="score-rule-table" style="width:100%;border-collapse:collapse;">
+          <thead><tr>
+            <th style="text-align:center;">#</th>
+            <th>條件</th>
+            <th style="text-align:center;">每隻分數</th>
+            <th style="text-align:center;">操作</th>
+          </tr></thead>
+          <tbody id="scoreRuleTbody"></tbody>
+        </table>
+      </div>
+      <button class="btn btn-secondary" style="margin-top:10px;" onclick="addScoreRule()">+ 新增規則</button>
+    </div>
+
+    <!-- Section 4：計算按鈕 -->
+    <div style="display:flex;justify-content:center;margin-bottom:1.5rem;">
+      <button id="scoreCalcBtn" class="btn btn-primary" style="font-size:16px;padding:12px 30px;border-radius:10px;" onclick="computeScoring()">📊 計算作業員評分</button>
+    </div>
+
+    <div id="scoreNoData" style="display:none;font-size:13px;color:#aaa;padding:2rem;text-align:center;background:#fff;border-radius:12px;border:0.5px solid #ddd;margin-bottom:1rem;">
+      該期間內無有效資料
+    </div>
+
+    <!-- Section 5：計算結果總覽表 -->
+    <div id="scoreResultsWrap" style="display:none;">
+      <div class="person-card" style="margin-bottom:1rem;">
+        <div style="font-size:18px;font-weight:700;margin-bottom:0.75rem;">📋 評分結果總覽</div>
+        <div style="overflow-x:auto;">
+          <table class="score-result-table" style="width:100%;border-collapse:collapse;">
+            <thead><tr style="border-bottom:1px solid #ddd;color:#888;font-size:13px;font-weight:700;">
+              <th style="padding:8px 10px;text-align:center;">排名</th>
+              <th style="padding:8px 10px;text-align:left;">工號</th>
+              <th style="padding:8px 10px;text-align:left;">產量分</th>
+              <th style="padding:8px 10px;text-align:left;">車型多樣性</th>
+              <th style="padding:8px 10px;text-align:left;">顏色多樣性</th>
+              <th style="padding:8px 10px;text-align:left;">效率分</th>
+              <th style="padding:8px 10px;text-align:left;">出勤分</th>
+              <th style="padding:8px 10px;text-align:right;">加權總分</th>
+            </tr></thead>
+            <tbody id="scoreResultTbody"></tbody>
+          </table>
+        </div>
+        <div style="font-size:11px;color:#aaa;margin-top:6px;">點擊列可展開／收合該作業員的完整計算明細（Section 6）</div>
+        <div id="scoreExcludedNote" style="font-size:12px;color:#aaa;margin-top:8px;"></div>
+      </div>
+      <!-- Section 6：作業員計算明細 — 已改為點擊 Section 5 表格列時，直接在該列下方插入展開列呈現 -->
+    </div>
+  </div><!-- /view-scoring -->
+
 </div><!-- /tab container -->
 
 <!-- 異常資料檢視按鈕 -->
@@ -643,6 +760,15 @@ let currentView = 'detail';
 let selectedEffPid = null;
 let selectedCumMonth = null; // 'YYYY-MM'，null = 尚未初始化，會於首次 buildCumulativeStatus 設為當月
 let selectedRtMonth = null; // 'YYYY-MM'，即時看板「當月累積」區塊的月份切換，與人員效率頁的 selectedCumMonth 各自獨立
+
+// ── 作業員評分（試跑階段）狀態 ─────────────────────────────────────────────────
+let scoreUIInitialized = false;
+let scoreWeights = { qty: 30, div: 20, cdiv: 25, eff: 15, att: 10 };
+let scoreRules = [];
+let scoreFallbackScore = 1;
+let scoreRangeMode = 'lastmonth';
+let scoreResult = null; // { start, end, rows:[...], excludedCount, weights, maxQty, maxDiv, maxColorDiv }
+let scoreSelectedPid = null;
 
 // ── LocalStorage helpers ─────────────────────────────────────────────────────
 function getConfig() {
@@ -1003,7 +1129,7 @@ function rebuildAll() {
 }
 
 // ── Views ────────────────────────────────────────────────────────────────────
-const VIEWS = ['detail','daily','efficiency','realtime','quality'];
+const VIEWS = ['detail','daily','efficiency','realtime','quality','scoring'];
 
 function showView(v) {
   VIEWS.forEach(x => {
@@ -1017,6 +1143,7 @@ function showView(v) {
   if(v==='daily') renderDailyChart();
   if(v==='efficiency') refreshEfficiency();
   if(v==='quality') buildQualityView();
+  if(v==='scoring') buildScoringSettingsUI();
   if(v==='realtime') buildRealtimeBoard(); // timer managed inside buildRealtimeBoard
   else stopRealtimeTimer();
 }
@@ -3205,6 +3332,426 @@ function copyAIQualityData() {
   } else {
     fallbackShowCopyText(text);
   }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// 作業員評分（試跑階段，本機 localStorage，不影響其他分頁）
+// record 欄位: [date, pid, type, tsMin, carModel, partType, code, points]
+// ══════════════════════════════════════════════════════════════════════════
+
+function defaultScoreRules() {
+  return [
+    { type: 'model+part', model: 'RV', part: 'BL', color: '', score: 3 },
+    { type: 'model+part', model: 'PU', part: 'BL', color: '', score: 3 },
+    { type: 'color',      model: '',   part: '',   color: '46V', score: 10 },
+    { type: 'color',      model: '',   part: '',   color: 'UC',  score: 10 },
+  ];
+}
+const SCORE_TYPE_LABELS = { model:'車型', part:'部件', color:'顏色', 'model+part':'車型+部件', 'model+color':'車型+顏色', 'model+part+color':'車型+部件+顏色' };
+function scoreConditionFields(type) {
+  switch (type) {
+    case 'model': return ['model'];
+    case 'part': return ['part'];
+    case 'color': return ['color'];
+    case 'model+part': return ['model','part'];
+    case 'model+color': return ['model','color'];
+    case 'model+part+color': return ['model','part','color'];
+    default: return [];
+  }
+}
+function scoreFieldLabel(f) { return f==='model' ? '車型' : f==='part' ? '部件' : '顏色'; }
+
+function loadScoreSettings() {
+  try {
+    const w = JSON.parse(localStorage.getItem('scoreWeights'));
+    // v3 權重維度（qty/div/cdiv/eff/att，五維：拿掉品質效率與特殊專精，多樣性拆成車型/顏色）
+    // 與 v1（qty/tech/eff/att）、v2（qty/qeff/div/spec/eff/att）皆不相容，偵測不到 cdiv 欄位一律忽略舊值改用新預設
+    if (w && typeof w.qty==='number' && typeof w.div==='number' && typeof w.cdiv==='number' && typeof w.eff==='number' && typeof w.att==='number') {
+      scoreWeights = w;
+    } else if (w) {
+      console.log('評分規則已升級為 v3：拿掉品質效率、拆分多樣性');
+    }
+  } catch(e) {}
+  try {
+    const r = JSON.parse(localStorage.getItem('scoreRules'));
+    scoreRules = (Array.isArray(r) && r.length) ? r : defaultScoreRules();
+  } catch(e) { scoreRules = defaultScoreRules(); }
+  // 46V/UC 難度分數由 30 分改回 10 分：僅遷移仍停留在上一版預設值(30)的規則，避免覆蓋使用者手動調整過的分數
+  let rulesMigrated = false;
+  scoreRules.forEach(r => {
+    if (r.type === 'color' && ['46V','UC'].includes((r.color||'').trim().toUpperCase()) && r.score === 30) {
+      r.score = 10; rulesMigrated = true;
+    }
+  });
+  if (rulesMigrated) saveScoreRules();
+  const fb = localStorage.getItem('scoreFallbackScore');
+  scoreFallbackScore = fb != null ? (parseFloat(fb) || 0) : 1;
+  scoreRangeMode = localStorage.getItem('scoreRangeMode') || 'lastmonth';
+}
+function saveScoreRules() { localStorage.setItem('scoreRules', JSON.stringify(scoreRules)); }
+
+function buildScoringSettingsUI() {
+  if (!scoreUIInitialized) { loadScoreSettings(); scoreUIInitialized = true; }
+  document.getElementById('scoreRangeMode').value = scoreRangeMode;
+  document.getElementById('scoreCustomWrap').style.display = scoreRangeMode==='custom' ? 'inline-flex' : 'none';
+  updateScoreRangeLabel();
+  renderScoreWeightInputs();
+  renderScoreRules();
+  if (scoreResult) renderScoreResults();
+  else {
+    document.getElementById('scoreResultsWrap').style.display = 'none';
+    document.getElementById('scoreNoData').style.display = 'none';
+  }
+}
+
+// ── Section 1：時間範圍 ──────────────────────────────────────────────────────
+function getScoreRange() {
+  const mode = scoreRangeMode;
+  const t = today();
+  let start, end;
+  if (mode === 'month') {
+    start = t.slice(0,7) + '-01'; end = t;
+  } else if (mode === 'lastmonth') {
+    const [y, m] = t.split('-').map(Number); // m: 1-indexed current month
+    const d = new Date(y, m - 2, 1); // 上月第一天
+    const ly = d.getFullYear(), lm = d.getMonth();
+    start = `${ly}-${String(lm+1).padStart(2,'0')}-01`;
+    const lastDay = new Date(ly, lm+1, 0).getDate();
+    end = `${ly}-${String(lm+1).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
+  } else if (mode === '30' || mode === '60' || mode === '90') {
+    start = addDays(t, -(parseInt(mode) - 1)); end = t;
+  } else { // custom
+    start = document.getElementById('scoreCustomStart').value;
+    end = document.getElementById('scoreCustomEnd').value;
+  }
+  return { start, end };
+}
+function onScoreRangeModeChange() {
+  scoreRangeMode = document.getElementById('scoreRangeMode').value;
+  localStorage.setItem('scoreRangeMode', scoreRangeMode);
+  document.getElementById('scoreCustomWrap').style.display = scoreRangeMode==='custom' ? 'inline-flex' : 'none';
+  updateScoreRangeLabel();
+}
+function updateScoreRangeLabel() {
+  const { start, end } = getScoreRange();
+  const label = document.getElementById('scoreRangeLabel');
+  if (!start || !end || start > end) { label.textContent = '請選擇有效日期範圍'; return; }
+  const days = Math.round((new Date(end) - new Date(start)) / 86400000) + 1;
+  label.textContent = `${start.replace(/-/g,'/')} ～ ${end.replace(/-/g,'/')}（共 ${days} 天）`;
+}
+
+// ── Section 2：權重設定 ──────────────────────────────────────────────────────
+function renderScoreWeightInputs() {
+  document.getElementById('wQty').value  = scoreWeights.qty;
+  document.getElementById('wDiv').value  = scoreWeights.div;
+  document.getElementById('wCDiv').value = scoreWeights.cdiv;
+  document.getElementById('wEff').value  = scoreWeights.eff;
+  document.getElementById('wAtt').value  = scoreWeights.att;
+  updateScoreWeightSum();
+}
+function onScoreWeightChange() {
+  scoreWeights = {
+    qty:  parseFloat(document.getElementById('wQty').value)  || 0,
+    div:  parseFloat(document.getElementById('wDiv').value)  || 0,
+    cdiv: parseFloat(document.getElementById('wCDiv').value) || 0,
+    eff:  parseFloat(document.getElementById('wEff').value)  || 0,
+    att:  parseFloat(document.getElementById('wAtt').value)  || 0,
+  };
+  localStorage.setItem('scoreWeights', JSON.stringify(scoreWeights));
+  updateScoreWeightSum();
+}
+function updateScoreWeightSum() {
+  const sum = scoreWeights.qty + scoreWeights.div + scoreWeights.cdiv + scoreWeights.eff + scoreWeights.att;
+  const ok = Math.abs(sum - 100) < 0.001;
+  const sumEl = document.getElementById('scoreWeightSum');
+  const warnEl = document.getElementById('scoreWeightWarn');
+  const btn = document.getElementById('scoreCalcBtn');
+  sumEl.textContent = `目前總和：${sum}%`;
+  sumEl.style.color = ok ? '#888' : '#c0392b';
+  warnEl.style.display = ok ? 'none' : '';
+  if (btn) btn.disabled = !ok;
+  return ok;
+}
+function resetScoreWeights() {
+  scoreWeights = { qty:30, div:20, cdiv:25, eff:15, att:10 };
+  localStorage.setItem('scoreWeights', JSON.stringify(scoreWeights));
+  renderScoreWeightInputs();
+}
+
+// ── Section 3：難度規則 ──────────────────────────────────────────────────────
+function renderScoreRules() {
+  const tbody = document.getElementById('scoreRuleTbody');
+  tbody.innerHTML = '';
+  scoreRules.forEach((rule, idx) => {
+    const fields = scoreConditionFields(rule.type);
+    const fieldInputs = fields.map(f =>
+      `<input type="text" value="${escapeHtml(rule[f]||'')}" placeholder="${scoreFieldLabel(f)}" onchange="updateScoreRuleField(${idx},'${f}',this.value)" />`
+    ).join('');
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td style="text-align:center;">${idx+1}</td>
+      <td>
+        <select onchange="updateScoreRuleType(${idx},this.value)">
+          ${Object.entries(SCORE_TYPE_LABELS).map(([v,l]) => `<option value="${v}" ${rule.type===v?'selected':''}>${l}</option>`).join('')}
+        </select>${fieldInputs}
+      </td>
+      <td style="text-align:center;"><input type="number" style="width:56px;" value="${rule.score}" onchange="updateScoreRuleField(${idx},'score',parseFloat(this.value)||0)" /> 分</td>
+      <td style="text-align:center;"><button class="btn btn-secondary" onclick="deleteScoreRule(${idx})">刪除</button></td>`;
+    tbody.appendChild(tr);
+  });
+  const fbTr = document.createElement('tr');
+  fbTr.innerHTML = `
+    <td style="text-align:center;">${scoreRules.length+1}</td>
+    <td style="color:#888;">其他一律</td>
+    <td style="text-align:center;"><input type="number" style="width:56px;" value="${scoreFallbackScore}" onchange="updateScoreFallback(this.value)" /> 分</td>
+    <td style="text-align:center;color:#bbb;">（預設，不可刪）</td>`;
+  tbody.appendChild(fbTr);
+}
+function updateScoreRuleType(idx, type) { scoreRules[idx].type = type; saveScoreRules(); renderScoreRules(); }
+function updateScoreRuleField(idx, field, value) { scoreRules[idx][field] = value; saveScoreRules(); }
+function deleteScoreRule(idx) { scoreRules.splice(idx,1); saveScoreRules(); renderScoreRules(); }
+function addScoreRule() { scoreRules.push({ type:'model', model:'', part:'', color:'', score:1 }); saveScoreRules(); renderScoreRules(); }
+function updateScoreFallback(v) { scoreFallbackScore = parseFloat(v) || 0; localStorage.setItem('scoreFallbackScore', String(scoreFallbackScore)); }
+
+// ── 規則比對 / 計分 ──────────────────────────────────────────────────────────
+function scoreRuleMatches(rule, rec) {
+  const fields = scoreConditionFields(rule.type);
+  if (!fields.length) return false;
+  const carModel = (rec[4]||'').trim();
+  const part = (rec[5]||'').trim();
+  const color = (rec[6]||'').trim().toUpperCase();
+  return fields.every(f => {
+    const val = (rule[f]||'').trim();
+    if (!val) return false;
+    if (f==='model') return carModel === val;
+    if (f==='part')  return part === val;
+    if (f==='color') return color === val.toUpperCase();
+    return false;
+  });
+}
+function scoreRecordUnitScore(rec) {
+  const matched = scoreRules.filter(r => scoreRuleMatches(r, rec));
+  matched.sort((a,b) => b.score - a.score);
+  const score = matched.length ? matched[0].score : scoreFallbackScore;
+  return { score, matched };
+}
+// ── Section 4：計算 ──────────────────────────────────────────────────────────
+function showScoreNoData() {
+  scoreResult = null;
+  document.getElementById('scoreResultsWrap').style.display = 'none';
+  document.getElementById('scoreNoData').style.display = '';
+}
+
+function computeScoring() {
+  if (!updateScoreWeightSum()) return;
+  const w = { ...scoreWeights };
+  const { start, end } = getScoreRange();
+  if (!start || !end || start > end) { showScoreNoData(); return; }
+
+  const recs = allRecords.filter(r => {
+    const iso = dateToISO(r[0]);
+    return iso >= start && iso <= end;
+  });
+  if (!recs.length) { showScoreNoData(); return; }
+
+  const byPid = {};
+  recs.forEach(r => {
+    const pid = r[1];
+    if (!pid || /^\d{4}[-\/]/.test(pid)) return;
+    (byPid[pid] || (byPid[pid] = [])).push(r);
+  });
+
+  let excludedCount = 0;
+  const rows = [];
+  Object.keys(byPid).forEach(pid => {
+    const precs = byPid[pid];
+    const totalQty = precs.length;
+    if (totalQty < 100) { excludedCount++; return; }
+
+    // 產量分
+    let qtyScoreRaw = 0;
+    const qtyDetailMap = {};
+    precs.forEach(r => {
+      const { score, matched } = scoreRecordUnitScore(r);
+      qtyScoreRaw += score;
+      const k = `${r[4]||'—'}|${r[5]||'—'}|${r[6]||'—'}`;
+      if (!qtyDetailMap[k]) qtyDetailMap[k] = { model:r[4]||'—', part:r[5]||'—', color:r[6]||'—', qty:0, unitScore:score, matched };
+      qtyDetailMap[k].qty++;
+    });
+
+    // 車型多樣性：期間內做過的不重複車型數
+    const modelSet = new Set(precs.map(r => (r[4]||'').trim()).filter(Boolean));
+    const diversityModels = [...modelSet].sort();
+    const diversityRaw = diversityModels.length;
+
+    // 顏色多樣性：期間內做過的不重複顏色代號數
+    const colorSet = new Set(precs.map(r => (r[6]||'').trim().toUpperCase()).filter(Boolean));
+    const colorDiversityColors = [...colorSet].sort();
+    const colorDiversityRaw = colorDiversityColors.length;
+
+    // 效率分（依每日班別自動判定時段數）
+    const dateSet = [...new Set(precs.map(r => r[0]))];
+    let totalSegCount = 0, otDays = 0;
+    dateSet.forEach(dt => {
+      const dayRecs = precs.filter(r => r[0] === dt);
+      const lastTs = dayRecs.reduce((mx, r) => (r[3] != null && (mx == null || r[3] > mx)) ? r[3] : mx, null);
+      const shiftKey = determineShiftKey(lastTs);
+      if (shiftKey !== 'normal') otDays++;
+      totalSegCount += SHIFT_TYPES[shiftKey].segCount;
+    });
+    const perSeg = totalSegCount > 0 ? totalQty / totalSegCount : 0;
+    const effScoreRaw = Math.max(0, Math.min(100, (perSeg - 4) / (12 - 4) * 100));
+
+    // 出勤分
+    const attendDays = dateSet.length;
+    const attScoreRaw = attendDays <= 22 ? (attendDays / 22 * 80) : Math.min(100, 80 + (attendDays - 22) * 5);
+
+    rows.push({
+      pid, totalQty, qtyScoreRaw, qtyDetailRows: Object.values(qtyDetailMap),
+      diversityModels, diversityRaw,
+      colorDiversityColors, colorDiversityRaw,
+      totalSegCount, perSeg, effScoreRaw,
+      attendDays, otDays, attScoreRaw,
+    });
+  });
+
+  if (!rows.length) { showScoreNoData(); return; }
+
+  const maxQty = Math.max(0, ...rows.map(r => r.qtyScoreRaw));
+  const maxDiv = Math.max(0, ...rows.map(r => r.diversityRaw));
+  const maxColorDiv = Math.max(0, ...rows.map(r => r.colorDiversityRaw));
+  rows.forEach(r => {
+    r.qty100 = maxQty > 0 ? r.qtyScoreRaw / maxQty * 100 : 0;
+    r.div100 = maxDiv > 0 ? r.diversityRaw / maxDiv * 100 : 0;
+    r.colorDiv100 = maxColorDiv > 0 ? r.colorDiversityRaw / maxColorDiv * 100 : 0;
+    r.eff100 = r.effScoreRaw;
+    r.att100 = r.attScoreRaw;
+    r.weighted = r.qty100*w.qty/100 + r.div100*w.div/100 + r.colorDiv100*w.cdiv/100 + r.eff100*w.eff/100 + r.att100*w.att/100;
+  });
+  rows.sort((a,b) => b.weighted - a.weighted);
+
+  scoreResult = { start, end, rows, excludedCount, weights: w, maxQty, maxDiv, maxColorDiv };
+  scoreSelectedPid = null;
+  renderScoreResults();
+}
+
+// ── Section 5：結果總覽 ──────────────────────────────────────────────────────
+function scoreBarCell(labelHtml, pct) {
+  const p = Math.max(0, Math.min(100, pct));
+  return `<td style="padding:8px 10px;min-width:110px;">
+    <div style="font-size:12px;color:#555;margin-bottom:3px;">${labelHtml} <span style="color:#aaa;">/ ${pct.toFixed(0)}分</span></div>
+    <div class="score-bar-track"><div class="score-bar-fill" style="width:${p}%;"></div></div>
+  </td>`;
+}
+const SCORE_RESULT_COLSPAN = 8; // 排名/工號/產量分/車型多樣性/顏色多樣性/效率分/出勤分/加權總分
+function renderScoreResults() {
+  const wrap = document.getElementById('scoreResultsWrap');
+  const noData = document.getElementById('scoreNoData');
+  if (!scoreResult || !scoreResult.rows.length) {
+    wrap.style.display = 'none'; noData.style.display = ''; return;
+  }
+  noData.style.display = 'none';
+  wrap.style.display = '';
+  const tbody = document.getElementById('scoreResultTbody');
+  tbody.innerHTML = '';
+  scoreResult.rows.forEach((r, i) => {
+    const rank = i + 1;
+    const rowCls = rank <= 2 ? 'score-row-gold' : rank <= 5 ? 'score-row-silver' : '';
+    const isOpen = scoreSelectedPid === r.pid;
+    const tr = document.createElement('tr');
+    tr.className = ['score-result-row', rowCls].filter(Boolean).join(' ');
+    tr.onclick = () => toggleScoreDetail(r.pid);
+    tr.innerHTML = `
+      <td style="padding:8px 10px;text-align:center;font-weight:700;"><span class="score-expand-icon">${isOpen?'▼':'▶'}</span>${rank}</td>
+      <td style="padding:8px 10px;font-weight:600;">${r.pid}</td>
+      ${scoreBarCell(`${r.qtyScoreRaw.toFixed(1)}分`, r.qty100)}
+      ${scoreBarCell(`${r.diversityRaw}種`, r.div100)}
+      ${scoreBarCell(`${r.colorDiversityRaw}種`, r.colorDiv100)}
+      ${scoreBarCell(`${r.perSeg.toFixed(1)}隻/段`, r.eff100)}
+      ${scoreBarCell(`${r.attendDays}天`, r.att100)}
+      <td style="padding:8px 10px;text-align:right;font-size:20px;font-weight:800;color:#185fa5;">${r.weighted.toFixed(1)}</td>`;
+    tbody.appendChild(tr);
+
+    if (isOpen) {
+      const dtr = document.createElement('tr');
+      dtr.className = 'score-detail-row';
+      dtr.innerHTML = `<td colspan="${SCORE_RESULT_COLSPAN}">
+        <div style="padding:1rem 1.25rem;background:#fafbfc;border-top:2px solid #185fa5;border-bottom:2px solid #185fa5;">
+          ${scoreDetailInnerHtml(r, scoreResult)}
+        </div>
+      </td>`;
+      tbody.appendChild(dtr);
+    }
+  });
+  document.getElementById('scoreExcludedNote').textContent =
+    scoreResult.excludedCount > 0 ? `共 ${scoreResult.excludedCount} 人未列入評選（累計產量不足 100 隻）` : '';
+}
+
+// ── Section 6：計算明細 ──────────────────────────────────────────────────────
+function scoreDetailInnerHtml(row, result) {
+  const w = result.weights;
+  const detailRows = row.qtyDetailRows.slice().sort((a,b) => b.qty - a.qty);
+  const qtyRowsHtml = detailRows.map(d => {
+    const overrideNote = d.matched.length > 1 ? `<span style="color:#e67e22;"> （${d.matched[0].score} 分覆蓋 ${d.matched[1].score} 分）</span>` : '';
+    return `<tr>
+      <td style="padding:5px 8px;">${escapeHtml(d.model)}</td>
+      <td style="padding:5px 8px;">${escapeHtml(d.part)}</td>
+      <td style="padding:5px 8px;">${escapeHtml(d.color)}</td>
+      <td style="padding:5px 8px;text-align:right;">${d.qty}</td>
+      <td style="padding:5px 8px;text-align:right;">${d.unitScore}</td>
+      <td style="padding:5px 8px;text-align:right;font-weight:600;">${(d.qty*d.unitScore).toFixed(0)}${overrideNote}</td>
+    </tr>`;
+  }).join('');
+
+  return `
+  <div style="font-size:16px;font-weight:700;margin-bottom:0.5rem;">工號 ${row.pid} 計算明細</div>
+  <div style="font-size:12px;color:#888;margin-bottom:1rem;">期間：${result.start.replace(/-/g,'/')} ～ ${result.end.replace(/-/g,'/')}　出勤天數：${row.attendDays} 天</div>
+
+  <div style="margin-bottom:1rem;">
+    <div style="font-weight:700;margin-bottom:4px;color:#185fa5;">產量分計算</div>
+    <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <thead><tr style="color:#888;border-bottom:1px solid #ddd;text-align:left;">
+        <th style="padding:5px 8px;">車型</th><th style="padding:5px 8px;">部件</th><th style="padding:5px 8px;">顏色</th>
+        <th style="padding:5px 8px;text-align:right;">隻數</th><th style="padding:5px 8px;text-align:right;">每隻分數</th><th style="padding:5px 8px;text-align:right;">小計</th>
+      </tr></thead><tbody>${qtyRowsHtml}</tbody></table></div>
+    <div style="font-size:13px;margin-top:6px;">總產量分 = <b>${row.qtyScoreRaw.toFixed(1)}</b> 分　映射 100 分制：全體最高 ${result.maxQty.toFixed(1)} / 該人 ${row.qtyScoreRaw.toFixed(1)} × 100 = <b>${row.qty100.toFixed(1)}</b> 分</div>
+  </div>
+
+  <div style="margin-bottom:1rem;">
+    <div style="font-weight:700;margin-bottom:4px;color:#185fa5;">車型多樣性計算</div>
+    <div style="font-size:13px;">做過的車型：${row.diversityModels.length ? row.diversityModels.map(m=>escapeHtml(m)).join('、') : '（無）'}</div>
+    <div style="font-size:13px;margin-top:2px;">車型數 = <b>${row.diversityRaw}</b> 種</div>
+    <div style="font-size:13px;margin-top:2px;">映射 100 分制：該人 ${row.diversityRaw} / 全體最高 ${result.maxDiv} × 100 = <b>${row.div100.toFixed(1)}</b> 分</div>
+  </div>
+
+  <div style="margin-bottom:1rem;">
+    <div style="font-weight:700;margin-bottom:4px;color:#185fa5;">顏色多樣性計算</div>
+    <div style="font-size:13px;">做過的顏色：${row.colorDiversityColors.length ? row.colorDiversityColors.map(c=>escapeHtml(c)).join('、') : '（無）'}</div>
+    <div style="font-size:13px;margin-top:2px;">顏色數 = <b>${row.colorDiversityRaw}</b> 種</div>
+    <div style="font-size:13px;margin-top:2px;">映射 100 分制：該人 ${row.colorDiversityRaw} / 全體最高 ${result.maxColorDiv} × 100 = <b>${row.colorDiv100.toFixed(1)}</b> 分</div>
+  </div>
+
+  <div style="margin-bottom:1rem;">
+    <div style="font-weight:700;margin-bottom:4px;color:#185fa5;">效率分計算</div>
+    <div style="font-size:13px;">總產量 ${row.totalQty} 隻 ÷ 出勤時段數 ${row.totalSegCount} 段 = 每時段 <b>${row.perSeg.toFixed(2)}</b> 隻</div>
+    <div style="font-size:13px;margin-top:4px;color:#888;">映射：每時段 12 隻 → 100 分、每時段 4 隻 → 0 分（線性）</div>
+    <div style="font-size:13px;margin-top:4px;">效率分 = <b>${row.eff100.toFixed(1)}</b> 分</div>
+  </div>
+
+  <div style="margin-bottom:1rem;">
+    <div style="font-weight:700;margin-bottom:4px;color:#185fa5;">出勤分計算</div>
+    <div style="font-size:13px;">出勤天數 ${row.attendDays} 天（其中加班 ${row.otDays} 天）</div>
+    <div style="font-size:13px;margin-top:4px;color:#888;">計算方式：22 天以下 = 天數/22×80 分；22 天以上 = 80+(超過天數×5 分)，最高 100 分</div>
+    <div style="font-size:13px;margin-top:4px;">出勤分 = <b>${row.att100.toFixed(1)}</b> 分</div>
+  </div>
+
+  <div style="background:#f5f5f3;border-radius:8px;padding:0.75rem 1rem;font-size:14px;font-weight:700;">
+    加權總分 = 產量 ${row.qty100.toFixed(1)}×${w.qty}% + 車型多樣性 ${row.div100.toFixed(1)}×${w.div}% + 顏色多樣性 ${row.colorDiv100.toFixed(1)}×${w.cdiv}% + 效率 ${row.eff100.toFixed(1)}×${w.eff}% + 出勤 ${row.att100.toFixed(1)}×${w.att}% = <span style="color:#185fa5;font-size:18px;">${row.weighted.toFixed(1)}</span> 分
+  </div>`;
+}
+function toggleScoreDetail(pid) {
+  scoreSelectedPid = (scoreSelectedPid === pid) ? null : pid;
+  renderScoreResults();
 }
 
 function init() {
