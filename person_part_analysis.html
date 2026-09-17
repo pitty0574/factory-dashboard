@@ -309,6 +309,7 @@
 
     <!-- 今日出勤說明 -->
     <div id="rtTableInfo" style="font-size:13px;color:#445;text-align:center;margin-bottom:0.5rem;"></div>
+    <div style="font-size:12px;color:#556;text-align:center;margin-bottom:0.5rem;">※ 各時段的實績包含該時段結束後至下段開始前的休息時間輸入</div>
 
     <!-- 合計時段表格 -->
     <div style="background:#161b27;border-radius:12px;overflow:hidden;margin-bottom:1rem;box-shadow:0 4px 24px rgba(0,0,0,0.5);">
@@ -1934,21 +1935,16 @@ function parseTimestampMinutes(rawTs) {
   return null;
 }
 
+// 該時段結束後、至下一時段開始前的休息時間，視為該時段的收尾補打，歸屬於該（已結束的）時段
+// 例：10:00～10:10 的休息時間輸入，歸屬第一段（而非第二段）
 function getSegmentIdx(mins) {
   if (mins == null) return -1;
-  for (const brk of BREAKS) {
-    if (mins >= brk.start && mins < brk.end) {
-      // 休息中 → 歸入下一個時段
-      for (let i=0; i<SEGMENTS.length; i++) {
-        if (SEGMENTS[i].start >= brk.end) return i;
-      }
-      return -1;
-    }
+  if (mins < SEGMENTS[0].start) return -1; // 班前
+  for (let i = 0; i < SEGMENTS.length; i++) {
+    const segEnd = (i + 1 < SEGMENTS.length) ? SEGMENTS[i + 1].start : SEGMENTS[i].end;
+    if (mins >= SEGMENTS[i].start && mins < segEnd) return i;
   }
-  for (let i=0; i<SEGMENTS.length; i++) {
-    if (mins >= SEGMENTS[i].start && mins < SEGMENTS[i].end) return i;
-  }
-  return -1;
+  return -1; // 下班後
 }
 
 function currentSegIdx() { return getSegmentIdx(nowMin()); }
