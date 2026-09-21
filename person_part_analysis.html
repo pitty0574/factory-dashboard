@@ -165,9 +165,22 @@
     <button class="quick-btn" id="qbtn-14" onclick="setQuick('14')">近14天</button>
     <button class="quick-btn" onclick="setQuick('all')">全部</button>
   </div>
-  <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:#555;margin-left:10px;cursor:pointer;" title="啟用後，TF 車型每筆記錄以 0.3 隻計算等效隻數，用於反映真實工作量（品質情報分頁不受影響）">
+  <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:#555;margin-left:10px;cursor:pointer;" title="啟用後，TF/PF 等小件車型每筆記錄依折算係數計算等效隻數，用於反映真實工作量（品質情報分頁不受影響）">
     <input type="checkbox" id="tfDiscountToggle" onchange="onTfDiscountToggle()" style="cursor:pointer;" />
-    TF 小件折算（每筆 0.3 隻）
+    小件車型折算（TF 固定 0.3）
+  </label>
+  <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:#555;margin-left:6px;">
+    PF 車型係數：
+    <select id="pfCoefficientSelect" onchange="onPfCoefficientChange()" style="font-size:12px;padding:2px 4px;cursor:pointer;">
+      <option value="0.60">0.60</option>
+      <option value="0.65">0.65</option>
+      <option value="0.70">0.70</option>
+      <option value="0.75">0.75</option>
+      <option value="0.80">0.80</option>
+      <option value="0.85">0.85</option>
+      <option value="1.00">不折算</option>
+    </select>
+    <span id="pfCoefficientInfo" style="cursor:help;">ℹ️</span>
   </label>
 </div>
 
@@ -750,16 +763,20 @@ const FALLBACK_RECORDS = [
 
 const MZ_CODES = new Set(['51','A4D','41W','46V','PZ','TAS']);
 
-// ── 小件車型折算表（可未來擴充）───────────────────────────────────────────────
-// TF 等小件車型部件較小、加工快速，實際工作量低於一般車型，因此每筆記錄折算為較小的等效隻數
-const SMALL_PART_MULTIPLIERS = {
-  'TF': 0.3,
-  // 未來如果有其他小件車型可以在這裡新增
-};
-function getEquivalentQty(model) {
-  return SMALL_PART_MULTIPLIERS[(model || '').trim()] ?? 1;
+// ── 小件車型折算（可未來擴充）─────────────────────────────────────────────────
+// TF、PF 等小件車型部件較小、加工快速，實際工作量低於一般車型，因此每筆記錄折算為較小的等效隻數
+// PF 係數可由使用者於下拉選單調整，存於 localStorage，預設 0.70
+function getPfCoefficient() {
+  const saved = localStorage.getItem('pf_coefficient');
+  return saved !== null ? parseFloat(saved) : 0.70;
 }
-// 依目前「TF 小件折算」開關狀態，回傳單筆記錄的等效隻數（品質情報分頁不使用此函式，恆以筆數計算）
+function getEquivalentQty(model) {
+  const m = (model || '').trim();
+  if (m === 'TF') return 0.3;
+  if (m === 'PF') return getPfCoefficient();
+  return 1;
+}
+// 依目前「小件車型折算」開關狀態，回傳單筆記錄的等效隻數（品質情報分頁不使用此函式，恆以筆數計算）
 function recEqQty(r) {
   return tfDiscountEnabled ? getEquivalentQty(r[4]) : 1;
 }
@@ -787,7 +804,7 @@ let selectedCumMonth = null; // 'YYYY-MM'，null = 尚未初始化，會於首�
 let selectedRtMonth = null; // 'YYYY-MM'，即時看板「當月累積」區塊的月份切換，與人員效率頁的 selectedCumMonth 各自獨立
 let tfDiscountEnabled = localStorage.getItem('tfDiscountEnabled') === null
   ? true
-  : localStorage.getItem('tfDiscountEnabled') === 'true'; // TF 小件折算開關，預設啟用，狀態存 localStorage
+  : localStorage.getItem('tfDiscountEnabled') === 'true'; // 小件車型折算開關，預設啟用，狀態存 localStorage
 
 // ── 作業員評分（試跑階段）狀態 ─────────────────────────────────────────────────
 let scoreUIInitialized = false;
@@ -815,10 +832,26 @@ function loadSettings() {
   document.getElementById('mzTarget').value   = localStorage.getItem('mzTarget') || '25';
   document.getElementById('minInterval').value = localStorage.getItem('minIntervalSec') || '30';
   document.getElementById('tfDiscountToggle').checked = tfDiscountEnabled;
+  document.getElementById('pfCoefficientSelect').value = getPfCoefficient().toFixed(2);
+  updatePfCoefficientInfo();
 }
 function onTfDiscountToggle() {
   tfDiscountEnabled = document.getElementById('tfDiscountToggle').checked;
   localStorage.setItem('tfDiscountEnabled', String(tfDiscountEnabled));
+  applyDateFilter();
+  if (scoreResult) computeScoring();
+  else if (currentView === 'scoring') buildScoringSettingsUI();
+}
+function updatePfCoefficientInfo() {
+  const el = document.getElementById('pfCoefficientInfo');
+  if (!el) return;
+  const c = getPfCoefficient();
+  el.title = `PF 車型為小件部件，作業速度較快。目前係數為 ${c.toFixed(2)}（每筆折算為 ${c.toFixed(2)} 隻）。可依實際觀察調整。`;
+}
+function onPfCoefficientChange() {
+  const v = parseFloat(document.getElementById('pfCoefficientSelect').value);
+  localStorage.setItem('pf_coefficient', String(v));
+  updatePfCoefficientInfo();
   applyDateFilter();
   if (scoreResult) computeScoring();
   else if (currentView === 'scoring') buildScoringSettingsUI();
@@ -1206,8 +1239,8 @@ function buildDetail() {
     div.innerHTML=`
       <div class="person-title">工號 ${pid}</div>
       <div class="stat-row">
-        <div class="stat-box"><div class="stat-label">保險桿 日均</div><div class="stat-val bx-color">${bxAvg} 隻</div><div class="stat-label">共 ${fmtQty(bxTotal)} 隻 / ${bxDays} 天${tfDiscountEnabled ? ' <span title="TF 車型每筆折算為 0.3 隻">ℹ️</span>' : ''}</div></div>
-        <div class="stat-box"><div class="stat-label">馬自達 日均</div><div class="stat-val mz-color">${mzAvg} 隻</div><div class="stat-label">共 ${fmtQty(mzTotal)} 隻 / ${mzDays} 天${tfDiscountEnabled ? ' <span title="TF 車型每筆折算為 0.3 隻">ℹ️</span>' : ''}</div></div>
+        <div class="stat-box"><div class="stat-label">保險桿 日均</div><div class="stat-val bx-color">${bxAvg} 隻</div><div class="stat-label">共 ${fmtQty(bxTotal)} 隻 / ${bxDays} 天${tfDiscountEnabled ? ' <span title="TF/PF 小件車型已依係數折算等效隻數（TF 0.3、PF 0.7）">ℹ️</span>' : ''}</div></div>
+        <div class="stat-box"><div class="stat-label">馬自達 日均</div><div class="stat-val mz-color">${mzAvg} 隻</div><div class="stat-label">共 ${fmtQty(mzTotal)} 隻 / ${mzDays} 天${tfDiscountEnabled ? ' <span title="TF/PF 小件車型已依係數折算等效隻數（TF 0.3、PF 0.7）">ℹ️</span>' : ''}</div></div>
         <div class="stat-box"><div class="stat-label">作業比例</div><div style="font-size:12px;margin-top:4px;"><span class="bx-color">${bxPct}%</span> / <span class="mz-color">${mzPct}%</span></div><div class="stat-label">保 / 馬</div></div>
       </div>
       <div style="height:6px;border-radius:3px;background:#eee;overflow:hidden;margin-top:4px;">
@@ -1235,7 +1268,7 @@ function buildDailyData() {
 
 function renderDailyChart() {
   const tfNoteEl = document.getElementById('dailyTfNote');
-  if (tfNoteEl) tfNoteEl.textContent = tfDiscountEnabled ? '（等效隻數，TF 已折算 0.3）' : '';
+  if (tfNoteEl) tfNoteEl.textContent = tfDiscountEnabled ? '（等效隻數，TF/PF 已折算）' : '';
   const labels = filteredDates.map(d=>d.slice(5));
   const bxAvgArr = filteredDates.map(d => { const r=dailyComputed[d]; return r.bxPax>0?parseFloat((r.bxTotal/r.bxPax).toFixed(2)):null; });
   const mzAvgArr = filteredDates.map(d => { const r=dailyComputed[d]; return r.mzPax>0?parseFloat((r.mzTotal/r.mzPax).toFixed(2)):null; });
@@ -1393,7 +1426,7 @@ function refreshEfficiency() {
     const blendedGoalStr = blendedCommitted > 0 ? Math.round(blendedCommitted) : '—';
     const overallRateColor = rateColor(overallRate ?? 0);
     const overallRateStr   = overallRate !== null ? ` (${overallRate}%)` : '';
-    const tfHint = tfDiscountEnabled ? ` <span title="TF 車型每筆折算為 0.3 隻" style="cursor:help;">ℹ️</span>` : '';
+    const tfHint = tfDiscountEnabled ? ` <span title="TF/PF 小件車型已依係數折算等效隻數（TF 0.3、PF 0.7）" style="cursor:help;">ℹ️</span>` : '';
     const mainRow = `<div style="font-size:15px;color:${overallRateColor};margin-top:3px;">合計 ${fmtQty(totalQty)}/${blendedGoalStr}隻${overallRateStr}${tfHint}</div>`;
 
     // 保/馬分解行（只顯示數量，不各自計算達成率）
@@ -1551,7 +1584,7 @@ function buildCumulativeStatus(bxTarget, mzTarget) {
 
   if (titleEl) {
     const heading = isCurMonth ? '本月累積狀態' : '歷史月份累積狀態';
-    const tfNote = tfDiscountEnabled ? '　<span style="font-size:12px;font-weight:400;color:#e67e22;">（等效隻數，TF 已折算 0.3）</span>' : '';
+    const tfNote = tfDiscountEnabled ? '　<span style="font-size:12px;font-weight:400;color:#e67e22;">（等效隻數，TF/PF 已折算）</span>' : '';
     titleEl.innerHTML = `${heading}（${monthLabelText}）${tfNote}<div style="font-size:13px;font-weight:400;color:#aaa;margin-top:3px;">${rangeLabel}</div>`;
   }
 
@@ -1661,7 +1694,7 @@ function buildCumulativeStatus(bxTarget, mzTarget) {
             <text x="48" y="62" text-anchor="middle" fill="#888"
               font-size="10" font-family="system-ui">${fmtQty(s.totalActual)}/${s.totalGoal} 隻</text>
           </svg>
-          <div style="font-size:15px;color:#888;margin-top:2px;">整體達標率${tfDiscountEnabled ? ' <span title="TF 車型每筆折算為 0.3 隻" style="cursor:help;">ℹ️</span>' : ''}</div>
+          <div style="font-size:15px;color:#888;margin-top:2px;">整體達標率${tfDiscountEnabled ? ' <span title="TF/PF 小件車型已依係數折算等效隻數（TF 0.3、PF 0.7）" style="cursor:help;">ℹ️</span>' : ''}</div>
         </div>
       </div>
       ${(s.bxPtsStats || s.mzPtsStats || s.overallPtsStats) ? `
@@ -2208,7 +2241,7 @@ function renderRtOverall(total, totalTarget, bxTarget, mzTarget, bxActual, mzAct
 
   const card = (label, val, unit='隻') => `
     <div style="${cardBase}border:1px solid #1e2d50;">
-      <div style="font-size:14px;color:#8ab4f8;margin-bottom:6px;letter-spacing:1px;">${label}${tfDiscountEnabled && label==='累計實績' ? ' <span title="TF 車型每筆折算為 0.3 隻">ℹ️</span>' : ''}</div>
+      <div style="font-size:14px;color:#8ab4f8;margin-bottom:6px;letter-spacing:1px;">${label}${tfDiscountEnabled && label==='累計實績' ? ' <span title="TF/PF 小件車型已依係數折算等效隻數（TF 0.3、PF 0.7）">ℹ️</span>' : ''}</div>
       <div style="font-size:80px;font-weight:800;line-height:1;color:#ffffff;">${val}</div>
       <div style="font-size:14px;color:#556;margin-top:6px;">${unit}</div>
     </div>`;
@@ -2222,7 +2255,7 @@ function renderRtOverall(total, totalTarget, bxTarget, mzTarget, bxActual, mzAct
 
   const breakdown = `
     <div style="${cardBase.replace('text-align:center;','').replace('align-items:center;','')}border:1px solid #1e2d50;padding:0 1.6rem;align-items:stretch;">
-      <div style="font-size:14px;color:#8ab4f8;margin-bottom:16px;letter-spacing:1px;text-align:left;">今日明細${tfDiscountEnabled ? ' <span title="TF 車型每筆折算為 0.3 隻" style="font-size:12px;">ℹ️</span>' : ''}</div>
+      <div style="font-size:14px;color:#8ab4f8;margin-bottom:16px;letter-spacing:1px;text-align:left;">今日明細${tfDiscountEnabled ? ' <span title="TF/PF 小件車型已依係數折算等效隻數（TF 0.3、PF 0.7）" style="font-size:12px;">ℹ️</span>' : ''}</div>
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:16px;">
         <span style="color:#aaa;font-size:16px;">保險桿</span>
         <span style="color:#e0e0e0;font-size:28px;font-weight:700;">${fmtQty(bxActual)} <span style="font-size:14px;color:#556;">/ ${bxTarget}</span></span>
@@ -2325,7 +2358,7 @@ function renderRtMonthly(bxTarget, mzTarget) {
       <div style="font-size:13px;color:#556;margin-top:6px;">隻</div>
     </div>
     <div style="${cb}border:1px solid #1e2d50;">
-      <div style="font-size:13px;color:#8ab4f8;margin-bottom:6px;letter-spacing:1px;">月累積實績${tfDiscountEnabled ? ' <span title="TF 車型每筆折算為 0.3 隻">ℹ️</span>' : ''}</div>
+      <div style="font-size:13px;color:#8ab4f8;margin-bottom:6px;letter-spacing:1px;">月累積實績${tfDiscountEnabled ? ' <span title="TF/PF 小件車型已依係數折算等效隻數（TF 0.3、PF 0.7）">ℹ️</span>' : ''}</div>
       <div style="font-size:64px;font-weight:800;line-height:1;color:#ffffff;">${monthlyActual ? fmtQty(monthlyActual) : '—'}</div>
       <div style="font-size:13px;color:#556;margin-top:6px;">隻</div>
     </div>
@@ -3432,7 +3465,7 @@ function saveScoreRules() { localStorage.setItem('scoreRules', JSON.stringify(sc
 function buildScoringSettingsUI() {
   if (!scoreUIInitialized) { loadScoreSettings(); scoreUIInitialized = true; }
   const tfNoteEl = document.getElementById('scoreTfNote');
-  if (tfNoteEl) tfNoteEl.textContent = tfDiscountEnabled ? '　產量分／效率分已套用 TF 小件折算（每筆 0.3 隻）。' : '';
+  if (tfNoteEl) tfNoteEl.textContent = tfDiscountEnabled ? '　產量分／效率分已套用小件車型折算（TF 0.3／PF 0.7）。' : '';
   document.getElementById('scoreRangeMode').value = scoreRangeMode;
   document.getElementById('scoreCustomWrap').style.display = scoreRangeMode==='custom' ? 'inline-flex' : 'none';
   updateScoreRangeLabel();
@@ -3726,7 +3759,7 @@ function renderScoreResults() {
     }
   });
   document.getElementById('scoreExcludedNote').textContent =
-    scoreResult.excludedCount > 0 ? `共 ${scoreResult.excludedCount} 人未列入評選（累計產量不足 100 隻${tfDiscountEnabled ? '，等效隻數，TF 已折算 0.3' : ''}）` : '';
+    scoreResult.excludedCount > 0 ? `共 ${scoreResult.excludedCount} 人未列入評選（累計產量不足 100 隻${tfDiscountEnabled ? '，等效隻數，TF/PF 已折算' : ''}）` : '';
 }
 
 // ── Section 6：計算明細 ──────────────────────────────────────────────────────
@@ -3747,7 +3780,7 @@ function scoreDetailInnerHtml(row, result) {
 
   return `
   <div style="font-size:16px;font-weight:700;margin-bottom:0.5rem;">工號 ${row.pid} 計算明細</div>
-  <div style="font-size:12px;color:#888;margin-bottom:1rem;">期間：${result.start.replace(/-/g,'/')} ～ ${result.end.replace(/-/g,'/')}　出勤天數：${row.attendDays} 天${tfDiscountEnabled ? '　<span style="color:#e67e22;">（等效隻數，TF 已折算 0.3）</span>' : ''}</div>
+  <div style="font-size:12px;color:#888;margin-bottom:1rem;">期間：${result.start.replace(/-/g,'/')} ～ ${result.end.replace(/-/g,'/')}　出勤天數：${row.attendDays} 天${tfDiscountEnabled ? '　<span style="color:#e67e22;">（等效隻數，TF/PF 已折算）</span>' : ''}</div>
 
   <div style="margin-bottom:1rem;">
     <div style="font-weight:700;margin-bottom:4px;color:#185fa5;">產量分計算</div>
@@ -3759,7 +3792,7 @@ function scoreDetailInnerHtml(row, result) {
     <div style="font-size:13px;margin-top:6px;">總產量分 = <b>${row.qtyScoreRaw.toFixed(1)}</b> 分　映射 100 分制：全體最高 ${result.maxQty.toFixed(1)} / 該人 ${row.qtyScoreRaw.toFixed(1)} × 100 = <b>${row.qty100.toFixed(1)}</b> 分</div>
   </div>
 
-  <div style="font-size:12px;color:#aaa;margin-bottom:1rem;">總產量（等效隻數）：${fmtQty(row.totalQty)} 隻${tfDiscountEnabled ? '（TF 每筆已折算為 0.3 隻）' : ''}</div>
+  <div style="font-size:12px;color:#aaa;margin-bottom:1rem;">總產量（等效隻數）：${fmtQty(row.totalQty)} 隻${tfDiscountEnabled ? '（TF/PF 已折算為等效隻數）' : ''}</div>
 
   <div style="margin-bottom:1rem;">
     <div style="font-weight:700;margin-bottom:4px;color:#185fa5;">車型多樣性計算</div>
