@@ -323,6 +323,7 @@
     <!-- 今日出勤說明 -->
     <div id="rtTableInfo" style="font-size:13px;color:#445;text-align:center;margin-bottom:0.5rem;"></div>
     <div style="font-size:12px;color:#556;text-align:center;margin-bottom:0.5rem;">※ 各時段的實績包含該時段結束後至下段開始前的休息時間輸入</div>
+    <div style="font-size:12px;color:#556;text-align:center;margin-bottom:0.5rem;">※ 各時段目標依該時段實際在場作業員動態計算，晚到人員不影響其到場前時段之目標</div>
 
     <!-- 合計時段表格 -->
     <div style="background:#161b27;border-radius:12px;overflow:hidden;margin-bottom:1rem;box-shadow:0 4px 24px rgba(0,0,0,0.5);">
@@ -341,6 +342,15 @@
         </thead>
         <tbody id="rtTbody"></tbody>
       </table>
+    </div>
+
+    <!-- 出勤明細（可展開） -->
+    <div style="background:#161b27;border-radius:12px;overflow:hidden;margin-bottom:1rem;box-shadow:0 4px 24px rgba(0,0,0,0.5);">
+      <div id="rtAttendanceToggle" onclick="toggleRtAttendanceDetail()" style="cursor:pointer;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;font-size:14px;color:#8ab4f8;letter-spacing:1px;user-select:none;">
+        <span>👥 出勤明細</span>
+        <span id="rtAttendanceCaret" style="color:#556;">▶</span>
+      </div>
+      <div id="rtAttendanceBody" style="display:none;padding:0 16px 14px;overflow-x:auto;"></div>
     </div>
 
     <!-- 底部四大數字卡片 -->
@@ -1413,7 +1423,7 @@ function refreshEfficiency() {
     const p = breakdown[pid];
     const bxQty = p.bxQty, mzQty = p.mzQty, totalQty = p.totalQty;
 
-    const planRatio = isViewingToday ? getCommittedPlanRatioForSegs(nowMin(), p.segCount) : 1.0;
+    const planRatio = isViewingToday ? getCommittedPlanRatioForRange(nowMin(), p.arrivalSeg, p.segCount) : 1.0;
     const blendedCommitted = p.dayTarget * planRatio;
     const overallRate = blendedCommitted > 0
       ? Math.round(totalQty / blendedCommitted * 100)
@@ -1903,17 +1913,25 @@ function determineShiftKey(lastTsMin) {
 }
 
 // 將某一天的原始記錄依工號彙整，計算每人當天的個人班別與已依班別工時比例縮放後的個人目標
-// dayRecs: 原始資料（allRecords）中屬於同一天的記錄陣列；回傳 { pid: {bxQty,mzQty,totalQty,lastTs,shiftKey,segCount,workMin,blendedDayTarget,dayTarget,bxDayTarget,mzDayTarget} }
+// dayRecs: 原始資料（allRecords）中屬於同一天的記錄陣列
+// 回傳 { pid: {bxQty,mzQty,totalQty,lastTs,shiftKey,segCount,workMin,blendedDayTarget,dayTarget,bxDayTarget,mzDayTarget,
+//              arrivalSeg,presentWorkMin} }
+// arrivalSeg：該人當天最早一筆有時間戳實績所屬的時段索引（無時間戳資料則視為全天在場，arrivalSeg=0）
+// 在場區間視為 arrivalSeg ～ segCount-1，供出勤明細與時段目標分攤使用
 function getPersonsDailyBreakdown(dayRecs, bxTarget, mzTarget) {
   const map = {};
   dayRecs.forEach(r => {
     const pid = r[1], type = r[2], tsMin = r[3];
     if (!pid || /^\d{4}[-\/]/.test(pid)) return;
-    if (!map[pid]) map[pid] = { pid, bxQty: 0, mzQty: 0, lastTs: null };
+    if (!map[pid]) map[pid] = { pid, bxQty: 0, mzQty: 0, lastTs: null, minSeg: null };
     const p = map[pid];
     const eq = recEqQty(r);
     if (type === 'bx') p.bxQty += eq; else p.mzQty += eq;
     if (tsMin != null && (p.lastTs == null || tsMin > p.lastTs)) p.lastTs = tsMin;
+    if (tsMin != null) {
+      const segIdx = getSegmentIdx(tsMin);
+      if (segIdx >= 0 && (p.minSeg == null || segIdx < p.minSeg)) p.minSeg = segIdx;
+    }
   });
   Object.values(map).forEach(p => {
     p.totalQty = p.bxQty + p.mzQty;
@@ -1929,6 +1947,9 @@ function getPersonsDailyBreakdown(dayRecs, bxTarget, mzTarget) {
 
     p.bxDayTarget = (p.totalQty > 0 && p.bxQty > 0) ? bxTarget * (p.bxQty / p.totalQty) * p.workMin / FULL_WORK_MIN : 0;
     p.mzDayTarget = (p.totalQty > 0 && p.mzQty > 0) ? mzTarget * (p.mzQty / p.totalQty) * p.workMin / FULL_WORK_MIN : 0;
+
+    p.arrivalSeg = p.minSeg != null ? p.minSeg : 0;
+    p.presentWorkMin = SEGMENTS.slice(p.arrivalSeg, p.segCount).reduce((s, g) => s + g.min, 0) || p.workMin;
   });
   return map;
 }
@@ -1982,21 +2003,21 @@ function getSegmentIdx(mins) {
 
 function currentSegIdx() { return getSegmentIdx(nowMin()); }
 
-// Returns 0..1: fraction of a shift's (segCount segments) work time elapsed as of nowMins
-function getCommittedPlanRatioForSegs(nowMins, segCount) {
-  const activeSegs = SEGMENTS.slice(0, segCount);
-  const totalMin   = activeSegs.reduce((s, g) => s + g.min, 0);
+// Returns 0..1: fraction of the [fromSeg, toSegExclusive) segment range's work time elapsed as of nowMins
+// 晚到人員只計算「到場後」的時段區間，避免把到場前的時段也算進已提交計畫比例
+function getCommittedPlanRatioForRange(nowMins, fromSeg, toSegExclusive) {
+  const activeSegs = SEGMENTS.slice(fromSeg, toSegExclusive);
+  const totalMin    = activeSegs.reduce((s, g) => s + g.min, 0);
   if (totalMin === 0) return 0;
   const curSeg = getSegmentIdx(nowMins);
   let elapsed = 0;
-  for (let i = 0; i < activeSegs.length; i++) {
-    const seg = activeSegs[i];
+  activeSegs.forEach((seg, offset) => {
+    const i = fromSeg + offset;
     if (nowMins >= seg.end)   { elapsed += seg.min; }
     else if (i === curSeg)    { elapsed += Math.max(0, nowMins - seg.start); }
-  }
+  });
   return Math.min(elapsed / totalMin, 1);
 }
-
 function minutesToNextEvent() {
   const now = nowMin();
   if (now < SHIFT_START) return { text: `班前（${SHIFT_START-now} 分鐘後開班）` };
@@ -2135,6 +2156,7 @@ function buildRealtimeBoard() {
     : `尚無出勤資料`;
 
   renderRtTableMerged(segTotal, activeBreakdowns, hasTsData, curSeg, now, isToday);
+  renderRtAttendanceDetail(activeBreakdowns);
 
   const bxActualTotal = dayRecs.filter(r=>r[2]==='bx').reduce((s,r)=>s+recEqQty(r),0);
   const mzActualTotal = dayRecs.filter(r=>r[2]==='mz').reduce((s,r)=>s+recEqQty(r),0);
@@ -2153,17 +2175,18 @@ function renderRtTableMerged(segActuals, activeBreakdowns, hasTsData, curSegIdx,
   if (!tbody) return;
   tbody.innerHTML = '';
 
-  // 每段計畫目標：每位作業員依自己的個人班別（只在班別涵蓋的時段內）分攤其個人目標
+  // 每段計畫目標：每位作業員的個人目標（dayTarget 不變）只分攤到「實際在場的時段」（arrivalSeg ～ segCount-1）
+  // 晚到人員（例如下午才轉入補漆房）不會把目標算進到場前的時段，避免早段目標虛高、達成率被拉低
   const segPlans = SEGMENTS.map(() => 0);
   activeBreakdowns.forEach(p => {
-    for (let i = 0; i < p.segCount; i++) {
-      segPlans[i] += p.dayTarget * SEGMENTS[i].min / p.workMin;
+    for (let i = p.arrivalSeg; i < p.segCount; i++) {
+      segPlans[i] += p.dayTarget * SEGMENTS[i].min / p.presentWorkMin;
     }
   });
 
-  // 當前時間已提交的累計計畫：每位作業員依自己班別的時間流逝比例計算後加總
+  // 當前時間已提交的累計計畫：每位作業員只計算「到場後」時段的時間流逝比例，再加總
   const committedPlan = activeBreakdowns.reduce(
-    (s, p) => s + p.dayTarget * getCommittedPlanRatioForSegs(now, p.segCount), 0);
+    (s, p) => s + p.dayTarget * getCommittedPlanRatioForRange(now, p.arrivalSeg, p.segCount), 0);
 
   const endCumPlan = [];
   let acc = 0;
@@ -2231,6 +2254,43 @@ function renderRtTableMerged(segActuals, activeBreakdowns, hasTsData, curSegIdx,
   });
 
   updateRtProgress(lastRate);
+}
+
+// 出勤明細區塊展開狀態（跨每 5 分鐘自動刷新保持記憶）
+let rtAttendanceExpanded = false;
+function toggleRtAttendanceDetail() {
+  rtAttendanceExpanded = !rtAttendanceExpanded;
+  const body  = document.getElementById('rtAttendanceBody');
+  const caret = document.getElementById('rtAttendanceCaret');
+  if (body)  body.style.display = rtAttendanceExpanded ? 'block' : 'none';
+  if (caret) caret.textContent  = rtAttendanceExpanded ? '▼' : '▶';
+}
+
+// 出勤明細：工號 × 時段，✓ 表示該人在該時段有在場（arrivalSeg ～ segCount-1），- 表示尚未到場或已下班
+function renderRtAttendanceDetail(activeBreakdowns) {
+  const body = document.getElementById('rtAttendanceBody');
+  if (!body) return;
+  if (!activeBreakdowns.length) { body.innerHTML = '<div style="font-size:13px;color:#556;padding:8px 0;">尚無出勤資料</div>'; return; }
+
+  const rows = activeBreakdowns.slice().sort((a, b) => String(a.pid).localeCompare(String(b.pid)));
+  const cellStyle = 'text-align:center;padding:8px 10px;font-size:15px;';
+  const head = `
+    <tr style="border-bottom:2px solid #1e2a40;font-size:13px;color:#556;">
+      <th style="text-align:left;padding:8px 10px;font-weight:600;">工號</th>
+      ${SEGMENTS.map(s => `<th style="${cellStyle}font-weight:600;">${s.name}</th>`).join('')}
+    </tr>`;
+  const body_ = rows.map(p => {
+    const cells = SEGMENTS.map((s, i) => {
+      const present = i >= p.arrivalSeg && i < p.segCount;
+      return `<td style="${cellStyle}color:${present ? '#1D9E75' : '#445'};">${present ? '✓' : '-'}</td>`;
+    }).join('');
+    return `<tr style="border-bottom:1px solid #1e2535;">
+      <td style="padding:8px 10px;font-size:14px;color:#e0e0e0;font-weight:600;">${p.pid}${shiftBadgeHtml(p.shiftKey)}</td>
+      ${cells}
+    </tr>`;
+  }).join('');
+
+  body.innerHTML = `<table style="width:100%;border-collapse:collapse;min-width:480px;"><thead>${head}</thead><tbody>${body_}</tbody></table>`;
 }
 
 function renderRtOverall(total, totalTarget, bxTarget, mzTarget, bxActual, mzActual) {
@@ -2324,8 +2384,8 @@ function renderRtMonthly(bxTarget, mzTarget) {
     Object.values(breakdown).forEach(p => {
       if (p.totalQty === 0) return;
       if (iso === todayISO) {
-        // 今天：只算到目前已過的計畫比例（依該人自己班別的工時流逝比例）
-        monthlyTarget += p.dayTarget * getCommittedPlanRatioForSegs(nowMins, p.segCount);
+        // 今天：只算到目前已過的計畫比例（依該人「到場後」的工時流逝比例）
+        monthlyTarget += p.dayTarget * getCommittedPlanRatioForRange(nowMins, p.arrivalSeg, p.segCount);
       } else {
         // 過去日期：整天已結束，直接採計該人依自己班別縮放後的個人當日目標
         monthlyTarget += p.dayTarget;
