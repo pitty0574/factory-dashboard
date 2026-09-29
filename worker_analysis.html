@@ -1,0 +1,1065 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>作業員深度效率分析工具</title>
+<style>
+  :root {
+    --bg:#0f1117; --panel:#131929; --panel2:#161b27; --border:#1e2a40;
+    --text:#e0e0e0; --muted:#8a93ad; --muted2:#556; --muted3:#445;
+    --accent:#5b9cf6; --accent2:#8ab4f8; --warn:#f0c040; --orange:#e67e22;
+    --green:#1D9E75; --red:#e74c3c; --purple:#a374db;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); padding: 1.25rem; }
+  h1 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+  .subtitle { font-size: 13px; color: var(--muted); margin-bottom: 1.25rem; }
+  .subtitle a { color: var(--accent2); text-decoration: none; }
+  .subtitle a:hover { text-decoration: underline; }
+  select, input[type=text], input[type=date], input[type=number] {
+    background: #0c0e14; color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 5px 9px; font-size: 12px;
+  }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 1rem 1.25rem; margin-bottom: 1rem; }
+  .card-title { font-size: 15px; font-weight: 700; margin-bottom: 0.75rem; color: var(--text); }
+  .card-sub { font-size: 11px; color: var(--muted); margin-top: -6px; margin-bottom: 0.75rem; }
+  .btn { font-size: 12px; padding: 6px 14px; border: none; border-radius: 8px; cursor: pointer; font-weight: 700; }
+  .btn-primary { background: var(--accent); color: #0c0e14; }
+  .btn-secondary { background: #1e2a40; color: var(--text); }
+  .btn:hover { filter: brightness(1.1); }
+  .status-badge { font-size: 11px; padding: 3px 9px; border-radius: 10px; }
+  .badge-ok { background: rgba(29,158,117,0.2); color: #4fd8a8; }
+  .badge-err { background: rgba(231,76,60,0.2); color: #ff8a7a; }
+  .badge-loading { background: rgba(91,156,246,0.2); color: var(--accent2); }
+
+  .settings-title { font-size: 13px; font-weight: 700; color: var(--muted); cursor: pointer; display: flex; align-items: center; gap: 6px; user-select: none; }
+  .settings-body { margin-top: 0.75rem; display: none; }
+  .settings-body.open { display: block; }
+  .settings-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
+  .settings-row label { font-size: 12px; color: var(--muted); width: 90px; flex-shrink: 0; }
+  .settings-row input { flex: 1; min-width: 180px; }
+
+  .date-filter { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .quick-btn { font-size: 11px; padding: 4px 12px; border-radius: 14px; border: 1px solid var(--border); background: var(--panel2); color: var(--muted); cursor: pointer; }
+  .quick-btn.active { background: rgba(91,156,246,0.2); border-color: var(--accent); color: var(--accent2); font-weight: 700; }
+
+  .tab-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 1.25rem; align-items: center; }
+  .tab-btn { background: var(--panel2); border: 1px solid var(--border); border-radius: 8px; padding: 7px 18px; font-size: 13px; color: var(--muted); cursor: pointer; }
+  .tab-btn.active { background: rgba(91,156,246,0.18); border-color: var(--accent); color: var(--accent2); font-weight: 700; }
+
+  .view-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 1rem; }
+  .picker-wrap { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .picker-wrap label { font-size: 12px; color: var(--muted); }
+
+  .stat-grid { display: flex; gap: 12px; flex-wrap: wrap; }
+  .stat-card { flex: 1; min-width: 140px; background: var(--panel2); border: 1px solid var(--border); border-radius: 10px; padding: 0.85rem 1rem; text-align: center; }
+  .stat-card .lbl { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  .stat-card .val { font-size: 24px; font-weight: 800; color: var(--accent2); }
+  .stat-card .sub { font-size: 11px; color: var(--muted3); margin-top: 2px; }
+
+  table.dark { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.dark thead th { text-align: left; padding: 7px 10px; color: var(--muted); border-bottom: 1px solid var(--border); font-weight: 700; white-space: nowrap; }
+  table.dark tbody td { padding: 6px 10px; border-bottom: 0.5px solid #1c2233; }
+  table.dark tbody tr:hover { background: #171d2c; }
+
+  .barlist-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .barlist-label { width: 90px; font-size: 12px; color: var(--muted); flex-shrink: 0; text-align: right; }
+  .barlist-track { flex: 1; background: #0c0e14; border-radius: 5px; height: 16px; overflow: hidden; position: relative; }
+  .barlist-fill { height: 100%; background: linear-gradient(90deg, #2c5da0, var(--accent)); }
+  .barlist-note { width: 150px; font-size: 11px; color: var(--muted3); flex-shrink: 0; }
+
+  .score-big { font-size: 52px; font-weight: 800; color: var(--accent2); line-height: 1; }
+  .score-tier { font-size: 13px; color: var(--muted); margin-top: 8px; line-height: 1.6; }
+
+  .chk-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chk-item { display: flex; align-items: center; gap: 4px; font-size: 12px; background: var(--panel2); border: 1px solid var(--border); border-radius: 8px; padding: 4px 10px; cursor: pointer; color: var(--muted); }
+  .chk-item.checked { border-color: var(--accent); color: var(--accent2); }
+  .chk-item input { cursor: pointer; }
+
+  .empty-hint { font-size: 13px; color: var(--muted3); text-align: center; padding: 2rem; }
+
+  @media print {
+    .no-print { display: none !important; }
+    body { background: #fff; color: #111; padding: 0.5rem; }
+    .card { background: #fff; border: 1px solid #ccc; }
+    table.dark tbody tr:hover { background: none; }
+  }
+  @media (max-width: 640px) {
+    .stat-card { min-width: 45%; }
+    body { padding: 0.75rem; }
+  }
+</style>
+</head>
+<body>
+<h1>作業員深度效率分析工具</h1>
+<div class="subtitle">用於深入了解每位作業員的產量、行為、趨勢，供主管參考　·　<a href="person_part_analysis.html">🔙 返回主看板</a></div>
+
+<!-- Settings -->
+<div class="card no-print">
+  <div class="settings-title" onclick="toggleWaSettings()">
+    ⚙️ 資料來源設定（與主看板共用）
+    <span id="waBadge" class="status-badge badge-ok">尚未載入</span>
+  </div>
+  <div class="settings-body" id="waSettingsBody">
+    <div class="settings-row"><label>Sheets ID</label><input type="text" id="waSheetsId" placeholder="貼上 Google Sheets ID" /></div>
+    <div class="settings-row"><label>API Key</label><input type="text" id="waApiKey" placeholder="貼上 Google API Key" /></div>
+    <div class="settings-row"><label>工作表名稱</label><input type="text" id="waSheetName" value="整修日報" /></div>
+    <div class="settings-row" style="gap:8px;">
+      <button class="btn btn-primary" onclick="waSaveAndFetch()">儲存並載入</button>
+      <button class="btn btn-secondary" onclick="waClearSettings()">清除設定</button>
+      <button class="btn btn-secondary" onclick="waRestoreDefaults()">恢復預設值</button>
+    </div>
+    <div style="font-size:11px;color:var(--muted3);margin-top:6px;">
+      欄位對應：A=時間戳記、B=記錄日期、C=工號、D=車型、E=種類、F=顏色代號、G=補漆總點數<br>
+      小件車型折算：TF 每筆 0.3 隻、PF 依主看板設定係數（目前 <span id="waPfInfo">0.70</span>），設定值與主看板同步（localStorage）。
+    </div>
+  </div>
+</div>
+
+<!-- Date range -->
+<div class="card no-print">
+  <div class="date-filter">
+    <span style="font-size:12px;color:var(--muted);">時間範圍：</span>
+    <input type="date" id="waStart" onchange="onWaDateInputChange()" />
+    <span style="font-size:12px;color:var(--muted3);">～</span>
+    <input type="date" id="waEnd" onchange="onWaDateInputChange()" />
+    <div style="display:flex;gap:6px;flex-wrap:wrap;">
+      <button class="quick-btn" onclick="setWaQuick('30')">近30天</button>
+      <button class="quick-btn" onclick="setWaQuick('60')">近60天</button>
+      <button class="quick-btn" onclick="setWaQuick('90')">近90天</button>
+      <button class="quick-btn" onclick="setWaQuick('month')">當月</button>
+      <button class="quick-btn" onclick="setWaQuick('lastmonth')">上月</button>
+    </div>
+    <span id="waRangeInfo" style="font-size:11px;color:var(--muted3);margin-left:auto;"></span>
+  </div>
+</div>
+
+<!-- Tabs -->
+<div class="tab-row no-print">
+  <span style="font-size:12px;color:var(--muted);margin-right:2px;">檢視模式：</span>
+  <button class="tab-btn active" id="tabbtn-individual" onclick="showWaTab('individual')">個人明細</button>
+  <button class="tab-btn" id="tabbtn-behavior" onclick="showWaTab('behavior')">行為分析</button>
+  <button class="tab-btn" id="tabbtn-comparison" onclick="showWaTab('comparison')">橫向比較</button>
+</div>
+
+<!-- Tab 1: Individual -->
+<div id="wa-view-individual">
+  <div class="view-head">
+    <div class="picker-wrap">
+      <label>選擇作業員：</label>
+      <select id="indivPidSelect" onchange="onIndivPidChange()"></select>
+    </div>
+    <button class="btn btn-secondary no-print" onclick="window.print()">📥 匯出當前分析</button>
+  </div>
+  <div id="indivContent"></div>
+</div>
+
+<!-- Tab 2: Behavior -->
+<div id="wa-view-behavior" style="display:none;">
+  <div class="view-head">
+    <div class="picker-wrap">
+      <label>選擇作業員：</label>
+      <select id="behavPidSelect" onchange="onBehavPidChange()"></select>
+    </div>
+    <button class="btn btn-secondary no-print" onclick="window.print()">📥 匯出當前分析</button>
+  </div>
+  <div id="behavContent"></div>
+</div>
+
+<!-- Tab 3: Comparison -->
+<div id="wa-view-comparison" style="display:none;">
+  <div class="view-head">
+    <div style="font-size:12px;color:var(--muted);">最多可選 8 位作業員進行比較</div>
+    <button class="btn btn-secondary no-print" onclick="window.print()">📥 匯出當前分析</button>
+  </div>
+  <div class="card no-print">
+    <div class="card-title" style="font-size:13px;">勾選要比較的作業員</div>
+    <div class="chk-grid" id="comparisonChecks"></div>
+  </div>
+  <div id="comparisonContent"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+// ── Config (shared with main dashboard) ─────────────────────────────────────
+const DEFAULT_CONFIG = {
+  sheetsId:  '1xQoIxoLlM4LkKjDrYZ_87uIahtebPgPcG6Hitck1T5c',
+  apiKey:    'AIzaSyBMgXHsua64mciOFJwqH4NreGI11gMXR-s',
+  sheetName: '整修日報'
+};
+const PALETTE = ['#5b9cf6','#f0c040','#1D9E75','#e74c3c','#a374db','#e67e22','#36cfc9','#eb5757'];
+
+// ── Segments (identical to main dashboard) ──────────────────────────────────
+const SEGMENTS = [
+  { name:'第一段', label:'08:00～10:00', start: 8*60,      end: 10*60,    min: 120 },
+  { name:'第二段', label:'10:10～12:00', start: 10*60+10,  end: 12*60,    min: 110 },
+  { name:'第三段', label:'12:30～14:30', start: 12*60+30,  end: 14*60+30, min: 120 },
+  { name:'第四段', label:'14:40～16:30', start: 14*60+40,  end: 16*60+30, min: 110 },
+  { name:'第五段', label:'16:40～18:30', start: 16*60+40,  end: 18*60+30, min: 110 },
+  { name:'第六段', label:'19:00～21:00', start: 19*60,     end: 21*60,    min: 120 },
+];
+function getSegmentIdx(mins) {
+  if (mins == null) return -1;
+  if (mins < SEGMENTS[0].start) return -1;
+  for (let i = 0; i < SEGMENTS.length; i++) {
+    const segEnd = (i + 1 < SEGMENTS.length) ? SEGMENTS[i + 1].start : SEGMENTS[i].end;
+    if (mins >= SEGMENTS[i].start && mins < segEnd) return i;
+  }
+  return -1;
+}
+
+// ── Fallback demo data (used only if Sheets fetch fails) ────────────────────
+const FALLBACK_RECORDS = [];
+(function(){
+  const raw = {
+    '8623': { mz: {'2026/04/12':17,'2026/04/18':27}, bx: {'2026/04/08':31,'2026/04/09':51,'2026/04/10':27,'2026/04/12':4,'2026/04/13':66,'2026/04/14':73,'2026/04/15':34,'2026/04/16':36,'2026/04/17':48,'2026/04/20':34,'2026/04/21':31,'2026/04/22':33} },
+    '8720': { mz: {'2026/04/08':37,'2026/04/09':28,'2026/04/10':48,'2026/04/12':23,'2026/04/13':23,'2026/04/14':28,'2026/04/15':20,'2026/04/16':27,'2026/04/17':37,'2026/04/18':26,'2026/04/19':25,'2026/04/20':24,'2026/04/21':33,'2026/04/22':41}, bx: {'2026/04/09':12,'2026/04/16':2} },
+    '8745': { mz: {'2026/04/08':32,'2026/04/09':34,'2026/04/10':46,'2026/04/12':19,'2026/04/13':28,'2026/04/14':18,'2026/04/15':20,'2026/04/16':27,'2026/04/17':35,'2026/04/18':22,'2026/04/19':22,'2026/04/20':24,'2026/04/21':35,'2026/04/22':39}, bx: {'2026/04/15':10,'2026/04/16':3} },
+    '8760': { mz: {'2026/04/12':21}, bx: {'2026/04/07':44,'2026/04/08':35,'2026/04/09':51,'2026/04/10':46,'2026/04/12':2,'2026/04/13':48,'2026/04/14':43,'2026/04/15':51,'2026/04/16':44,'2026/04/17':32} },
+    '8764': { mz: {'2026/04/08':37,'2026/04/10':52,'2026/04/12':25,'2026/04/13':24,'2026/04/14':29,'2026/04/15':24,'2026/04/16':28,'2026/04/17':36,'2026/04/18':24,'2026/04/19':25,'2026/04/20':23,'2026/04/21':30,'2026/04/22':39}, bx: {'2026/04/08':1,'2026/04/15':11,'2026/04/16':1} },
+    '8767': { mz: {'2026/04/10':5,'2026/04/12':21,'2026/04/13':1,'2026/04/14':2,'2026/04/18':47,'2026/04/19':33}, bx: {'2026/04/08':36,'2026/04/09':41,'2026/04/10':53,'2026/04/12':4,'2026/04/13':42,'2026/04/14':37,'2026/04/15':49,'2026/04/16':43,'2026/04/17':47,'2026/04/19':10,'2026/04/20':52,'2026/04/21':46,'2026/04/22':49} },
+    '8768': { mz: {'2026/04/10':22,'2026/04/12':24,'2026/04/13':17,'2026/04/14':30,'2026/04/15':18,'2026/04/16':18,'2026/04/17':37,'2026/04/18':28,'2026/04/19':25,'2026/04/20':22,'2026/04/21':28}, bx: {'2026/04/10':1,'2026/04/12':1,'2026/04/15':8,'2026/04/16':12,'2026/04/22':22} },
+    '8782': { mz: {'2026/04/12':7,'2026/04/18':30}, bx: {'2026/04/08':39,'2026/04/09':35,'2026/04/10':25,'2026/04/12':1,'2026/04/13':40,'2026/04/14':31,'2026/04/15':46,'2026/04/16':44,'2026/04/17':52,'2026/04/19':35,'2026/04/20':46,'2026/04/21':60,'2026/04/22':53} }
+  };
+  let idx = 0;
+  Object.entries(raw).forEach(([pid, parts]) => {
+    ['bx','mz'].forEach(type => {
+      Object.entries(parts[type]).forEach(([date, qty]) => {
+        const carModel = type === 'mz' ? 'CX-5' : 'CX-3';
+        const code     = type === 'mz' ? '51'   : 'W3S';
+        for(let i=0;i<qty;i++){
+          const seg = SEGMENTS[idx % 6];
+          const tsMin = seg.start + ((idx*37) % (seg.end-seg.start));
+          FALLBACK_RECORDS.push([date, pid, type, tsMin, carModel, type==='mz'?'烤漆':'鈑金', code, (idx%7)+1]);
+          idx++;
+        }
+      });
+    });
+  });
+})();
+
+// ── TF/PF equivalent quantity (shared logic w/ main dashboard) ──────────────
+function getPfCoefficient() {
+  const saved = localStorage.getItem('pf_coefficient');
+  return saved !== null ? parseFloat(saved) : 0.70;
+}
+function tfDiscountEnabled() {
+  return localStorage.getItem('tfDiscountEnabled') === null ? true : localStorage.getItem('tfDiscountEnabled') === 'true';
+}
+function getEquivalentQty(model) {
+  const m = (model || '').trim();
+  if (m === 'TF') return 0.3;
+  if (m === 'PF') return getPfCoefficient();
+  return 1;
+}
+function recEqQty(r) { return tfDiscountEnabled() ? getEquivalentQty(r[4]) : 1; }
+function fmtQty(n) {
+  const r = Math.round((n + Number.EPSILON) * 10) / 10;
+  return Number.isInteger(r) ? String(r) : r.toFixed(1);
+}
+function escapeHtml(s) { return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+// ── Date helpers ─────────────────────────────────────────────────────────────
+function dateToISO(s) { return s.replace(/\//g,'-'); }
+function today() { return new Date().toISOString().slice(0,10); }
+function addDays(iso, n) { const d = new Date(iso); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10); }
+function normalizeDate(s) {
+  s = s.trim().replace(/\s*(上午|下午|AM|PM)[\s\d:：]*$/i, '').trim();
+  s = s.split('T')[0].trim();
+  s = s.replace(/-/g, '/');
+  if (/^\d{4}\/\d{2}\/\d{2}$/.test(s)) return s;
+  const m1 = s.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
+  if (m1) return `${m1[1]}/${m1[2].padStart(2,'0')}/${m1[3].padStart(2,'0')}`;
+  const m2 = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m2) return `${m2[3]}/${m2[1].padStart(2,'0')}/${m2[2].padStart(2,'0')}`;
+  if (/^\d{2}\/\d{2}$/.test(s)) return `${new Date().getFullYear()}/${s}`;
+  return '';
+}
+function parseTimestampMinutes(rawTs) {
+  if (!rawTs) return null;
+  const ampm = rawTs.match(/(上午|下午)\s*(\d{1,2}):(\d{2})/);
+  if (ampm) {
+    let h = parseInt(ampm[2]), m = parseInt(ampm[3]);
+    if (ampm[1]==='下午' && h<12) h += 12;
+    if (ampm[1]==='上午' && h===12) h = 0;
+    return h*60 + m;
+  }
+  const t24 = rawTs.match(/\b(\d{1,2}):(\d{2})(?::\d{2})?\b/);
+  if (t24) return parseInt(t24[1])*60 + parseInt(t24[2]);
+  return null;
+}
+function minToHM(m) { if (m==null) return '—'; const h=Math.floor(m/60), mm=m%60; return `${String(h).padStart(2,'0')}:${String(mm).padStart(2,'0')}`; }
+
+// ── State ────────────────────────────────────────────────────────────────────
+let allRecords = [];           // [date, pid, type, tsMin, carModel, partType, code, points]
+let recordsInRange = [];
+let qualifiedPersons = [];     // sorted pid list (total eqQty >= 100 in range)
+let personTotalQty = {};
+let personAttendDates = {};    // pid -> Set(date)
+let personDaily = {};          // pid -> {date: qty}
+let factoryDailyAvg = {};      // date -> avg qty across qualified persons with data that date
+let globalRareColors = new Set();
+let currentWaTab = 'individual';
+let selectedIndivPid = null;
+let selectedBehavPid = null;
+let selectedComparisonPids = [];
+const waCharts = {}; // id -> Chart instance
+
+// ── Settings panel ───────────────────────────────────────────────────────────
+function toggleWaSettings() { document.getElementById('waSettingsBody').classList.toggle('open'); }
+function waGetConfig() {
+  return {
+    id:    localStorage.getItem('gsId')    || DEFAULT_CONFIG.sheetsId,
+    key:   localStorage.getItem('gsKey')   || DEFAULT_CONFIG.apiKey,
+    sheet: localStorage.getItem('gsSheet') || DEFAULT_CONFIG.sheetName,
+  };
+}
+function waLoadSettingsUI() {
+  const cfg = waGetConfig();
+  document.getElementById('waSheetsId').value = cfg.id;
+  document.getElementById('waApiKey').value = cfg.key;
+  document.getElementById('waSheetName').value = cfg.sheet;
+  document.getElementById('waPfInfo').textContent = getPfCoefficient().toFixed(2);
+}
+async function waSaveAndFetch() {
+  const id = document.getElementById('waSheetsId').value.trim();
+  const key = document.getElementById('waApiKey').value.trim();
+  const sheet = document.getElementById('waSheetName').value.trim() || '整修日報';
+  if (!id || !key) { alert('請填入 Sheets ID 與 API Key'); return; }
+  localStorage.setItem('gsId', id);
+  localStorage.setItem('gsKey', key);
+  localStorage.setItem('gsSheet', sheet);
+  await waFetch(id, key, sheet);
+}
+function waClearSettings() {
+  ['gsId','gsKey','gsSheet'].forEach(k => localStorage.removeItem(k));
+  document.getElementById('waSheetsId').value = '';
+  document.getElementById('waApiKey').value = '';
+  document.getElementById('waSheetName').value = '整修日報';
+  waSetBadge('已清除設定，使用示範資料','ok');
+}
+function waRestoreDefaults() {
+  ['gsId','gsKey','gsSheet'].forEach(k => localStorage.removeItem(k));
+  waLoadSettingsUI();
+  waFetch(DEFAULT_CONFIG.sheetsId, DEFAULT_CONFIG.apiKey, DEFAULT_CONFIG.sheetName);
+}
+function waSetBadge(text, type) {
+  const b = document.getElementById('waBadge');
+  b.textContent = text;
+  b.className = 'status-badge badge-' + type;
+}
+
+// ── Fetch ────────────────────────────────────────────────────────────────────
+async function waFetch(id, key, sheet) {
+  waSetBadge('載入中…','loading');
+  try {
+    const range = encodeURIComponent(sheet + '!A:G');
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${range}?key=${key}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
+    const values = json.values || [];
+    if (!values.length) throw new Error('無資料');
+
+    let dateCol = 1, pidCol = 2, codeCol = 5, ptsCol = 6;
+    const header = values[0].map(h => (h || '').trim());
+    const isHeader = isNaN(Number(header[1])) && header[1].length > 0 && !/^\d{4}/.test(header[1]);
+    if (isHeader) {
+      header.forEach((h, i) => {
+        if (/記錄日期|date/i.test(h))                dateCol = i;
+        else if (/工號|員工|人員/i.test(h))           pidCol  = i;
+        else if (/顏色代號|顏色|色碼|color/i.test(h)) codeCol = i;
+        else if (/補漆總點數|點數|points/i.test(h))   ptsCol  = i;
+      });
+    }
+
+    const records = [];
+    values.slice(1).forEach(row => {
+      const rawDate = (row[dateCol] || '').trim();
+      const pid     = (row[pidCol]  || '').trim();
+      const code    = (row[codeCol] || '').trim().toUpperCase();
+      if (!rawDate) return;
+      const date = normalizeDate(rawDate);
+      if (!/^\d{4}\/\d{2}\/\d{2}$/.test(date)) return;
+      const tsMin    = parseTimestampMinutes((row[0] || '').trim());
+      const carModel = (row[3] || '').trim();
+      const partType = (row[4] || '').trim();
+      const rawPts   = row[ptsCol] !== undefined ? parseFloat(row[ptsCol]) : NaN;
+      const points   = isNaN(rawPts) ? null : rawPts;
+      records.push([date, pid, 'na', tsMin, carModel, partType, code, points]);
+    });
+    allRecords = records;
+    waSetBadge(`已載入 ${records.length} 筆`, 'ok');
+    waSetDefaultRange();
+    waRebuild();
+  } catch(e) {
+    console.error(e);
+    waSetBadge('載入失敗，使用示範資料','err');
+    allRecords = FALLBACK_RECORDS;
+    waSetDefaultRange();
+    waRebuild();
+  }
+}
+
+function waSetDefaultRange() {
+  if (document.getElementById('waStart').value) return; // already set by user
+  setWaQuick('30');
+}
+
+// ── Date range ───────────────────────────────────────────────────────────────
+function setWaQuick(mode) {
+  const t = today();
+  let s, e = t;
+  if (mode==='30') s = addDays(t,-29);
+  else if (mode==='60') s = addDays(t,-59);
+  else if (mode==='90') s = addDays(t,-89);
+  else if (mode==='month') s = t.slice(0,7)+'-01';
+  else if (mode==='lastmonth') {
+    const [y,m] = t.split('-').map(Number);
+    const d = new Date(y, m-2, 1);
+    const ly=d.getFullYear(), lm=d.getMonth();
+    s = `${ly}-${String(lm+1).padStart(2,'0')}-01`;
+    const lastDay = new Date(ly, lm+1, 0).getDate();
+    e = `${ly}-${String(lm+1).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
+  }
+  document.getElementById('waStart').value = s;
+  document.getElementById('waEnd').value = e;
+  document.querySelectorAll('.quick-btn').forEach(b=>b.classList.remove('active'));
+  event && event.target && event.target.classList.add('active');
+  waRebuild();
+}
+function onWaDateInputChange() {
+  document.querySelectorAll('.quick-btn').forEach(b=>b.classList.remove('active'));
+  waRebuild();
+}
+
+// ── Data pipeline ────────────────────────────────────────────────────────────
+function waRebuild() {
+  const s = document.getElementById('waStart').value;
+  const e = document.getElementById('waEnd').value;
+  recordsInRange = allRecords.filter(r => {
+    const iso = dateToISO(r[0]);
+    return (!s || iso >= s) && (!e || iso <= e);
+  });
+
+  const totals = {}, dateSetByPid = {};
+  recordsInRange.forEach(r => {
+    const pid = r[1];
+    if (!pid || /^\d{4}[-\/]/.test(pid)) return;
+    totals[pid] = (totals[pid]||0) + recEqQty(r);
+    (dateSetByPid[pid] || (dateSetByPid[pid]=new Set())).add(r[0]);
+  });
+  qualifiedPersons = Object.keys(totals).filter(p => totals[p] >= 100).sort();
+  personTotalQty = totals;
+  personAttendDates = dateSetByPid;
+
+  const qSet = new Set(qualifiedPersons);
+  personDaily = {};
+  recordsInRange.forEach(r => {
+    if (!qSet.has(r[1])) return;
+    (personDaily[r[1]] || (personDaily[r[1]]={}));
+    personDaily[r[1]][r[0]] = (personDaily[r[1]][r[0]]||0) + recEqQty(r);
+  });
+
+  const sums={}, counts={};
+  Object.keys(personDaily).forEach(pid => {
+    Object.entries(personDaily[pid]).forEach(([date,qty]) => {
+      sums[date]=(sums[date]||0)+qty; counts[date]=(counts[date]||0)+1;
+    });
+  });
+  factoryDailyAvg = {};
+  Object.keys(sums).forEach(d => factoryDailyAvg[d] = sums[d]/counts[d]);
+
+  const colorCounts = {}; let colorTotal = 0;
+  recordsInRange.forEach(r => {
+    const c = (r[6]||'').trim().toUpperCase();
+    if (!c) return;
+    colorCounts[c] = (colorCounts[c]||0)+1; colorTotal++;
+  });
+  globalRareColors = new Set();
+  Object.entries(colorCounts).forEach(([c,n]) => { if (colorTotal>0 && n/colorTotal < 0.05) globalRareColors.add(c); });
+
+  const rangeInfo = document.getElementById('waRangeInfo');
+  rangeInfo.textContent = `符合條件作業員（總實績≥100隻）：${qualifiedPersons.length} 位　共 ${recordsInRange.length} 筆記錄`;
+
+  populateWaSelects();
+  renderWaActiveTab();
+}
+
+function personRecords(pid) { return recordsInRange.filter(r => r[1] === pid); }
+
+function populateWaSelects() {
+  const opts = qualifiedPersons.length
+    ? qualifiedPersons.map(p => `<option value="${p}">${p}（${fmtQty(personTotalQty[p])} 隻）</option>`).join('')
+    : `<option value="">（無符合條件作業員）</option>`;
+
+  const indivSel = document.getElementById('indivPidSelect');
+  indivSel.innerHTML = opts;
+  if (!qualifiedPersons.includes(selectedIndivPid)) selectedIndivPid = qualifiedPersons[0] || null;
+  if (selectedIndivPid) indivSel.value = selectedIndivPid;
+
+  const behavSel = document.getElementById('behavPidSelect');
+  behavSel.innerHTML = opts;
+  if (!qualifiedPersons.includes(selectedBehavPid)) selectedBehavPid = qualifiedPersons[0] || null;
+  if (selectedBehavPid) behavSel.value = selectedBehavPid;
+
+  if (!selectedComparisonPids.length || selectedComparisonPids.some(p => !qualifiedPersons.includes(p))) {
+    const kept = selectedComparisonPids.filter(p => qualifiedPersons.includes(p));
+    if (kept.length) selectedComparisonPids = kept;
+    else selectedComparisonPids = qualifiedPersons.length <= 8
+      ? qualifiedPersons.slice()
+      : qualifiedPersons.slice().sort((a,b)=>personTotalQty[b]-personTotalQty[a]).slice(0,8).sort();
+  }
+  const chkWrap = document.getElementById('comparisonChecks');
+  chkWrap.innerHTML = qualifiedPersons.map(p => {
+    const checked = selectedComparisonPids.includes(p);
+    return `<label class="chk-item ${checked?'checked':''}"><input type="checkbox" value="${p}" ${checked?'checked':''} onchange="onComparisonCheckChange(this)" />${p}</label>`;
+  }).join('') || '<div class="empty-hint">無符合條件作業員</div>';
+}
+
+function onIndivPidChange() { selectedIndivPid = document.getElementById('indivPidSelect').value; renderIndividualTab(); }
+function onBehavPidChange() { selectedBehavPid = document.getElementById('behavPidSelect').value; renderBehaviorTab(); }
+function onComparisonCheckChange(el) {
+  const pid = el.value;
+  if (el.checked) {
+    if (selectedComparisonPids.length >= 8) { el.checked = false; alert('最多可選 8 位作業員'); return; }
+    selectedComparisonPids.push(pid);
+  } else {
+    selectedComparisonPids = selectedComparisonPids.filter(p => p !== pid);
+  }
+  el.closest('.chk-item').classList.toggle('checked', el.checked);
+  renderComparisonTab();
+}
+
+// ── Tab switching ────────────────────────────────────────────────────────────
+function showWaTab(tab) {
+  currentWaTab = tab;
+  ['individual','behavior','comparison'].forEach(t => {
+    document.getElementById('wa-view-'+t).style.display = t===tab ? '' : 'none';
+    document.getElementById('tabbtn-'+t).classList.toggle('active', t===tab);
+  });
+  renderWaActiveTab();
+}
+function renderWaActiveTab() {
+  if (currentWaTab==='individual') renderIndividualTab();
+  else if (currentWaTab==='behavior') renderBehaviorTab();
+  else renderComparisonTab();
+}
+
+function destroyChart(id) { if (waCharts[id]) { waCharts[id].destroy(); delete waCharts[id]; } }
+
+// ══════════════════════════════════════════════════════════════════════════
+// Tab 1: Individual Details
+// ══════════════════════════════════════════════════════════════════════════
+function renderIndividualTab() {
+  const el = document.getElementById('indivContent');
+  const pid = selectedIndivPid;
+  if (!pid) { el.innerHTML = '<div class="empty-hint">目前日期範圍內無符合條件（總實績≥100隻）的作業員</div>'; return; }
+
+  const recs = personRecords(pid);
+  const totalQty = personTotalQty[pid] || 0;
+  const attendDays = (personAttendDates[pid] || new Set()).size;
+  const avgDaily = attendDays ? totalQty / attendDays : 0;
+
+  // per-day distinct segments visited (records without ts count as 1 "segment" for that day)
+  const byDateSeg = {};
+  recs.forEach(r => {
+    (byDateSeg[r[0]] || (byDateSeg[r[0]] = new Set()));
+    if (r[3] != null) { const s = getSegmentIdx(r[3]); if (s>=0) byDateSeg[r[0]].add(s); }
+  });
+  let totalSegVisits = 0;
+  Object.values(byDateSeg).forEach(set => totalSegVisits += set.size>0 ? set.size : 1);
+  const perSeg = totalSegVisits > 0 ? totalQty / totalSegVisits : 0;
+
+  el.innerHTML = `
+    <div class="stat-grid" style="margin-bottom:1rem;">
+      <div class="stat-card"><div class="lbl">總實績（等效隻數）</div><div class="val">${fmtQty(totalQty)}</div><div class="sub">隻</div></div>
+      <div class="stat-card"><div class="lbl">出勤天數</div><div class="val">${attendDays}</div><div class="sub">天</div></div>
+      <div class="stat-card"><div class="lbl">平均日產量</div><div class="val">${fmtQty(avgDaily)}</div><div class="sub">隻/天</div></div>
+      <div class="stat-card"><div class="lbl">每時段平均產量</div><div class="val">${fmtQty(perSeg)}</div><div class="sub">隻/時段</div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">日產量趨勢（虛線為全體平均）</div>
+      <div style="position:relative;width:100%;height:280px;"><canvas id="indivTrendChart"></canvas></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">車型作業分布</div>
+      <div style="display:flex;gap:1.5rem;flex-wrap:wrap;align-items:flex-start;">
+        <div style="position:relative;width:220px;height:220px;flex-shrink:0;"><canvas id="indivModelDonut"></canvas></div>
+        <div style="flex:1;min-width:260px;overflow-x:auto;">
+          <table class="dark"><thead><tr><th>車型</th><th style="text-align:right;">筆數</th><th style="text-align:right;">佔比</th><th style="text-align:right;">平均粒點/隻</th></tr></thead>
+          <tbody id="indivModelTbody"></tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">顏色作業分布（前 10 名）</div>
+      <div id="indivColorBars"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">時段產量熱力圖</div>
+      <div class="card-sub">色塊越深表示該時段筆數越多</div>
+      <div id="indivHeatmap" style="overflow-x:auto;"></div>
+    </div>
+  `;
+
+  renderIndivTrendChart(pid);
+  renderIndivModelBlock(pid, recs);
+  renderIndivColorBars(pid, recs);
+  renderIndivHeatmap(pid, recs);
+}
+
+function renderIndivTrendChart(pid) {
+  const dates = Object.keys(personDaily[pid] || {}).sort();
+  const labels = dates.map(d => d.slice(5));
+  const personData = dates.map(d => +personDaily[pid][d].toFixed(2));
+  const avgData = dates.map(d => factoryDailyAvg[d] != null ? +factoryDailyAvg[d].toFixed(2) : null);
+
+  destroyChart('indivTrend');
+  waCharts['indivTrend'] = new Chart(document.getElementById('indivTrendChart'), {
+    type: 'line',
+    data: { labels, datasets: [
+      { label: `工號 ${pid}`, data: personData, borderColor: '#5b9cf6', backgroundColor: '#5b9cf633', borderWidth: 2, pointRadius: 3, tension: 0.25 },
+      { label: '全體平均', data: avgData, borderColor: '#8a93ad', borderDash:[5,3], borderWidth: 2, pointRadius: 0, tension: 0.25 }
+    ]},
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { labels: { color: '#8a93ad' } },
+        tooltip: { callbacks: { title: (items) => dates[items[0].dataIndex],
+          label: (ctx) => `${ctx.dataset.label}：${ctx.parsed.y!=null?ctx.parsed.y.toFixed(1)+' 隻':'無資料'}` } }
+      },
+      scales: {
+        x: { ticks: { color: '#556' }, grid: { color: '#1e2a40' } },
+        y: { ticks: { color: '#556' }, grid: { color: '#1e2a40' } }
+      }
+    }
+  });
+}
+
+function groupByField(recs, fieldIdx) {
+  const map = {};
+  recs.forEach(r => {
+    const key = (r[fieldIdx]||'').trim() || '（未標示）';
+    if (!map[key]) map[key] = { key, count:0, eq:0, ptsSum:0, ptsEq:0 };
+    const g = map[key];
+    g.count++;
+    g.eq += recEqQty(r);
+    if (r[7] != null) { g.ptsSum += r[7]; g.ptsEq += recEqQty(r); }
+  });
+  return Object.values(map);
+}
+
+function renderIndivModelBlock(pid, recs) {
+  const groups = groupByField(recs, 4).sort((a,b)=>b.count-a.count);
+  const total = recs.length;
+  const tbody = document.getElementById('indivModelTbody');
+  tbody.innerHTML = groups.map(g => {
+    const pct = total ? (g.count/total*100) : 0;
+    const avgPts = g.ptsEq>0 ? (g.ptsSum/g.ptsEq).toFixed(2) : '—';
+    return `<tr><td>${escapeHtml(g.key)}</td><td style="text-align:right;">${g.count}</td><td style="text-align:right;">${pct.toFixed(1)}%</td><td style="text-align:right;">${avgPts}</td></tr>`;
+  }).join('') || `<tr><td colspan="4" style="text-align:center;color:#556;">無資料</td></tr>`;
+
+  destroyChart('indivModelDonut');
+  waCharts['indivModelDonut'] = new Chart(document.getElementById('indivModelDonut'), {
+    type: 'doughnut',
+    data: { labels: groups.map(g=>g.key), datasets: [{ data: groups.map(g=>g.count), backgroundColor: groups.map((_,i)=>PALETTE[i%PALETTE.length]), borderColor: '#131929', borderWidth: 2 }] },
+    options: { responsive:true, maintainAspectRatio:false, plugins: { legend: { display:false }, tooltip: { callbacks: { label: (ctx)=>`${ctx.label}：${ctx.parsed} 筆` } } } }
+  });
+}
+
+function renderIndivColorBars(pid, recs) {
+  const groups = groupByField(recs, 6).sort((a,b)=>b.count-a.count).slice(0,10);
+  const maxCount = Math.max(1, ...groups.map(g=>g.count));
+  const wrap = document.getElementById('indivColorBars');
+  wrap.innerHTML = groups.map(g => {
+    const pct = g.count/maxCount*100;
+    const avgPts = g.ptsEq>0 ? (g.ptsSum/g.ptsEq).toFixed(2) : '—';
+    return `<div class="barlist-row">
+      <div class="barlist-label">${escapeHtml(g.key)}</div>
+      <div class="barlist-track"><div class="barlist-fill" style="width:${pct}%;"></div></div>
+      <div class="barlist-note">${g.count} 筆・平均${avgPts}粒點</div>
+    </div>`;
+  }).join('') || '<div class="empty-hint">無資料</div>';
+}
+
+function renderIndivHeatmap(pid, recs) {
+  const dates = [...new Set(recs.map(r=>r[0]))].sort();
+  const grid = {};
+  let maxCount = 0;
+  dates.forEach(d => grid[d] = SEGMENTS.map(()=>0));
+  let hasNoTs = false;
+  recs.forEach(r => {
+    if (r[3] == null) { hasNoTs = true; return; }
+    const s = getSegmentIdx(r[3]);
+    if (s < 0) return;
+    grid[r[0]][s]++;
+    if (grid[r[0]][s] > maxCount) maxCount = grid[r[0]][s];
+  });
+  let html = '<table class="dark" style="border-collapse:collapse;"><thead><tr><th></th>' +
+    SEGMENTS.map(s=>`<th style="text-align:center;">${s.name}</th>`).join('') + '</tr></thead><tbody>';
+  dates.forEach(d => {
+    html += `<tr><td style="white-space:nowrap;color:#8a93ad;">${d.slice(5)}</td>`;
+    grid[d].forEach(c => {
+      const alpha = maxCount>0 ? (0.08 + 0.72*(c/maxCount)) : 0;
+      const bg = c>0 ? `rgba(91,156,246,${alpha.toFixed(2)})` : 'transparent';
+      html += `<td style="text-align:center;background:${bg};border:0.5px solid #1e2a40;min-width:44px;">${c>0?c:''}</td>`;
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  if (hasNoTs) html += '<div class="card-sub" style="margin-top:6px;">※ 部分記錄無時間戳記，未列入熱力圖</div>';
+  document.getElementById('indivHeatmap').innerHTML = dates.length ? html : '<div class="empty-hint">無資料</div>';
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// Tab 2: Behavior Analysis
+// ══════════════════════════════════════════════════════════════════════════
+function computeTimelinessScore(recs) {
+  const buckets = new Array(26).fill(0); // 08:00-21:00 in 30-min buckets
+  let n = 0;
+  recs.forEach(r => {
+    const t = r[3];
+    if (t == null || t < 480 || t >= 1260) return;
+    buckets[Math.floor((t-480)/30)]++; n++;
+  });
+  if (n < 5) return null;
+  const mean = n/26;
+  const variance = buckets.reduce((s,c)=>s+(c-mean)*(c-mean),0)/26;
+  const std = Math.sqrt(variance);
+  const cv = mean>0 ? std/mean : 0;
+  const score = Math.max(0, Math.min(100, Math.round(100 - cv*50)));
+  return { score, cv, n };
+}
+
+function detectBurstEvents(recs) {
+  const byDate = {};
+  recs.forEach(r => { if (r[3]==null) return; (byDate[r[0]] || (byDate[r[0]]=[])).push(r); });
+  const events = [];
+  Object.keys(byDate).forEach(date => {
+    const list = byDate[date].slice().sort((a,b)=>a[3]-b[3]);
+    let cluster = [list[0]];
+    for (let i=1;i<list.length;i++) {
+      if (list[i][3] - cluster[cluster.length-1][3] <= 5) cluster.push(list[i]);
+      else { if (cluster.length>=5) events.push(makeBurstEvent(date,cluster)); cluster=[list[i]]; }
+    }
+    if (cluster.length>=5) events.push(makeBurstEvent(date,cluster));
+  });
+  events.sort((a,b) => b.date.localeCompare(a.date) || a.startMin-b.startMin);
+  return events;
+}
+function makeBurstEvent(date, cluster) {
+  const startMin = cluster[0][3], endMin = cluster[cluster.length-1][3];
+  const segIdx = getSegmentIdx(startMin);
+  const models = [...new Set(cluster.map(r=>r[4]).filter(Boolean))];
+  return { date, segName: segIdx>=0?SEGMENTS[segIdx].name:'—', startMin, endMin, count: cluster.length, models, memberKeys: cluster.map(r=>r[0]+'|'+r[3]) };
+}
+
+function computeAttendanceRows(recs) {
+  const byDate = {};
+  recs.forEach(r => { (byDate[r[0]] || (byDate[r[0]]=[])).push(r); });
+  return Object.keys(byDate).map(date => {
+    const dayRecs = byDate[date];
+    const tsRecs = dayRecs.filter(r=>r[3]!=null);
+    if (!tsRecs.length) return { date, first:null, last:null, workHours:null, count:dayRecs.length, judge:'無時間戳記' };
+    const first = Math.min(...tsRecs.map(r=>r[3]));
+    const last = Math.max(...tsRecs.map(r=>r[3]));
+    const diff = last - first;
+    let judge;
+    if (first<=540 && last>=1080) judge='全職';
+    else if (last<1020) judge='早退';
+    else if (first>600) judge='晚到';
+    else if (diff<60) judge='短暫進場';
+    else if (diff>240 && dayRecs.length<20) judge='中場消失';
+    else judge='正常';
+    return { date, first, last, workHours: diff/60, count: dayRecs.length, judge };
+  }).sort((a,b) => b.date.localeCompare(a.date));
+}
+
+const JUDGE_COLOR = { '全職':'#4fd8a8', '早退':'#f0c040', '晚到':'#f0c040', '短暫進場':'#ff8a7a', '中場消失':'#ff8a7a', '正常':'#8a93ad', '無時間戳記':'#4a5268' };
+
+function renderBehaviorTab() {
+  const el = document.getElementById('behavContent');
+  const pid = selectedBehavPid;
+  if (!pid) { el.innerHTML = '<div class="empty-hint">目前日期範圍內無符合條件（總實績≥100隻）的作業員</div>'; return; }
+  const recs = personRecords(pid);
+  const tl = computeTimelinessScore(recs);
+  const events = detectBurstEvents(recs);
+  const attRows = computeAttendanceRows(recs);
+
+  el.innerHTML = `
+    <div class="card">
+      <div class="card-title">輸入即時率評分</div>
+      ${tl ? `
+        <div class="score-big">${tl.score} 分</div>
+        <div class="score-tier">
+          85 分以上為即時輸入型、60～84 分為偶爾累積、60 分以下為經常集中輸入<br>
+          （依 08:00～21:00 每 30 分鐘一格的輸入密度變異係數計算，CV=${tl.cv.toFixed(2)}，樣本數 ${tl.n} 筆有時間戳記錄）
+        </div>` : `<div class="empty-hint">有時間戳記的樣本數不足（需至少 5 筆），無法計算</div>`}
+    </div>
+
+    <div class="card">
+      <div class="card-title">補打事件記錄</div>
+      <div class="card-sub">條件：5 分鐘內連續輸入 ≥ 5 筆（不刪除資料，僅供提示參考）</div>
+      <div style="overflow-x:auto;"><table class="dark"><thead><tr>
+        <th>日期</th><th>時段</th><th>時間範圍</th><th style="text-align:right;">筆數</th><th>車型</th>
+      </tr></thead><tbody>
+        ${events.length ? events.map(ev => `<tr>
+          <td>${ev.date}</td><td>${ev.segName}</td><td>${minToHM(ev.startMin)}～${minToHM(ev.endMin)}</td>
+          <td style="text-align:right;">${ev.count}</td><td>${ev.models.map(escapeHtml).join('、')||'—'}</td>
+        </tr>`).join('') : `<tr><td colspan="5" style="text-align:center;color:#556;">無疑似補打事件</td></tr>`}
+      </tbody></table></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">每日出勤時間分析</div>
+      <div style="overflow-x:auto;"><table class="dark"><thead><tr>
+        <th>日期</th><th>首筆時間</th><th>末筆時間</th><th style="text-align:right;">有效工時</th><th style="text-align:right;">筆數</th><th>判定</th>
+      </tr></thead><tbody>
+        ${attRows.map(a => `<tr>
+          <td>${a.date}</td><td>${minToHM(a.first)}</td><td>${minToHM(a.last)}</td>
+          <td style="text-align:right;">${a.workHours!=null?a.workHours.toFixed(1)+' 小時':'—'}</td>
+          <td style="text-align:right;">${a.count}</td>
+          <td><span style="color:${JUDGE_COLOR[a.judge]||'#8a93ad'};font-weight:700;">${a.judge}</span></td>
+        </tr>`).join('') || `<tr><td colspan="6" style="text-align:center;color:#556;">無資料</td></tr>`}
+      </tbody></table></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">輸入時間分布散點圖</div>
+      <div class="card-sub">每個點代表一筆實績，橘點為補打事件成員</div>
+      <div style="position:relative;width:100%;height:320px;"><canvas id="behavScatterChart"></canvas></div>
+    </div>
+  `;
+
+  renderBehaviorScatter(recs, events);
+}
+
+function renderBehaviorScatter(recs, events) {
+  const burstKeys = new Set();
+  events.forEach(ev => ev.memberKeys.forEach(k => burstKeys.add(k)));
+  const dates = [...new Set(recs.filter(r=>r[3]!=null).map(r=>r[0]))].sort();
+  const dateIdx = {}; dates.forEach((d,i)=>dateIdx[d]=i);
+
+  const points = recs.filter(r=>r[3]!=null).map(r => ({
+    x: dateIdx[r[0]], y: r[3], burst: burstKeys.has(r[0]+'|'+r[3])
+  }));
+
+  destroyChart('behavScatter');
+  waCharts['behavScatter'] = new Chart(document.getElementById('behavScatterChart'), {
+    type: 'scatter',
+    data: { datasets: [{
+      data: points,
+      pointBackgroundColor: points.map(p => p.burst ? '#e67e22' : '#5b9cf6'),
+      pointRadius: 4,
+    }]},
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display:false },
+        tooltip: { callbacks: { label: (ctx) => `${dates[ctx.raw.x]}　${minToHM(ctx.raw.y)}${ctx.raw.burst?'（疑似補打）':''}` } }
+      },
+      scales: {
+        x: { type:'linear', min:-0.5, max: Math.max(0,dates.length-0.5), ticks: { color:'#556', stepSize:1, callback:(v)=> Number.isInteger(v)&&dates[v]?dates[v].slice(5):'' }, grid:{color:'#1e2a40'} },
+        y: { min:480, max:1260, reverse:false, ticks: { color:'#556', stepSize:60, callback:(v)=>minToHM(v) }, grid:{color:'#1e2a40'} }
+      }
+    }
+  });
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// Tab 3: Comparison
+// ══════════════════════════════════════════════════════════════════════════
+function computeStabilityScore(pid) {
+  const vals = Object.values(personDaily[pid]||{});
+  if (vals.length<2) return null;
+  const mean = vals.reduce((a,b)=>a+b,0)/vals.length;
+  if (mean<=0) return null;
+  const variance = vals.reduce((s,v)=>s+(v-mean)*(v-mean),0)/vals.length;
+  const cv = Math.sqrt(variance)/mean;
+  return Math.max(0, Math.min(100, Math.round(100 - cv*50)));
+}
+function computeSpecialtyRatio(recs) {
+  if (!recs.length) return 0;
+  const rare = recs.filter(r => { const c=(r[6]||'').trim().toUpperCase(); return c && globalRareColors.has(c); }).length;
+  return Math.round(rare/recs.length*100);
+}
+function computeWorkerMetrics(pid) {
+  const recs = personRecords(pid);
+  const totalQty = personTotalQty[pid]||0;
+  const attendDays = (personAttendDates[pid]||new Set()).size;
+  const avgDaily = attendDays ? totalQty/attendDays : 0;
+  const modelDiv = new Set(recs.map(r=>(r[4]||'').trim()).filter(Boolean)).size;
+  const colorDiv = new Set(recs.map(r=>(r[6]||'').trim().toUpperCase()).filter(Boolean)).size;
+  const tl = computeTimelinessScore(recs);
+  return {
+    pid, totalQty, attendDays, avgDaily, modelDiv, colorDiv,
+    timeliness: tl ? tl.score : null,
+    stability: computeStabilityScore(pid),
+    specialty: computeSpecialtyRatio(recs),
+  };
+}
+
+function renderComparisonTab() {
+  const el = document.getElementById('comparisonContent');
+  const pids = selectedComparisonPids;
+  if (!pids.length) { el.innerHTML = '<div class="empty-hint">請至少勾選一位作業員</div>'; return; }
+  const metrics = pids.map(computeWorkerMetrics);
+
+  el.innerHTML = `
+    <div class="card">
+      <div class="card-title">綜合指標比較表</div>
+      <div style="overflow-x:auto;"><table class="dark"><thead><tr>
+        <th>指標</th>${metrics.map(m=>`<th style="text-align:right;">${m.pid}</th>`).join('')}
+      </tr></thead><tbody>
+        <tr><td>總實績（等效隻數）</td>${metrics.map(m=>`<td style="text-align:right;">${fmtQty(m.totalQty)}</td>`).join('')}</tr>
+        <tr><td>出勤天數</td>${metrics.map(m=>`<td style="text-align:right;">${m.attendDays}</td>`).join('')}</tr>
+        <tr><td>平均日產量</td>${metrics.map(m=>`<td style="text-align:right;">${fmtQty(m.avgDaily)}</td>`).join('')}</tr>
+        <tr><td>車型多樣性</td>${metrics.map(m=>`<td style="text-align:right;">${m.modelDiv} 種</td>`).join('')}</tr>
+        <tr><td>顏色多樣性</td>${metrics.map(m=>`<td style="text-align:right;">${m.colorDiv} 種</td>`).join('')}</tr>
+        <tr><td>輸入即時率</td>${metrics.map(m=>`<td style="text-align:right;">${m.timeliness!=null?m.timeliness+' 分':'—'}</td>`).join('')}</tr>
+        <tr><td>出勤穩定性</td>${metrics.map(m=>`<td style="text-align:right;">${m.stability!=null?m.stability+' 分':'—'}</td>`).join('')}</tr>
+        <tr><td>特殊顏色比例</td>${metrics.map(m=>`<td style="text-align:right;">${m.specialty}%</td>`).join('')}</tr>
+      </tbody></table></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">多維度雷達圖</div>
+      <div style="position:relative;width:100%;max-width:520px;height:380px;margin:0 auto;"><canvas id="cmpRadarChart"></canvas></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">日產量趨勢對比</div>
+      <div class="card-sub">點擊圖例可切換顯示／隱藏</div>
+      <div style="position:relative;width:100%;height:320px;"><canvas id="cmpTrendChart"></canvas></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">車型專精比較</div>
+      <div style="position:relative;width:100%;height:320px;"><canvas id="cmpModelStackChart"></canvas></div>
+    </div>
+  `;
+
+  renderComparisonRadar(metrics);
+  renderComparisonTrend(pids);
+  renderComparisonModelStack(pids);
+}
+
+function renderComparisonRadar(metrics) {
+  const maxQty = Math.max(1, ...metrics.map(m=>m.totalQty));
+  const maxDiv = Math.max(1, ...metrics.map(m=>m.modelDiv));
+  const datasets = metrics.map((m,i) => ({
+    label: m.pid,
+    data: [
+      Math.round(m.totalQty/maxQty*100),
+      Math.round(m.modelDiv/maxDiv*100),
+      m.timeliness ?? 0,
+      m.stability ?? 0,
+      m.specialty
+    ],
+    borderColor: PALETTE[i%PALETTE.length],
+    backgroundColor: PALETTE[i%PALETTE.length]+'2a',
+    pointBackgroundColor: PALETTE[i%PALETTE.length],
+  }));
+  destroyChart('cmpRadar');
+  waCharts['cmpRadar'] = new Chart(document.getElementById('cmpRadarChart'), {
+    type: 'radar',
+    data: { labels: ['產量','多樣性','輸入即時率','出勤穩定性','專精度'], datasets },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins: { legend: { labels: { color:'#8a93ad' } } },
+      scales: { r: {
+        min:0, max:100,
+        angleLines: { color:'#1e2a40' }, grid: { color:'#1e2a40' },
+        pointLabels: { color:'#8a93ad', font:{size:12} },
+        ticks: { color:'#556', backdropColor:'transparent', stepSize:25 }
+      }}
+    }
+  });
+}
+
+function renderComparisonTrend(pids) {
+  const dateSet = new Set();
+  pids.forEach(p => Object.keys(personDaily[p]||{}).forEach(d=>dateSet.add(d)));
+  const dates = [...dateSet].sort();
+  const labels = dates.map(d=>d.slice(5));
+  const datasets = pids.map((p,i) => ({
+    label: p,
+    data: dates.map(d => personDaily[p] && personDaily[p][d] != null ? +personDaily[p][d].toFixed(2) : null),
+    borderColor: PALETTE[i%PALETTE.length],
+    backgroundColor: PALETTE[i%PALETTE.length],
+    spanGaps: true, borderWidth: 2, pointRadius: 2, tension: 0.25,
+  }));
+  destroyChart('cmpTrend');
+  waCharts['cmpTrend'] = new Chart(document.getElementById('cmpTrendChart'), {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      interaction: { mode:'index', intersect:false },
+      plugins: { legend: { labels:{ color:'#8a93ad' } } },
+      scales: { x:{ ticks:{color:'#556'}, grid:{color:'#1e2a40'} }, y:{ ticks:{color:'#556'}, grid:{color:'#1e2a40'} } }
+    }
+  });
+}
+
+function renderComparisonModelStack(pids) {
+  const allRecs = pids.flatMap(personRecords);
+  const modelTotals = {};
+  allRecs.forEach(r => { const m=(r[4]||'').trim()||'（未標示）'; modelTotals[m]=(modelTotals[m]||0)+recEqQty(r); });
+  const topModels = Object.entries(modelTotals).sort((a,b)=>b[1]-a[1]).slice(0,6).map(e=>e[0]);
+  const perWorkerTotal = {};
+  pids.forEach(p => perWorkerTotal[p] = personRecords(p).reduce((s,r)=>s+recEqQty(r),0));
+
+  const datasets = topModels.map((m,i) => ({
+    label: m,
+    data: pids.map(p => {
+      const total = perWorkerTotal[p];
+      if (!total) return 0;
+      const q = personRecords(p).filter(r=>((r[4]||'').trim()||'（未標示）')===m).reduce((s,r)=>s+recEqQty(r),0);
+      return +(q/total*100).toFixed(1);
+    }),
+    backgroundColor: PALETTE[i%PALETTE.length],
+  }));
+  datasets.push({
+    label: '其他',
+    data: pids.map(p => {
+      const total = perWorkerTotal[p];
+      if (!total) return 0;
+      const topQty = personRecords(p).filter(r=>topModels.includes((r[4]||'').trim()||'（未標示）')).reduce((s,r)=>s+recEqQty(r),0);
+      return +(100 - topQty/total*100).toFixed(1);
+    }),
+    backgroundColor: '#4a5268',
+  });
+
+  destroyChart('cmpModelStack');
+  waCharts['cmpModelStack'] = new Chart(document.getElementById('cmpModelStackChart'), {
+    type: 'bar',
+    data: { labels: pids, datasets },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins: { legend: { labels:{ color:'#8a93ad' } }, tooltip: { callbacks: { label:(ctx)=>`${ctx.dataset.label}：${ctx.parsed.y}%` } } },
+      scales: {
+        x: { stacked:true, ticks:{color:'#556'}, grid:{color:'#1e2a40'} },
+        y: { stacked:true, min:0, max:100, ticks:{color:'#556', callback:(v)=>v+'%'}, grid:{color:'#1e2a40'} }
+      }
+    }
+  });
+}
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+function waInit() {
+  waLoadSettingsUI();
+  const cfg = waGetConfig();
+  waFetch(cfg.id, cfg.key, cfg.sheet);
+}
+waInit();
+</script>
+</body>
+</html>
