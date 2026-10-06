@@ -138,7 +138,7 @@
     </div>
     <div class="settings-row">
       <label>工作表名稱</label>
-      <input type="text" id="sheetName" placeholder="整修日報" value="整修日報" />
+      <input type="text" id="sheetName" placeholder="補漆日報" value="補漆日報" />
     </div>
     <div class="settings-row" style="gap:8px;">
       <button class="btn btn-primary" onclick="saveAndFetch()">儲存並載入</button>
@@ -183,6 +183,12 @@
     </select>
     <span id="pfCoefficientInfo" style="cursor:help;">ℹ️</span>
   </label>
+</div>
+
+<!-- Pipeline Stage Notice -->
+<div style="background:#eef6ff;border:1px solid #cfe3fb;border-radius:8px;padding:0.6rem 1rem;margin-bottom:1rem;font-size:13px;color:#333;line-height:1.6;">
+  🏭 目前看板資料來源：<strong>補漆階段</strong><br>
+  📊 整修階段看板（開發中）｜✅ 終檢階段看板（開發中）
 </div>
 
 <!-- Tabs -->
@@ -742,7 +748,7 @@
 const DEFAULT_CONFIG = {
   sheetsId:  '1xQoIxoLlM4LkKjDrYZ_87uIahtebPgPcG6Hitck1T5c',
   apiKey:    'AIzaSyBMgXHsua64mciOFJwqH4NreGI11gMXR-s',
-  sheetName: '整修日報'
+  sheetName: '補漆日報'
 };
 
 // ── Fallback hardcoded data ──────────────────────────────────────────────────
@@ -1008,7 +1014,7 @@ function clearSettings() {
   ['gsId','gsKey','gsSheet'].forEach(k => localStorage.removeItem(k));
   document.getElementById('sheetsId').value  = '';
   document.getElementById('apiKey').value    = '';
-  document.getElementById('sheetName').value = '整修日報';
+  document.getElementById('sheetName').value = '補漆日報';
   setBadge('已清除設定，使用示範資料','ok');
 }
 function restoreDefaults() {
@@ -1028,7 +1034,7 @@ function setBadge(text, type) {
 async function saveAndFetch() {
   const id = document.getElementById('sheetsId').value.trim();
   const key = document.getElementById('apiKey').value.trim();
-  const sheet = document.getElementById('sheetName').value.trim() || '整修日報';
+  const sheet = document.getElementById('sheetName').value.trim() || '補漆日報';
   if (!id || !key) { alert('請填入 Sheets ID 與 API Key'); return; }
   localStorage.setItem('gsId', id);
   localStorage.setItem('gsKey', key);
@@ -2048,7 +2054,7 @@ function startRealtimeTimer() {
       const boardDate = filteredDates.length ? filteredDates[filteredDates.length-1] : null;
       if (!boardDate || dateToISO(boardDate) !== today()) { stopRealtimeTimer(); return; }
       const id = localStorage.getItem('gsId'), key = localStorage.getItem('gsKey');
-      const sh = localStorage.getItem('gsSheet') || '整修日報';
+      const sh = localStorage.getItem('gsSheet') || '補漆日報';
       if (id && key) {
         fetchFromSheets(id, key, sh).then(() => {
           if (currentView==='realtime') buildRealtimeBoard();
@@ -3892,7 +3898,15 @@ function toggleScoreDetail(pid) {
   renderScoreResults();
 }
 
+function migrateLegacySheetName() {
+  // Google Sheet 分頁重新命名：原「整修日報」改為「補漆日報」，自動升級既有使用者的設定
+  if (localStorage.getItem('gsSheet') === '整修日報') {
+    localStorage.setItem('gsSheet', '補漆日報');
+  }
+}
+
 function init() {
+  migrateLegacySheetName();
   loadSettings();
   const cfg = getConfig();
   // Always auto-fetch: localStorage values take priority, DEFAULT_CONFIG as fallback
