@@ -187,7 +187,7 @@
 
 <!-- Pipeline Stage Notice -->
 <div style="background:#eef6ff;border:1px solid #cfe3fb;border-radius:8px;padding:0.6rem 1rem;margin-bottom:1rem;font-size:13px;color:#333;line-height:1.6;">
-  🏭 目前看板資料來源：<strong>補漆階段</strong><br>
+  🏭 目前看板資料來源：<strong id="pipelineStageText">補漆階段</strong><br>
   📊 整修階段看板（開發中）｜✅ 終檢階段看板（開發中）
 </div>
 
@@ -1015,6 +1015,7 @@ function clearSettings() {
   document.getElementById('sheetsId').value  = '';
   document.getElementById('apiKey').value    = '';
   document.getElementById('sheetName').value = '補漆日報';
+  updatePipelineNotice();
   setBadge('已清除設定，使用示範資料','ok');
 }
 function restoreDefaults() {
@@ -1022,6 +1023,7 @@ function restoreDefaults() {
   document.getElementById('sheetsId').value  = DEFAULT_CONFIG.sheetsId;
   document.getElementById('apiKey').value    = DEFAULT_CONFIG.apiKey;
   document.getElementById('sheetName').value = DEFAULT_CONFIG.sheetName;
+  updatePipelineNotice();
   fetchFromSheets(DEFAULT_CONFIG.sheetsId, DEFAULT_CONFIG.apiKey, DEFAULT_CONFIG.sheetName);
 }
 
@@ -1039,6 +1041,7 @@ async function saveAndFetch() {
   localStorage.setItem('gsId', id);
   localStorage.setItem('gsKey', key);
   localStorage.setItem('gsSheet', sheet);
+  updatePipelineNotice();
   await fetchFromSheets(id, key, sheet);
 }
 
@@ -3898,16 +3901,22 @@ function toggleScoreDetail(pid) {
   renderScoreResults();
 }
 
-function migrateLegacySheetName() {
-  // Google Sheet 分頁重新命名：原「整修日報」改為「補漆日報」，自動升級既有使用者的設定
-  if (localStorage.getItem('gsSheet') === '整修日報') {
-    localStorage.setItem('gsSheet', '補漆日報');
+function updatePipelineNotice() {
+  const el = document.getElementById('pipelineStageText');
+  if (!el) return;
+  const sheet = localStorage.getItem('gsSheet') || '補漆日報';
+  if (sheet === '補漆日報') {
+    el.textContent = '補漆階段';
+  } else if (sheet === '整修日報') {
+    el.textContent = '補漆階段（Sheet 命名：整修日報，待遷移）';
+  } else {
+    el.textContent = sheet;
   }
 }
 
 function init() {
-  migrateLegacySheetName();
   loadSettings();
+  updatePipelineNotice();
   const cfg = getConfig();
   // Always auto-fetch: localStorage values take priority, DEFAULT_CONFIG as fallback
   fetchFromSheets(cfg.id, cfg.key, cfg.sheet);
