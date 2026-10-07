@@ -37,6 +37,20 @@
   .badge-err { background: #fde8e8; color: #c0392b; }
   .badge-loading { background: #e6f1fb; color: #185fa5; }
 
+  /* Admin Login */
+  .admin-btn { font-size: 12px; padding: 6px 14px; border: none; border-radius: 6px; cursor: pointer; background: #eee; color: #444; }
+  .admin-btn.logged-in { background: #d4f5e9; color: #1D9E75; }
+  #adminCountdown { font-size: 11px; color: #888; margin-top: 4px; text-align: right; }
+  .admin-banner { display: none; background: #fff8e1; border: 1px solid #ffe082; border-radius: 8px; padding: 0.5rem 1rem; margin-bottom: 1rem; font-size: 12px; color: #8a6d00; }
+  .lock-icon { font-size: 12px; cursor: help; }
+  input:disabled, select:disabled, button:disabled { opacity: 0.55; cursor: not-allowed; }
+  .admin-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 1100; align-items: center; justify-content: center; padding: 1rem; }
+  .admin-overlay.open { display: flex; }
+  .admin-modal { background: #fff; border-radius: 14px; padding: 1.5rem; max-width: 320px; width: 100%; box-shadow: 0 10px 40px rgba(0,0,0,0.3); }
+  .admin-modal input[type=password] { width: 100%; margin-top: 0.75rem; }
+  .admin-modal-title { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+  .admin-login-error { color: #c0392b; font-size: 12px; margin-top: 6px; display: none; }
+
   /* Date Filter */
   .date-filter { background: #fff; border: 0.5px solid #ddd; border-radius: 12px; padding: 0.75rem 1.25rem; margin-bottom: 1rem; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
   .quick-btn { font-size: 11px; padding: 3px 10px; border: 0.5px solid #aaa; border-radius: 6px; cursor: pointer; background: #f5f5f3; color: #555; }
@@ -118,8 +132,30 @@
 </style>
 </head>
 <body>
-<h1 id="pageTitle">個人部件分析 — 保險桿 vs 馬自達</h1>
-<div style="margin:-0.5rem 0 1rem;"><a href="worker_analysis.html" target="_blank" rel="noopener" style="font-size:12px;color:#185fa5;text-decoration:none;">🔗 深度分析工具</a></div>
+<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;">
+  <div>
+    <h1 id="pageTitle">個人部件分析 — 保險桿 vs 馬自達</h1>
+    <div style="margin:-0.5rem 0 1rem;"><a href="worker_analysis.html" target="_blank" rel="noopener" style="font-size:12px;color:#185fa5;text-decoration:none;">🔗 深度分析工具</a></div>
+  </div>
+  <div>
+    <button id="adminLoginBtn" class="admin-btn" onclick="openAdminModal()">🔑 管理者登入</button>
+    <div id="adminCountdown" style="display:none;"></div>
+  </div>
+</div>
+<div class="admin-banner" id="adminBanner"></div>
+
+<!-- Admin Login Modal -->
+<div class="admin-overlay" id="adminOverlay" onclick="if(event.target===this) closeAdminModal()">
+  <div class="admin-modal">
+    <div class="admin-modal-title">🔑 管理者登入</div>
+    <input type="password" id="adminPasswordInput" placeholder="請輸入管理者密碼" onkeydown="if(event.key==='Enter'){event.preventDefault();submitAdminLogin();}" />
+    <div class="admin-login-error" id="adminLoginError">密碼錯誤</div>
+    <div style="display:flex;gap:8px;margin-top:1rem;justify-content:flex-end;">
+      <button class="btn btn-secondary" onclick="closeAdminModal()">取消</button>
+      <button class="btn btn-primary" onclick="submitAdminLogin()">登入</button>
+    </div>
+  </div>
+</div>
 
 <!-- Settings Panel -->
 <div class="settings-panel">
@@ -131,19 +167,24 @@
     <div class="settings-row">
       <label>Sheets ID</label>
       <input type="text" id="sheetsId" placeholder="貼上 Google Sheets ID" />
+      <span class="lock-icon" id="lock-sheetsId" title="需要管理者登入才能修改">🔒</span>
     </div>
     <div class="settings-row">
       <label>API Key</label>
       <input type="text" id="apiKey" placeholder="貼上 Google API Key" />
+      <span class="lock-icon" id="lock-apiKey" title="需要管理者登入才能修改">🔒</span>
     </div>
     <div class="settings-row">
       <label>工作表名稱</label>
-      <input type="text" id="sheetName" placeholder="補漆日報" value="補漆日報" />
+      <input type="text" id="sheetName" placeholder="整修日報" value="整修日報" />
+      <span class="lock-icon" id="lock-sheetName" title="需要管理者登入才能修改">🔒</span>
     </div>
     <div class="settings-row" style="gap:8px;">
       <button class="btn btn-primary" onclick="saveAndFetch()">儲存並載入</button>
-      <button class="btn btn-secondary" onclick="clearSettings()">清除設定</button>
-      <button class="btn btn-secondary" onclick="restoreDefaults()">恢復預設值</button>
+      <button class="btn btn-secondary" id="clearSettingsBtn" onclick="clearSettings()">清除設定</button>
+      <span class="lock-icon" id="lock-clearSettingsBtn" title="需要管理者登入才能修改">🔒</span>
+      <button class="btn btn-secondary" id="restoreDefaultsBtn" onclick="restoreDefaults()">恢復預設值</button>
+      <span class="lock-icon" id="lock-restoreDefaultsBtn" title="需要管理者登入才能修改">🔒</span>
     </div>
     <div style="font-size:11px;color:#aaa;margin-top:6px;">
       欄位對應：A=時間戳記、B=記錄日期、C=工號、D=車型、E=種類、F=顏色代號<br>
@@ -181,6 +222,7 @@
       <option value="0.85">0.85</option>
       <option value="1.00">不折算</option>
     </select>
+    <span class="lock-icon" id="lock-pfCoefficientSelect" title="需要管理者登入才能修改">🔒</span>
     <span id="pfCoefficientInfo" style="cursor:help;">ℹ️</span>
   </label>
 </div>
@@ -244,10 +286,13 @@
     <div class="target-bar">
       <label>保險桿目標（隻/天）：</label>
       <input type="number" id="bxTarget" value="40" min="1" onchange="saveTargets();refreshEfficiency();" />
+      <span class="lock-icon" id="lock-bxTarget" title="需要管理者登入才能修改">🔒</span>
       <label>馬自達目標（隻/天）：</label>
       <input type="number" id="mzTarget" value="25" min="1" onchange="saveTargets();refreshEfficiency();" />
+      <span class="lock-icon" id="lock-mzTarget" title="需要管理者登入才能修改">🔒</span>
       <label>最小輸入間隔（秒）：</label>
       <input type="number" id="minInterval" value="30" min="0" onchange="saveTargets();applyMinIntervalChange();" />
+      <span class="lock-icon" id="lock-minInterval" title="需要管理者登入才能修改">🔒</span>
       <div style="flex-basis:100%;font-size:11px;color:#aaa;">同一工號連續輸入間隔小於此秒數的記錄將不納入計算（僅套用於品質情報分頁）。變更後即時更新品質情報頁籤。</div>
     </div>
     <div id="effStatusTitle" style="font-size:18px;font-weight:700;margin-bottom:0.75rem;color:#555;">當日人員狀態</div>
@@ -748,7 +793,7 @@
 const DEFAULT_CONFIG = {
   sheetsId:  '1xQoIxoLlM4LkKjDrYZ_87uIahtebPgPcG6Hitck1T5c',
   apiKey:    'AIzaSyBMgXHsua64mciOFJwqH4NreGI11gMXR-s',
-  sheetName: '補漆日報'
+  sheetName: '整修日報'
 };
 
 // ── Fallback hardcoded data ──────────────────────────────────────────────────
@@ -1014,7 +1059,7 @@ function clearSettings() {
   ['gsId','gsKey','gsSheet'].forEach(k => localStorage.removeItem(k));
   document.getElementById('sheetsId').value  = '';
   document.getElementById('apiKey').value    = '';
-  document.getElementById('sheetName').value = '補漆日報';
+  document.getElementById('sheetName').value = DEFAULT_CONFIG.sheetName;
   updatePipelineNotice();
   setBadge('已清除設定，使用示範資料','ok');
 }
@@ -1036,7 +1081,7 @@ function setBadge(text, type) {
 async function saveAndFetch() {
   const id = document.getElementById('sheetsId').value.trim();
   const key = document.getElementById('apiKey').value.trim();
-  const sheet = document.getElementById('sheetName').value.trim() || '補漆日報';
+  const sheet = document.getElementById('sheetName').value.trim() || DEFAULT_CONFIG.sheetName;
   if (!id || !key) { alert('請填入 Sheets ID 與 API Key'); return; }
   localStorage.setItem('gsId', id);
   localStorage.setItem('gsKey', key);
@@ -2057,7 +2102,7 @@ function startRealtimeTimer() {
       const boardDate = filteredDates.length ? filteredDates[filteredDates.length-1] : null;
       if (!boardDate || dateToISO(boardDate) !== today()) { stopRealtimeTimer(); return; }
       const id = localStorage.getItem('gsId'), key = localStorage.getItem('gsKey');
-      const sh = localStorage.getItem('gsSheet') || '補漆日報';
+      const sh = localStorage.getItem('gsSheet') || DEFAULT_CONFIG.sheetName;
       if (id && key) {
         fetchFromSheets(id, key, sh).then(() => {
           if (currentView==='realtime') buildRealtimeBoard();
@@ -3904,19 +3949,99 @@ function toggleScoreDetail(pid) {
 function updatePipelineNotice() {
   const el = document.getElementById('pipelineStageText');
   if (!el) return;
-  const sheet = localStorage.getItem('gsSheet') || '補漆日報';
-  if (sheet === '補漆日報') {
-    el.textContent = '補漆階段';
-  } else if (sheet === '整修日報') {
-    el.textContent = '補漆階段（Sheet 命名：整修日報，待遷移）';
+  const sheet = localStorage.getItem('gsSheet') || DEFAULT_CONFIG.sheetName;
+  el.textContent = `補漆階段（Sheet：${sheet}）`;
+}
+
+// ── Admin Login ──────────────────────────────────────────────────────────────
+const ADMIN_PASSWORD_HASH = '1758525ce651a482a458a59c562ec9eb81cfd0fd5a88b246375f7cd237c94a78'; // yk0574 的 SHA-256
+const ADMIN_SESSION_KEY = 'admin_logged_in_until';
+const ADMIN_LOCK_FIELD_IDS = ['sheetsId','apiKey','sheetName','clearSettingsBtn','restoreDefaultsBtn','bxTarget','mzTarget','minInterval','pfCoefficientSelect'];
+
+async function sha256(text) {
+  const buf = new TextEncoder().encode(text);
+  const hash = await crypto.subtle.digest('SHA-256', buf);
+  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function isAdminLoggedIn() {
+  const until = parseInt(localStorage.getItem(ADMIN_SESSION_KEY) || '0', 10);
+  return until > Date.now();
+}
+
+function applyAdminLockUI(loggedIn) {
+  ADMIN_LOCK_FIELD_IDS.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.disabled = !loggedIn;
+    const icon = document.getElementById('lock-' + id);
+    if (icon) icon.style.display = loggedIn ? 'none' : 'inline';
+  });
+  const btn = document.getElementById('adminLoginBtn');
+  if (loggedIn) {
+    btn.textContent = '🔓 管理者模式｜登出';
+    btn.classList.add('logged-in');
+    btn.onclick = logoutAdmin;
   } else {
-    el.textContent = sheet;
+    btn.textContent = '🔑 管理者登入';
+    btn.classList.remove('logged-in');
+    btn.onclick = openAdminModal;
+  }
+  updateAdminCountdown();
+}
+
+function updateAdminCountdown() {
+  const until = parseInt(localStorage.getItem(ADMIN_SESSION_KEY) || '0', 10);
+  const now = Date.now();
+  const cd = document.getElementById('adminCountdown');
+  const banner = document.getElementById('adminBanner');
+  if (until > now) {
+    const hoursLeft = Math.max(1, Math.ceil((until - now) / 3600000));
+    cd.textContent = `剩餘 ${hoursLeft} 小時`;
+    cd.style.display = '';
+    banner.textContent = `您目前以管理者身份登入，剩餘 ${hoursLeft} 小時`;
+    banner.style.display = '';
+  } else {
+    cd.style.display = 'none';
+    banner.style.display = 'none';
   }
 }
+
+function checkAdminSession() {
+  const loggedIn = isAdminLoggedIn();
+  if (!loggedIn) localStorage.removeItem(ADMIN_SESSION_KEY);
+  applyAdminLockUI(loggedIn);
+}
+
+function openAdminModal() {
+  document.getElementById('adminPasswordInput').value = '';
+  document.getElementById('adminLoginError').style.display = 'none';
+  document.getElementById('adminOverlay').classList.add('open');
+  setTimeout(() => document.getElementById('adminPasswordInput').focus(), 0);
+}
+function closeAdminModal() {
+  document.getElementById('adminOverlay').classList.remove('open');
+}
+async function submitAdminLogin() {
+  const pw = document.getElementById('adminPasswordInput').value;
+  const hash = await sha256(pw);
+  if (hash === ADMIN_PASSWORD_HASH) {
+    localStorage.setItem(ADMIN_SESSION_KEY, String(Date.now() + 24 * 3600 * 1000));
+    closeAdminModal();
+    applyAdminLockUI(true);
+  } else {
+    document.getElementById('adminLoginError').style.display = 'block';
+  }
+}
+function logoutAdmin() {
+  localStorage.removeItem(ADMIN_SESSION_KEY);
+  applyAdminLockUI(false);
+}
+setInterval(checkAdminSession, 60000);
 
 function init() {
   loadSettings();
   updatePipelineNotice();
+  checkAdminSession();
   const cfg = getConfig();
   // Always auto-fetch: localStorage values take priority, DEFAULT_CONFIG as fallback
   fetchFromSheets(cfg.id, cfg.key, cfg.sheet);
