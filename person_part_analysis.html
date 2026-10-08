@@ -143,6 +143,7 @@
   </div>
 </div>
 <div class="admin-banner" id="adminBanner"></div>
+<div id="sysSettingsWarning" style="display:none;background:#fdecea;border:1px solid #f5c2c0;color:#b42318;border-radius:8px;padding:0.6rem 1rem;margin-bottom:1rem;font-size:13px;"></div>
 
 <!-- Admin Login Modal -->
 <div class="admin-overlay" id="adminOverlay" onclick="if(event.target===this) closeAdminModal()">
@@ -164,6 +165,10 @@
     <span id="settingsBadge" class="status-badge badge-ok">已使用示範資料</span>
   </div>
   <div class="settings-body" id="settingsBody">
+    <div class="settings-row" style="gap:8px;">
+      <button class="btn btn-secondary" onclick="manualRefreshSystemSettings()">🔄 重新讀取系統設定</button>
+      <span id="sysSettingsRefreshStatus" style="font-size:12px;"></span>
+    </div>
     <div class="settings-row">
       <label>Sheets ID</label>
       <input type="text" id="sheetsId" placeholder="貼上 Google Sheets ID" />
@@ -191,6 +196,10 @@
       馬自達色碼：51、A4D、41W、46V、PZ、TAS，其餘為保險桿
     </div>
     <div id="filterHint" style="font-size:11px;color:#e67e22;margin-top:6px;display:none;"></div>
+    <div id="sysSettingsTip" style="display:none;background:#eef6ff;border:1px solid #cfe3fb;border-radius:8px;padding:0.6rem 1rem;margin-top:8px;font-size:12px;color:#333;line-height:1.6;">
+      💡 要永久修改設定（讓所有幹部看到），請直接到 Google Sheet 的「系統設定」分頁修改對應儲存格，此處修改僅供暫時試算，重新整理頁面後會還原：<br>
+      分頁名稱 → B2　保險桿目標 → B3　馬自達目標 → B4　最小輸入間隔 → B5　PF 車型係數 → B6
+    </div>
   </div>
 </div>
 
@@ -796,6 +805,102 @@ const DEFAULT_CONFIG = {
   sheetName: '整修日報'
 };
 
+// ── 系統設定（Google Sheet「系統設定」分頁，A2:B6 key-value，全員共用）──────────────
+const SYSTEM_SETTINGS_RANGE = '系統設定!A2:B6';
+const SYSTEM_SETTINGS_DEFAULTS = {
+  sheet_name:   DEFAULT_CONFIG.sheetName,
+  bx_target:    51,
+  mz_target:    39,
+  min_interval: 30,
+  pf_coef:      0.7
+};
+function buildSystemSettings(raw) {
+  const d  = SYSTEM_SETTINGS_DEFAULTS;
+  const bx = parseInt(raw.bx_target, 10);
+  const mz = parseInt(raw.mz_target, 10);
+  const mi = parseInt(raw.min_interval, 10);
+  const pf = parseFloat(raw.pf_coef);
+  return {
+    sheet_name:   (raw.sheet_name || '').trim() || d.sheet_name,
+    bx_target:    Number.isFinite(bx) ? bx : d.bx_target,
+    mz_target:    Number.isFinite(mz) ? mz : d.mz_target,
+    min_interval: Number.isFinite(mi) ? mi : d.min_interval,
+    pf_coef:      Number.isFinite(pf) ? pf : d.pf_coef,
+  };
+}
+function showSystemSettingsWarning(msg) {
+  const el = document.getElementById('sysSettingsWarning');
+  if (!el) return;
+  el.textContent = msg;
+  el.style.display = '';
+}
+function hideSystemSettingsWarning() {
+  const el = document.getElementById('sysSettingsWarning');
+  if (el) el.style.display = 'none';
+}
+// 讀取 Google Sheet「系統設定」分頁；失敗時回退：上次成功快取 → 程式內建預設值
+async function fetchSystemSettings(id, key) {
+  try {
+    const range = encodeURIComponent(SYSTEM_SETTINGS_RANGE);
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${range}?key=${key}`;
+    const res = await fetch(url);
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => null);
+      const msg = (errJson && errJson.error && errJson.error.message) || '';
+      throw new Error(/unable to parse range|not found/i.test(msg) ? 'SHEET_MISSING' : `HTTP ${res.status}`);
+    }
+    const json = await res.json();
+    const raw = {};
+    (json.values || []).forEach(row => {
+      const k = (row[0] || '').trim();
+      if (k) raw[k] = row[1];
+    });
+    const settings = buildSystemSettings(raw);
+    localStorage.setItem('sysSettingsCache', JSON.stringify(settings));
+    hideSystemSettingsWarning();
+    return { settings, ok: true };
+  } catch (e) {
+    let cached = null;
+    try { cached = JSON.parse(localStorage.getItem('sysSettingsCache') || 'null'); } catch(_) {}
+    const settings = cached || SYSTEM_SETTINGS_DEFAULTS;
+    const usedLabel = cached ? '上次快取值' : '預設值';
+    if (e.message === 'SHEET_MISSING') {
+      showSystemSettingsWarning(`⚠️ 讀不到「系統設定」分頁，正在使用${usedLabel}`);
+    } else {
+      showSystemSettingsWarning(`⚠️ 無法連接 Google Sheet 讀取系統設定，目前使用${usedLabel}`);
+    }
+    return { settings, ok: false };
+  }
+}
+// 把系統設定套用到 localStorage（其他函式已從這些 key 讀值）並刷新畫面
+function applySystemSettings(settings) {
+  localStorage.setItem('gsSheet', settings.sheet_name);
+  localStorage.setItem('bxTarget', String(settings.bx_target));
+  localStorage.setItem('mzTarget', String(settings.mz_target));
+  localStorage.setItem('minIntervalSec', String(settings.min_interval));
+  localStorage.setItem('pf_coefficient', String(settings.pf_coef));
+  loadSettings();
+  updatePipelineNotice();
+  computeFilteredRecords();
+  updateFilterHint();
+  applyDateFilter();
+}
+async function refreshSystemSettings(id, key) {
+  const { settings, ok } = await fetchSystemSettings(id, key);
+  applySystemSettings(settings);
+  return ok;
+}
+async function manualRefreshSystemSettings() {
+  const cfg = getConfig();
+  const status = document.getElementById('sysSettingsRefreshStatus');
+  status.textContent = '讀取中…';
+  status.style.color = '#888';
+  const ok = await refreshSystemSettings(cfg.id, cfg.key);
+  status.textContent = ok ? '✅ 設定已更新' : '❌ 讀取失敗，請確認「系統設定」分頁存在';
+  status.style.color = ok ? '#1D9E75' : '#d9534f';
+  setTimeout(() => { status.textContent = ''; }, 2000);
+}
+
 // ── Fallback hardcoded data ──────────────────────────────────────────────────
 const FALLBACK_RECORDS = [
   // [date, personId, type]  type: 'bx'=保險桿, 'mz'=馬自達
@@ -890,12 +995,24 @@ function loadSettings() {
   document.getElementById('sheetsId').value   = cfg.id;
   document.getElementById('apiKey').value     = cfg.key;
   document.getElementById('sheetName').value  = cfg.sheet;
-  document.getElementById('bxTarget').value   = localStorage.getItem('bxTarget') || '40';
-  document.getElementById('mzTarget').value   = localStorage.getItem('mzTarget') || '25';
-  document.getElementById('minInterval').value = localStorage.getItem('minIntervalSec') || '30';
+  document.getElementById('bxTarget').value   = localStorage.getItem('bxTarget') || String(SYSTEM_SETTINGS_DEFAULTS.bx_target);
+  document.getElementById('mzTarget').value   = localStorage.getItem('mzTarget') || String(SYSTEM_SETTINGS_DEFAULTS.mz_target);
+  document.getElementById('minInterval').value = localStorage.getItem('minIntervalSec') || String(SYSTEM_SETTINGS_DEFAULTS.min_interval);
   document.getElementById('tfDiscountToggle').checked = tfDiscountEnabled;
+  ensurePfCoefficientOption(getPfCoefficient());
   document.getElementById('pfCoefficientSelect').value = getPfCoefficient().toFixed(2);
   updatePfCoefficientInfo();
+}
+// 確保下拉選單含有系統設定讀到的 PF 係數值（若非預設選項之一，動態補上一個選項）
+function ensurePfCoefficientOption(val) {
+  const select = document.getElementById('pfCoefficientSelect');
+  const v = val.toFixed(2);
+  if (![...select.options].some(o => o.value === v)) {
+    const opt = document.createElement('option');
+    opt.value = v;
+    opt.textContent = v;
+    select.appendChild(opt);
+  }
 }
 function onTfDiscountToggle() {
   tfDiscountEnabled = document.getElementById('tfDiscountToggle').checked;
@@ -1056,20 +1173,21 @@ function toggleSettings() {
   document.getElementById('settingsBody').classList.toggle('open');
 }
 function clearSettings() {
-  ['gsId','gsKey','gsSheet'].forEach(k => localStorage.removeItem(k));
+  ['gsId','gsKey'].forEach(k => localStorage.removeItem(k));
   document.getElementById('sheetsId').value  = '';
   document.getElementById('apiKey').value    = '';
   document.getElementById('sheetName').value = DEFAULT_CONFIG.sheetName;
   updatePipelineNotice();
   setBadge('已清除設定，使用示範資料','ok');
 }
-function restoreDefaults() {
-  ['gsId','gsKey','gsSheet'].forEach(k => localStorage.removeItem(k));
+async function restoreDefaults() {
+  ['gsId','gsKey'].forEach(k => localStorage.removeItem(k));
   document.getElementById('sheetsId').value  = DEFAULT_CONFIG.sheetsId;
   document.getElementById('apiKey').value    = DEFAULT_CONFIG.apiKey;
-  document.getElementById('sheetName').value = DEFAULT_CONFIG.sheetName;
   updatePipelineNotice();
-  fetchFromSheets(DEFAULT_CONFIG.sheetsId, DEFAULT_CONFIG.apiKey, DEFAULT_CONFIG.sheetName);
+  await refreshSystemSettings(DEFAULT_CONFIG.sheetsId, DEFAULT_CONFIG.apiKey);
+  const cfg = getConfig();
+  fetchFromSheets(cfg.id, cfg.key, cfg.sheet);
 }
 
 function setBadge(text, type) {
@@ -1085,8 +1203,8 @@ async function saveAndFetch() {
   if (!id || !key) { alert('請填入 Sheets ID 與 API Key'); return; }
   localStorage.setItem('gsId', id);
   localStorage.setItem('gsKey', key);
-  localStorage.setItem('gsSheet', sheet);
   updatePipelineNotice();
+  await refreshSystemSettings(id, key); // 重新讀取系統設定（會更新其他鎖定欄位，但本次仍用下方剛輸入的工作表名稱抓資料）
   await fetchFromSheets(id, key, sheet);
 }
 
@@ -3986,6 +4104,8 @@ function applyAdminLockUI(loggedIn) {
     btn.classList.remove('logged-in');
     btn.onclick = openAdminModal;
   }
+  const tip = document.getElementById('sysSettingsTip');
+  if (tip) tip.style.display = loggedIn ? '' : 'none';
   updateAdminCountdown();
 }
 
@@ -4038,12 +4158,11 @@ function logoutAdmin() {
 }
 setInterval(checkAdminSession, 60000);
 
-function init() {
-  loadSettings();
-  updatePipelineNotice();
+async function init() {
+  const bootCfg = getConfig(); // 僅用 id/key 連線，sheet 由系統設定覆蓋
+  await refreshSystemSettings(bootCfg.id, bootCfg.key); // 讀取「系統設定」分頁，套用到 localStorage 並刷新欄位（內部已呼叫 loadSettings/updatePipelineNotice）
   checkAdminSession();
   const cfg = getConfig();
-  // Always auto-fetch: localStorage values take priority, DEFAULT_CONFIG as fallback
   fetchFromSheets(cfg.id, cfg.key, cfg.sheet);
 }
 
