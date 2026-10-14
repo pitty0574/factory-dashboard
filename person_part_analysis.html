@@ -384,7 +384,7 @@
     <!-- 今日出勤說明 -->
     <div id="rtTableInfo" style="font-size:13px;color:#445;text-align:center;margin-bottom:0.5rem;"></div>
     <div style="font-size:12px;color:#556;text-align:center;margin-bottom:0.5rem;">※ 各時段的實績包含該時段結束後至下段開始前的休息時間輸入</div>
-    <div style="font-size:12px;color:#556;text-align:center;margin-bottom:0.5rem;">※ 各時段目標依該時段實際在場作業員動態計算，晚到人員不影響其到場前時段之目標</div>
+    <div style="font-size:12px;color:#556;text-align:center;margin-bottom:0.5rem;">※ 各時段目標依該時段實際在場作業員動態計算<br>晚到或早退超過 90 分鐘者，其日目標按在場時間比例打折</div>
 
     <!-- 合計時段表格 -->
     <div style="background:#161b27;border-radius:12px;overflow:hidden;margin-bottom:1rem;box-shadow:0 4px 24px rgba(0,0,0,0.5);">
@@ -798,6 +798,11 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script>
+// ── 遲到／早退容錯（分鐘）：日目標依實際在場時間打折時使用，可自行調整 ──────────────
+// 首筆 ≤ 08:00 + LATE_BUFFER_MIN → 視為準時；末筆 ≥ 班別下班時間 − EARLY_LEAVE_BUFFER_MIN → 視為做到最後
+const LATE_BUFFER_MIN = 90;
+const EARLY_LEAVE_BUFFER_MIN = 90;
+
 // ── Default config (built-in, used when localStorage is empty) ────────────────
 const DEFAULT_CONFIG = {
   sheetsId:  '1xQoIxoLlM4LkKjDrYZ_87uIahtebPgPcG6Hitck1T5c',
@@ -1588,7 +1593,7 @@ function refreshEfficiency() {
   // 每位作業員依「當天最後一筆實績時間」自動判定個人班別，並計算已依班別工時比例縮放後的個人目標
   // 人員效率頁使用原始資料 allRecords（不套用異常資料過濾／連續輸入間隔過濾，該過濾僅限品質情報分頁）
   const dayRecs = allRecords.filter(r => r[0] === lastDate);
-  const breakdown = getPersonsDailyBreakdown(dayRecs, bxTarget, mzTarget);
+  const breakdown = getPersonsDailyBreakdown(dayRecs, bxTarget, mzTarget, isViewingToday ? nowMin() : null);
   const dayPids = Object.keys(breakdown).filter(pid => breakdown[pid].totalQty > 0).sort();
 
   // 若當天實績筆數 = 0，該作業員不顯示卡片
@@ -1596,7 +1601,7 @@ function refreshEfficiency() {
     const p = breakdown[pid];
     const bxQty = p.bxQty, mzQty = p.mzQty, totalQty = p.totalQty;
 
-    const planRatio = isViewingToday ? getCommittedPlanRatioForRange(nowMin(), p.arrivalSeg, p.segCount) : 1.0;
+    const planRatio = isViewingToday ? getCommittedPlanRatioForPerson(nowMin(), p) : 1.0;
     const blendedCommitted = p.dayTarget * planRatio;
     const overallRate = blendedCommitted > 0
       ? Math.round(totalQty / blendedCommitted * 100)
@@ -1786,8 +1791,9 @@ function buildCumulativeStatus(bxTarget, mzTarget) {
   });
 
   const pidAgg = {};
-  Object.values(dateMap).forEach(dayRecs => {
-    const breakdown = getPersonsDailyBreakdown(dayRecs, bxTarget, mzTarget);
+  const todayISOForCum = today();
+  Object.entries(dateMap).forEach(([iso, dayRecs]) => {
+    const breakdown = getPersonsDailyBreakdown(dayRecs, bxTarget, mzTarget, iso === todayISOForCum ? nowMin() : null);
     Object.values(breakdown).forEach(p => {
       if (p.totalQty === 0) return;
       if (!pidAgg[p.pid]) pidAgg[p.pid] = { pid: p.pid, attendDays: 0, bxDays: 0, mzDays: 0, bxActual: 0, mzActual: 0, bxGoal: 0, mzGoal: 0, totalGoal: 0 };
@@ -2088,19 +2094,38 @@ function determineShiftKey(lastTsMin) {
 // 將某一天的原始記錄依工號彙整，計算每人當天的個人班別與已依班別工時比例縮放後的個人目標
 // dayRecs: 原始資料（allRecords）中屬於同一天的記錄陣列
 // 回傳 { pid: {bxQty,mzQty,totalQty,lastTs,shiftKey,segCount,workMin,blendedDayTarget,dayTarget,bxDayTarget,mzDayTarget,
-//              arrivalSeg,presentWorkMin} }
+//              arrivalSeg,firstTs,isLate,isEarly,inProgress,actStartMin,actEndMin,actWorkMin,attendRatio} }
 // arrivalSeg：該人當天最早一筆有時間戳實績所屬的時段索引（無時間戳資料則視為全天在場，arrivalSeg=0）
-// 在場區間視為 arrivalSeg ～ segCount-1，供出勤明細與時段目標分攤使用
-function getPersonsDailyBreakdown(dayRecs, bxTarget, mzTarget) {
+//
+// 實際在場時間打折（10/14 修正：晚到工人在唯一在場時段獨得全日目標）：
+//   1. 依末筆判定班別 → 預期上班 08:00、預期下班 = 班別最後時段結束（正常班 16:30 / 加班2h 18:30 / 加班4h 21:00）
+//   2. 首筆 ≤ 08:00 + LATE_BUFFER_MIN → 準時（actStartMin = 08:00）；否則遲到（actStartMin = 首筆）
+//   3. 末筆 ≥ 預期下班 − EARLY_LEAVE_BUFFER_MIN → 做到最後（actEndMin = 預期下班）；否則早退（actEndMin = 末筆）
+//      ※ 檢視今天且尚未到「預期下班 − 容錯」時，不判早退（人可能還在做）
+//   4. actWorkMin = actStartMin～actEndMin 與各時段的重疊分鐘數總和（自動扣除休息時間）
+//   5. attendRatio = actWorkMin / workMin；dayTarget / bxDayTarget / mzDayTarget 同乘此比例（準時且做到最後 → 1，不打折）
+//   6. 時段分攤：該人第 i 段目標 = dayTarget × (actStartMin～actEndMin 與第 i 段重疊分鐘) / actWorkMin
+//      （到場前、離場後的時段重疊為 0，沿用需求 2「在場才算入」）
+// 測試基準（以 LATE/EARLY 容錯皆 20 分計算；加班2h workMin = 570）：
+//   例1 首筆 08:15、末筆 18:28（加班2h）→ 準時 + 做到最後 → 100% 不打折
+//       （若首筆 09:15 則 > 08:20 判遲到，09:15～18:30 扣休息 = 505 分 → 89%；需不打折請調大 LATE_BUFFER_MIN）
+//   例2 首筆 16:30、末筆 18:30（加班2h）→ 遲到，16:30～18:30 扣 16:30～16:40 休息 = 110 分 → 110/570 = 19%
+//       第五段分攤 = 該人打折後 dayTarget × 110/110，第一～四段為 0
+//   例3 首筆 08:15、末筆 16:00（末筆 ≤16:30 判正常班，workMin 460）→ 早退，08:00～16:00 扣休息 50 分 = 430 → 93%
+//       （換算成全日 690 分基準 = 430/690，與「假設排加班2h → 430/570 = 75%」打折後的目標隻數相同）
+//   例4 首筆 08:20、末筆 18:25，中間 11:00～15:00 無實績 → 準時 + 做到最後 → 100% 不打折（只看首末筆，不看中間空檔）
+// nowMins：檢視今天時傳入目前時間（分鐘），歷史日期傳 null
+function getPersonsDailyBreakdown(dayRecs, bxTarget, mzTarget, nowMins = null) {
   const map = {};
   dayRecs.forEach(r => {
     const pid = r[1], type = r[2], tsMin = r[3];
     if (!pid || /^\d{4}[-\/]/.test(pid)) return;
-    if (!map[pid]) map[pid] = { pid, bxQty: 0, mzQty: 0, lastTs: null, minSeg: null };
+    if (!map[pid]) map[pid] = { pid, bxQty: 0, mzQty: 0, firstTs: null, lastTs: null, minSeg: null };
     const p = map[pid];
     const eq = recEqQty(r);
     if (type === 'bx') p.bxQty += eq; else p.mzQty += eq;
     if (tsMin != null && (p.lastTs == null || tsMin > p.lastTs)) p.lastTs = tsMin;
+    if (tsMin != null && (p.firstTs == null || tsMin < p.firstTs)) p.firstTs = tsMin;
     if (tsMin != null) {
       const segIdx = getSegmentIdx(tsMin);
       if (segIdx >= 0 && (p.minSeg == null || segIdx < p.minSeg)) p.minSeg = segIdx;
@@ -2122,9 +2147,49 @@ function getPersonsDailyBreakdown(dayRecs, bxTarget, mzTarget) {
     p.mzDayTarget = (p.totalQty > 0 && p.mzQty > 0) ? mzTarget * (p.mzQty / p.totalQty) * p.workMin / FULL_WORK_MIN : 0;
 
     p.arrivalSeg = p.minSeg != null ? p.minSeg : 0;
-    p.presentWorkMin = SEGMENTS.slice(p.arrivalSeg, p.segCount).reduce((s, g) => s + g.min, 0) || p.workMin;
+
+    // 實際在場區間與日目標打折（見函式上方說明）
+    const expStart = SEGMENTS[0].start;
+    const expEnd   = SEGMENTS[p.segCount - 1].end;
+    p.isLate     = p.firstTs != null && p.firstTs > expStart + LATE_BUFFER_MIN;
+    p.inProgress = nowMins != null && nowMins < expEnd - EARLY_LEAVE_BUFFER_MIN;
+    p.isEarly    = !p.inProgress && p.lastTs != null && p.lastTs < expEnd - EARLY_LEAVE_BUFFER_MIN;
+    p.actStartMin = p.isLate  ? p.firstTs : expStart;
+    p.actEndMin   = p.isEarly ? p.lastTs  : expEnd;
+    p.actWorkMin  = workMinBetween(p.actStartMin, p.actEndMin);
+    if (p.actWorkMin <= 0) {
+      // 首末筆都落在同一段休息時間內（休息時間補打）→ 視為在其歸屬時段在場
+      const seg = SEGMENTS[Math.max(0, getSegmentIdx(p.firstTs))];
+      p.actStartMin = seg.start; p.actEndMin = seg.end; p.actWorkMin = seg.min;
+    }
+    p.attendRatio = (p.isLate || p.isEarly) ? Math.min(1, p.actWorkMin / p.workMin) : 1;
+    p.dayTarget   *= p.attendRatio;
+    p.bxDayTarget *= p.attendRatio;
+    p.mzDayTarget *= p.attendRatio;
   });
   return map;
+}
+
+// [fromMin, toMin) 區間內的實際工作分鐘數（只計各時段內的分鐘，休息時間自動排除）
+function workMinBetween(fromMin, toMin) {
+  return SEGMENTS.reduce((s, g) => s + Math.max(0, Math.min(toMin, g.end) - Math.max(fromMin, g.start)), 0);
+}
+
+// 該人第 segIdx 段的在場工作分鐘數（實際在場區間與該時段的重疊）
+function personSegWorkMin(p, segIdx) {
+  const g = SEGMENTS[segIdx];
+  return Math.max(0, Math.min(p.actEndMin, g.end) - Math.max(p.actStartMin, g.start));
+}
+
+// 截至 nowMins，該人已提交的計畫比例（0..1）：實際在場區間內已流逝的工作分鐘 / 實際工時
+function getCommittedPlanRatioForPerson(nowMins, p) {
+  if (!p.actWorkMin) return 0;
+  return Math.min(1, workMinBetween(p.actStartMin, Math.min(nowMins, p.actEndMin)) / p.actWorkMin);
+}
+
+function minToHHMM(m) {
+  if (m == null) return '—';
+  return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 }
 
 function shiftBadgeHtml(shiftKey) {
@@ -2176,21 +2241,6 @@ function getSegmentIdx(mins) {
 
 function currentSegIdx() { return getSegmentIdx(nowMin()); }
 
-// Returns 0..1: fraction of the [fromSeg, toSegExclusive) segment range's work time elapsed as of nowMins
-// 晚到人員只計算「到場後」的時段區間，避免把到場前的時段也算進已提交計畫比例
-function getCommittedPlanRatioForRange(nowMins, fromSeg, toSegExclusive) {
-  const activeSegs = SEGMENTS.slice(fromSeg, toSegExclusive);
-  const totalMin    = activeSegs.reduce((s, g) => s + g.min, 0);
-  if (totalMin === 0) return 0;
-  const curSeg = getSegmentIdx(nowMins);
-  let elapsed = 0;
-  activeSegs.forEach((seg, offset) => {
-    const i = fromSeg + offset;
-    if (nowMins >= seg.end)   { elapsed += seg.min; }
-    else if (i === curSeg)    { elapsed += Math.max(0, nowMins - seg.start); }
-  });
-  return Math.min(elapsed / totalMin, 1);
-}
 function minutesToNextEvent() {
   const now = nowMin();
   if (now < SHIFT_START) return { text: `班前（${SHIFT_START-now} 分鐘後開班）` };
@@ -2281,7 +2331,7 @@ function buildRealtimeBoard() {
   const hasTsData = dayRecs.some(r => r[3] != null);
 
   // 每位作業員：依當天最後一筆實績時間自動判定個人班別，並算出已依班別工時比例縮放後的個人目標
-  const breakdown = getPersonsDailyBreakdown(dayRecs, bxTarget, mzTarget);
+  const breakdown = getPersonsDailyBreakdown(dayRecs, bxTarget, mzTarget, isToday ? now : null);
   const activeBreakdowns = Object.values(breakdown).filter(p => p.totalQty > 0);
 
   const dayTarget      = activeBreakdowns.reduce((s, p) => s + p.dayTarget, 0);
@@ -2348,18 +2398,17 @@ function renderRtTableMerged(segActuals, activeBreakdowns, hasTsData, curSegIdx,
   if (!tbody) return;
   tbody.innerHTML = '';
 
-  // 每段計畫目標：每位作業員的個人目標（dayTarget 不變）只分攤到「實際在場的時段」（arrivalSeg ～ segCount-1）
-  // 晚到人員（例如下午才轉入補漆房）不會把目標算進到場前的時段，避免早段目標虛高、達成率被拉低
+  // 每段計畫目標：每位作業員已依實際在場時間打折的 dayTarget，只分攤到「實際在場區間」與各時段重疊的分鐘
+  // 晚到人員不會把目標算進到場前的時段；晚到／早退者的日目標已按在場比例縮小，不會在少數時段獨得全日目標
   const segPlans = SEGMENTS.map(() => 0);
   activeBreakdowns.forEach(p => {
-    for (let i = p.arrivalSeg; i < p.segCount; i++) {
-      segPlans[i] += p.dayTarget * SEGMENTS[i].min / p.presentWorkMin;
-    }
+    if (!p.actWorkMin) return;
+    SEGMENTS.forEach((g, i) => { segPlans[i] += p.dayTarget * personSegWorkMin(p, i) / p.actWorkMin; });
   });
 
-  // 當前時間已提交的累計計畫：每位作業員只計算「到場後」時段的時間流逝比例，再加總
+  // 當前時間已提交的累計計畫：每位作業員只計算「實際在場區間」內的時間流逝比例，再加總
   const committedPlan = activeBreakdowns.reduce(
-    (s, p) => s + p.dayTarget * getCommittedPlanRatioForRange(now, p.arrivalSeg, p.segCount), 0);
+    (s, p) => s + p.dayTarget * getCommittedPlanRatioForPerson(now, p), 0);
 
   const endCumPlan = [];
   let acc = 0;
@@ -2439,7 +2488,7 @@ function toggleRtAttendanceDetail() {
   if (caret) caret.textContent  = rtAttendanceExpanded ? '▼' : '▶';
 }
 
-// 出勤明細：工號 × 時段，✓ 表示該人在該時段有在場（arrivalSeg ～ segCount-1），- 表示尚未到場或已下班
+// 出勤明細：每人到場（首筆）、離場（末筆）、遲到／早退狀態與日目標折算比例
 function renderRtAttendanceDetail(activeBreakdowns) {
   const body = document.getElementById('rtAttendanceBody');
   if (!body) return;
@@ -2450,20 +2499,29 @@ function renderRtAttendanceDetail(activeBreakdowns) {
   const head = `
     <tr style="border-bottom:2px solid #1e2a40;font-size:13px;color:#556;">
       <th style="text-align:left;padding:8px 10px;font-weight:600;">工號</th>
-      ${SEGMENTS.map(s => `<th style="${cellStyle}font-weight:600;">${s.name}</th>`).join('')}
+      <th style="${cellStyle}font-weight:600;">到場</th>
+      <th style="${cellStyle}font-weight:600;">離場</th>
+      <th style="${cellStyle}font-weight:600;">狀態</th>
+      <th style="${cellStyle}font-weight:600;">日目標折算</th>
     </tr>`;
   const body_ = rows.map(p => {
-    const cells = SEGMENTS.map((s, i) => {
-      const present = i >= p.arrivalSeg && i < p.segCount;
-      return `<td style="${cellStyle}color:${present ? '#1D9E75' : '#445'};">${present ? '✓' : '-'}</td>`;
-    }).join('');
+    let status, color;
+    if (p.isLate && p.isEarly) { status = '遲到・早退'; color = '#e74c3c'; }
+    else if (p.isLate)         { status = '遲到';       color = '#e67e22'; }
+    else if (p.isEarly)        { status = '早退';       color = '#e67e22'; }
+    else if (p.inProgress)     { status = '在場中';     color = '#8ab4f8'; }
+    else                       { status = '正常';       color = '#1D9E75'; }
+    const pct = Math.round(p.attendRatio * 100);
     return `<tr style="border-bottom:1px solid #1e2535;">
       <td style="padding:8px 10px;font-size:14px;color:#e0e0e0;font-weight:600;">${p.pid}${shiftBadgeHtml(p.shiftKey)}</td>
-      ${cells}
+      <td style="${cellStyle}color:#ccc;">${minToHHMM(p.firstTs)}</td>
+      <td style="${cellStyle}color:#ccc;">${minToHHMM(p.lastTs)}</td>
+      <td style="${cellStyle}color:${color};font-weight:600;">${status}</td>
+      <td style="${cellStyle}color:${pct < 100 ? '#e67e22' : '#ccc'};font-weight:600;">${pct}%</td>
     </tr>`;
   }).join('');
 
-  body.innerHTML = `<table style="width:100%;border-collapse:collapse;min-width:480px;"><thead>${head}</thead><tbody>${body_}</tbody></table>`;
+  body.innerHTML = `<table style="width:100%;border-collapse:collapse;min-width:420px;"><thead>${head}</thead><tbody>${body_}</tbody></table>`;
 }
 
 function renderRtOverall(total, totalTarget, bxTarget, mzTarget, bxActual, mzActual) {
@@ -2553,12 +2611,12 @@ function renderRtMonthly(bxTarget, mzTarget) {
   Object.entries(dateMap).forEach(([iso, recs]) => {
     monthlyActual += recs.reduce((s, r) => s + recEqQty(r), 0);
 
-    const breakdown = getPersonsDailyBreakdown(recs, bxTarget, mzTarget);
+    const breakdown = getPersonsDailyBreakdown(recs, bxTarget, mzTarget, iso === todayISO ? nowMins : null);
     Object.values(breakdown).forEach(p => {
       if (p.totalQty === 0) return;
       if (iso === todayISO) {
         // 今天：只算到目前已過的計畫比例（依該人「到場後」的工時流逝比例）
-        monthlyTarget += p.dayTarget * getCommittedPlanRatioForRange(nowMins, p.arrivalSeg, p.segCount);
+        monthlyTarget += p.dayTarget * getCommittedPlanRatioForPerson(nowMins, p);
       } else {
         // 過去日期：整天已結束，直接採計該人依自己班別縮放後的個人當日目標
         monthlyTarget += p.dayTarget;
