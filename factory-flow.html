@@ -224,12 +224,19 @@ body {
 .data-src { font-size: 11px; color: var(--fg-mute); font-family: var(--font-mono); letter-spacing: 0.02em; }
 .err-banner { display: none; background: var(--crit-fill); border: 1px solid var(--crit); color: var(--crit); padding: 8px 14px; font-size: 13px; font-weight: 600; }
 .empty-note { font-size: 12px; color: var(--fg-mute); padding: 6px 0; }
+.link-3d {
+  display: inline-block; margin-left: 12px; vertical-align: middle;
+  font-size: 11px; font-weight: 600; letter-spacing: 0.02em; color: var(--info); text-decoration: none;
+  border: 1px solid var(--border-up); background: var(--panel); padding: 3px 10px; border-radius: 999px;
+  transition: border-color 0.2s, transform 0.2s;
+}
+.link-3d:hover { border-color: var(--info); transform: translateX(2px); }
 </style>
 
 <div class="shell">
   <div class="topbar">
     <div class="title-group">
-      <div class="title">補漆房 <span class="accent">流程看板</span></div>
+      <div class="title">補漆房 <span class="accent">流程看板</span><a class="link-3d" href="factory-flow-3d.html">🧊 3D 數位孿生看板 →</a></div>
       <div class="subtitle">裕器工業 · 塗裝部門 · 下線 → 整修 → 補漆 → 終檢</div>
       <div class="data-src" id="data-src">資料來源：Google Sheet · 讀取中…</div>
     </div>
@@ -296,12 +303,13 @@ body {
       <span class="ttl">現場流程 · Factory Floor</span>
       <span class="meta">點擊工站查看詳細</span>
     </div>
-    <svg id="floor-svg" viewBox="0 0 1200 500" preserveAspectRatio="xMidYMid meet" role="img" aria-label="factory floor">
+    <svg id="floor-svg" viewBox="-60 0 1500 500" preserveAspectRatio="xMidYMid meet" role="img" aria-label="factory floor">
       <defs>
-        <path id="path-u-r" d="M 190 210 L 310 210" />
-        <path id="path-r-p" d="M 490 210 L 610 190" />
-        <path id="path-r-f-direct" d="M 440 295 Q 465 345, 500 345 L 800 345 Q 835 345, 860 295" />
-        <path id="path-p-f" d="M 790 190 L 820 210" />
+        <!-- 工站：寬 170、y 140~310，中心 x = 165 / 515 / 865 / 1215，中心 y = 225 -->
+        <path id="path-u-r" d="M 250 225 L 430 225" />
+        <path id="path-r-p" d="M 600 225 L 780 225" />
+        <path id="path-r-f-direct" d="M 515 310 L 515 380 L 1215 380 L 1215 310" />
+        <path id="path-p-f" d="M 950 225 L 1130 225" />
         <marker id="arrow-ok" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
           <path d="M 0 0 L 7 4 L 0 8 z" fill="var(--ok)" opacity="0.6"/>
         </marker>
@@ -313,29 +321,29 @@ body {
         </pattern>
       </defs>
 
-      <rect width="1200" height="500" fill="url(#grid)"/>
+      <rect x="-60" width="1500" height="500" fill="url(#grid)"/>
 
       <!-- Zone labels (floor markings) -->
-      <text x="110" y="60" class="flow-label" text-anchor="middle">ZONE A · 下線區</text>
-      <text x="400" y="60" class="flow-label" text-anchor="middle">ZONE B · 整修區</text>
-      <text x="700" y="60" class="flow-label" text-anchor="middle">ZONE C · 補漆區</text>
-      <text x="920" y="60" class="flow-label" text-anchor="middle">ZONE D · 終檢區</text>
-      <line x1="40" y1="70" x2="180" y2="70" stroke="var(--border-up)" stroke-width="1"/>
-      <line x1="330" y1="70" x2="470" y2="70" stroke="var(--border-up)" stroke-width="1"/>
-      <line x1="630" y1="70" x2="770" y2="70" stroke="var(--border-up)" stroke-width="1"/>
-      <line x1="850" y1="70" x2="990" y2="70" stroke="var(--border-up)" stroke-width="1"/>
+      <text x="165" y="60" class="flow-label" text-anchor="middle">ZONE A · 下線區</text>
+      <text x="515" y="60" class="flow-label" text-anchor="middle">ZONE B · 整修區</text>
+      <text x="865" y="60" class="flow-label" text-anchor="middle">ZONE C · 補漆區</text>
+      <text x="1215" y="60" class="flow-label" text-anchor="middle">ZONE D · 終檢區</text>
+      <line x1="95" y1="70" x2="235" y2="70" stroke="var(--border-up)" stroke-width="1"/>
+      <line x1="445" y1="70" x2="585" y2="70" stroke="var(--border-up)" stroke-width="1"/>
+      <line x1="795" y1="70" x2="935" y2="70" stroke="var(--border-up)" stroke-width="1"/>
+      <line x1="1145" y1="70" x2="1285" y2="70" stroke="var(--border-up)" stroke-width="1"/>
 
       <!-- Flow lines -->
-      <path class="flow-line main" d="M 190 210 L 310 210" marker-end="url(#arrow-ok)"/>
-      <path class="flow-line rework" d="M 490 210 L 610 190" marker-end="url(#arrow-warn)"/>
-      <path class="flow-line direct" d="M 440 295 Q 465 345, 500 345 L 800 345 Q 835 345, 860 295" marker-end="url(#arrow-ok)"/>
-      <path class="flow-line main" d="M 790 190 L 820 210" marker-end="url(#arrow-ok)"/>
+      <path class="flow-line main" d="M 250 225 L 430 225" marker-end="url(#arrow-ok)"/>
+      <path class="flow-line rework" d="M 600 225 L 780 225" marker-end="url(#arrow-warn)"/>
+      <path class="flow-line direct" d="M 515 310 L 515 380 L 1215 380 L 1215 310" marker-end="url(#arrow-ok)"/>
+      <path class="flow-line rework" d="M 950 225 L 1130 225" marker-end="url(#arrow-warn)"/>
 
-      <!-- Flow labels -->
-      <text x="250" y="200" class="flow-label" text-anchor="middle">下線 → 整修</text>
-      <text x="550" y="180" class="flow-label" text-anchor="middle" id="flow-repaint">需補漆 —</text>
-      <text x="650" y="365" class="flow-label" text-anchor="middle" id="flow-fpy">直行 —</text>
-      <text x="810" y="180" class="flow-label" text-anchor="middle">補完 → 終檢</text>
+      <!-- Flow labels（與流線保持 ≥ 15px 間距） -->
+      <text x="340" y="205" class="flow-label" text-anchor="middle">下線 → 整修</text>
+      <text x="690" y="205" class="flow-label" text-anchor="middle" id="flow-repaint">需補漆 —</text>
+      <text x="1040" y="205" class="flow-label" text-anchor="middle">補完 → 終檢</text>
+      <text x="865" y="362" class="flow-label" text-anchor="middle" id="flow-fpy">直行 —</text>
 
       <!-- Flowing particles -->
       <g>
@@ -373,52 +381,52 @@ body {
       </g>
 
       <!-- Station: 下線（無系統資料，維持每日隨機 + 緩慢遞減） -->
-      <g class="station" data-id="unload" data-name="下線區" transform="translate(40, 140)">
-        <rect class="station-rect ok" width="150" height="170" rx="4"/>
-        <text class="station-name" x="75" y="36" text-anchor="middle">下線</text>
-        <text class="station-sub" x="75" y="60" text-anchor="middle">UNLOAD · 剩餘</text>
-        <text class="station-count" id="unload-count" x="75" y="118" text-anchor="middle">400</text>
-        <text class="station-sub" x="75" y="144" text-anchor="middle">PCS REMAINING</text>
-        <text class="station-pct ok" id="unload-pct" x="75" y="162" text-anchor="middle">▼ 處理中</text>
+      <g class="station" data-id="unload" data-name="下線區" transform="translate(80, 140)">
+        <rect class="station-rect ok" width="170" height="170" rx="4"/>
+        <text class="station-name" x="85" y="36" text-anchor="middle">下線</text>
+        <text class="station-sub" x="85" y="60" text-anchor="middle">UNLOAD · 剩餘</text>
+        <text class="station-count" id="unload-count" x="85" y="118" text-anchor="middle">400</text>
+        <text class="station-sub" x="85" y="144" text-anchor="middle">PCS REMAINING</text>
+        <text class="station-pct ok" id="unload-pct" x="85" y="162" text-anchor="middle">▼ 處理中</text>
       </g>
 
       <!-- Station: 整修 -->
-      <g class="station" data-id="rework" data-name="整修區" transform="translate(310, 140)">
-        <rect class="station-rect" id="st-rework-rect" width="180" height="170" rx="4"/>
-        <text class="station-name" x="90" y="36" text-anchor="middle">整修</text>
-        <text class="station-sub" id="st-rework-sub" x="90" y="60" text-anchor="middle">REWORK · — 人</text>
-        <text class="station-count" id="st-rework-count" x="90" y="118" text-anchor="middle">—</text>
-        <text class="station-sub" x="90" y="144" text-anchor="middle">PCS · 今日筆數</text>
-        <text class="station-pct ok" id="st-rework-pct" x="90" y="162" text-anchor="middle"></text>
+      <g class="station" data-id="rework" data-name="整修區" transform="translate(430, 140)">
+        <rect class="station-rect" id="st-rework-rect" width="170" height="170" rx="4"/>
+        <text class="station-name" x="85" y="36" text-anchor="middle">整修</text>
+        <text class="station-sub" id="st-rework-sub" x="85" y="60" text-anchor="middle">REWORK · — 人</text>
+        <text class="station-count" id="st-rework-count" x="85" y="118" text-anchor="middle">—</text>
+        <text class="station-sub" x="85" y="144" text-anchor="middle">PCS · 今日筆數</text>
+        <text class="station-pct ok" id="st-rework-pct" x="85" y="162" text-anchor="middle"></text>
         <g id="st-rework-dots"></g>
       </g>
 
       <!-- Station: 補漆 -->
-      <g class="station" data-id="paint" data-name="補漆區" transform="translate(610, 140)">
-        <rect class="station-rect" id="st-paint-rect" width="180" height="170" rx="4"/>
-        <text class="station-name" x="90" y="36" text-anchor="middle">補漆</text>
-        <text class="station-sub" id="st-paint-sub" x="90" y="60" text-anchor="middle">TOUCH-UP · — 人</text>
-        <text class="station-count" id="st-paint-count" x="90" y="118" text-anchor="middle">—</text>
-        <text class="station-sub" x="90" y="144" text-anchor="middle">PCS · 今日筆數</text>
-        <text class="station-pct warn" id="st-paint-pct" x="90" y="162" text-anchor="middle"></text>
+      <g class="station" data-id="paint" data-name="補漆區" transform="translate(780, 140)">
+        <rect class="station-rect" id="st-paint-rect" width="170" height="170" rx="4"/>
+        <text class="station-name" x="85" y="36" text-anchor="middle">補漆</text>
+        <text class="station-sub" id="st-paint-sub" x="85" y="60" text-anchor="middle">TOUCH-UP · — 人</text>
+        <text class="station-count" id="st-paint-count" x="85" y="118" text-anchor="middle">—</text>
+        <text class="station-sub" x="85" y="144" text-anchor="middle">PCS · 今日筆數</text>
+        <text class="station-pct warn" id="st-paint-pct" x="85" y="162" text-anchor="middle"></text>
         <g id="st-paint-dots"></g>
       </g>
 
       <!-- Station: 終檢 -->
-      <g class="station" data-id="final" data-name="終檢區" transform="translate(820, 140)">
-        <rect class="station-rect" id="st-final-rect" width="180" height="170" rx="4"/>
-        <text class="station-name" x="90" y="36" text-anchor="middle">終檢</text>
-        <text class="station-sub" id="st-final-sub" x="90" y="60" text-anchor="middle">FINAL · — 人</text>
-        <text class="station-count" id="st-final-count" x="90" y="118" text-anchor="middle">—</text>
-        <text class="station-sub" x="90" y="144" text-anchor="middle">PCS · 今日筆數</text>
-        <text class="station-pct ok" id="st-final-pct" x="90" y="162" text-anchor="middle"></text>
+      <g class="station" data-id="final" data-name="終檢區" transform="translate(1130, 140)">
+        <rect class="station-rect" id="st-final-rect" width="170" height="170" rx="4"/>
+        <text class="station-name" x="85" y="36" text-anchor="middle">終檢</text>
+        <text class="station-sub" id="st-final-sub" x="85" y="60" text-anchor="middle">FINAL · — 人</text>
+        <text class="station-count" id="st-final-count" x="85" y="118" text-anchor="middle">—</text>
+        <text class="station-sub" x="85" y="144" text-anchor="middle">PCS · 今日筆數</text>
+        <text class="station-pct ok" id="st-final-pct" x="85" y="162" text-anchor="middle"></text>
         <g id="st-final-dots"></g>
       </g>
 
       <!-- Timeline strip -->
-      <text x="40" y="420" class="flow-label">近 2 小時流動 · 每 10 分鐘（整修＋補漆＋終檢 筆數）</text>
-      <g transform="translate(40, 425)">
-        <rect width="1120" height="50" fill="var(--panel-up)" stroke="var(--border)" stroke-width="0.5"/>
+      <text x="80" y="420" class="flow-label">近 2 小時流動 · 每 10 分鐘（整修＋補漆＋終檢 筆數）</text>
+      <g transform="translate(80, 425)">
+        <rect width="1220" height="50" fill="var(--panel-up)" stroke="var(--border)" stroke-width="0.5"/>
         <polyline id="floor-trend" points="" fill="var(--ok-fill)" stroke="var(--ok)" stroke-width="1.5"/>
       </g>
     </svg>
@@ -652,7 +660,7 @@ body {
     const dots = document.getElementById(`st-${key}-dots`);
     const shown = s.workers.slice(0, 12), n = shown.length;
     dots.innerHTML = shown.map((w, i) =>
-      `<circle class="worker-dot${w.active ? '' : ' off'}" cx="${90 - (n - 1) * 6 + i * 12}" cy="76" r="3.5"/>`).join('');
+      `<circle class="worker-dot${w.active ? '' : ' off'}" cx="${85 - (n - 1) * 6 + i * 12}" cy="76" r="3.5"/>`).join('');
   }
 
   function renderAll() {
@@ -703,11 +711,11 @@ body {
     });
     const maxTrend = Math.max(1, Math.max.apply(null, trend));
     const polyPts = trend.map((v, i) => {
-      const x = (i / (trend.length - 1)) * 1120;
+      const x = (i / (trend.length - 1)) * 1220;
       const y = 50 - (v / maxTrend) * 40;
       return x + ',' + y;
     }).join(' ');
-    document.getElementById('floor-trend').setAttribute('points', '0,50 ' + polyPts + ' 1120,50');
+    document.getElementById('floor-trend').setAttribute('points', '0,50 ' + polyPts + ' 1220,50');
   }
 
   // ── 詳細面板 ──────────────────────────────────────────────────────────────
