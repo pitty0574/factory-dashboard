@@ -123,10 +123,10 @@ body {
 .station-rect.ok { stroke: var(--ok); fill: var(--ok-fill); }
 .station-rect.warn { stroke: var(--warn); fill: var(--warn-fill); }
 .station-rect.crit { stroke: var(--crit); fill: var(--crit-fill); }
-.station-name { fill: var(--fg); font-size: 15px; font-weight: 600; }
-.station-count { fill: var(--fg); font-size: 28px; font-weight: 700; font-family: var(--font-mono); }
-.station-sub { fill: var(--fg-mute); font-size: 10px; letter-spacing: 0.08em; }
-.station-pct { font-size: 11px; font-family: var(--font-mono); font-weight: 600; }
+.station-name { fill: var(--fg); font-size: 20px; font-weight: 600; }
+.station-count { fill: var(--fg); font-size: 40px; font-weight: 700; font-family: var(--font-mono); }
+.station-sub { fill: var(--fg-mute); font-size: 13px; letter-spacing: 0.08em; }
+.station-pct { font-size: 14px; font-family: var(--font-mono); font-weight: 600; }
 .station-pct.ok { fill: var(--ok); }
 .station-pct.warn { fill: var(--warn); }
 .station-pct.crit { fill: var(--crit); }
@@ -139,7 +139,7 @@ body {
 .flow-line.direct { stroke: var(--ok); stroke-dasharray: none; stroke-width: 2.5; opacity: 0.4; }
 .flow-line.rework { stroke: var(--warn); stroke-dasharray: none; stroke-width: 2; opacity: 0.4; }
 
-.flow-label { fill: var(--fg-mute); font-size: 10px; font-family: var(--font-mono); letter-spacing: 0.05em; }
+.flow-label { fill: var(--fg-mute); font-size: 13px; font-family: var(--font-mono); letter-spacing: 0.05em; }
 
 .particle { fill: var(--ok); }
 .particle.warn { fill: var(--warn); }
@@ -300,7 +300,7 @@ body {
       <defs>
         <path id="path-u-r" d="M 190 210 L 310 210" />
         <path id="path-r-p" d="M 490 210 L 610 190" />
-        <path id="path-r-f-direct" d="M 490 210 Q 650 320, 820 230" />
+        <path id="path-r-f-direct" d="M 440 265 Q 465 310, 500 310 L 800 310 Q 835 310, 860 265" />
         <path id="path-p-f" d="M 790 190 L 820 210" />
         <marker id="arrow-ok" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
           <path d="M 0 0 L 7 4 L 0 8 z" fill="var(--ok)" opacity="0.6"/>
@@ -328,13 +328,13 @@ body {
       <!-- Flow lines -->
       <path class="flow-line main" d="M 190 210 L 310 210" marker-end="url(#arrow-ok)"/>
       <path class="flow-line rework" d="M 490 210 L 610 190" marker-end="url(#arrow-warn)"/>
-      <path class="flow-line direct" d="M 490 210 Q 650 320, 820 230" marker-end="url(#arrow-ok)"/>
+      <path class="flow-line direct" d="M 440 265 Q 465 310, 500 310 L 800 310 Q 835 310, 860 265" marker-end="url(#arrow-ok)"/>
       <path class="flow-line main" d="M 790 190 L 820 210" marker-end="url(#arrow-ok)"/>
 
       <!-- Flow labels -->
       <text x="250" y="200" class="flow-label" text-anchor="middle">下線 → 整修</text>
       <text x="550" y="180" class="flow-label" text-anchor="middle" id="flow-repaint">需補漆 —</text>
-      <text x="650" y="340" class="flow-label" text-anchor="middle" id="flow-fpy">直行 —</text>
+      <text x="650" y="328" class="flow-label" text-anchor="middle" id="flow-fpy">直行 —</text>
       <text x="810" y="180" class="flow-label" text-anchor="middle">補完 → 終檢</text>
 
       <!-- Flowing particles -->
