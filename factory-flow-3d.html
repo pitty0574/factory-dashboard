@@ -1,0 +1,1115 @@
+<!doctype html>
+<html lang="zh-TW">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>補漆房 3D 數位孿生看板 · 直線幹道版</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <style>
+    :root {
+      --bg-grad-1: #eef2f7;
+      --bg-grad-2: #dce4f0;
+      --card-bg: rgba(255, 255, 255, 0.88);
+      --card-border: rgba(255, 255, 255, 0.95);
+      --shadow: 0 10px 30px -5px rgba(15, 23, 42, 0.08), 0 4px 12px -2px rgba(15, 23, 42, 0.04);
+      --fg: #0f172a;
+      --fg-mute: #64748b;
+      --fg-dim: #94a3b8;
+      --ok: #10b981;
+      --ok-bg: rgba(16, 185, 129, 0.12);
+      --warn: #f59e0b;
+      --warn-bg: rgba(245, 158, 11, 0.12);
+      --crit: #ef4444;
+      --crit-bg: rgba(239, 68, 68, 0.12);
+      --info: #2563eb;
+      --info-bg: rgba(37, 99, 235, 0.1);
+      --purple: #7c3aed;
+      --font-ui: 'Inter', 'Noto Sans TC', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+    }
+
+    [data-theme="dark"] {
+      --bg-grad-1: #0f172a;
+      --bg-grad-2: #1e293b;
+      --card-bg: rgba(18, 26, 36, 0.86);
+      --card-border: rgba(59, 74, 98, 0.6);
+      --shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+      --fg: #f1f5f9;
+      --fg-mute: #94a3b8;
+      --fg-dim: #475569;
+    }
+
+    * { box-sizing: border-box; }
+    body, html {
+      margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden;
+      font-family: var(--font-ui); color: var(--fg);
+      background: linear-gradient(135deg, var(--bg-grad-1), var(--bg-grad-2));
+      user-select: none;
+    }
+
+    #canvas-container { position: absolute; inset: 0; z-index: 1; }
+    #labels-container { position: absolute; inset: 0; z-index: 2; pointer-events: none; overflow: hidden; }
+
+    /* 3D 工站懸浮膠囊標籤 */
+    .station-pin {
+      position: absolute; transform: translate(-50%, -100%);
+      pointer-events: auto; cursor: pointer;
+      background: var(--card-bg); backdrop-filter: blur(10px);
+      border: 2px solid var(--card-border); border-radius: 14px;
+      padding: 8px 14px; min-width: 125px;
+      box-shadow: var(--shadow);
+      transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1), border-color 0.2s;
+      display: flex; flex-direction: column; align-items: center; gap: 2px;
+    }
+    .station-pin:hover { transform: translate(-50%, -106%) scale(1.04); }
+    .station-pin.selected { border-color: var(--info); box-shadow: 0 0 0 4px var(--info-bg), var(--shadow); }
+    .station-pin::after {
+      content: ''; position: absolute; bottom: -8px; left: 50%; transform: translateX(-50%);
+      border-width: 8px 7px 0; border-style: solid;
+      border-color: var(--card-bg) transparent transparent;
+    }
+    .pin-zone { font-size: 10px; font-weight: 700; letter-spacing: 0.06em; color: var(--fg-mute); text-transform: uppercase; }
+    .pin-title { font-size: 13px; font-weight: 700; color: var(--fg); display: flex; align-items: center; gap: 5px; }
+    .pin-count { font-size: 20px; font-weight: 800; font-family: var(--font-mono); line-height: 1.1; margin: 2px 0; }
+    .pin-meta { font-size: 10px; font-family: var(--font-mono); padding: 2px 6px; border-radius: 6px; font-weight: 600; }
+    .pin-meta.ok { background: var(--ok-bg); color: var(--ok); }
+    .pin-meta.warn { background: var(--warn-bg); color: var(--warn); }
+    .pin-meta.info { background: var(--info-bg); color: var(--info); }
+
+    /* 路徑文字小標籤 (直行通道 / 需補漆) */
+    .road-badge {
+      position: absolute; transform: translate(-50%, -50%);
+      background: var(--card-bg); backdrop-filter: blur(8px);
+      border: 1px solid var(--card-border); border-radius: 999px;
+      padding: 3px 10px; font-size: 11px; font-family: var(--font-mono); font-weight: 700;
+      box-shadow: var(--shadow); white-space: nowrap;
+    }
+    .road-badge.ok { color: var(--ok); border-color: rgba(16,185,129,0.35); }
+    .road-badge.warn { color: var(--warn); border-color: rgba(245,158,11,0.35); }
+
+    /* 頂部懸浮導覽列 */
+    .hud-top {
+      position: absolute; top: 16px; left: 20px; right: 20px; z-index: 10;
+      display: flex; justify-content: space-between; align-items: center; gap: 16px;
+      pointer-events: none; flex-wrap: wrap;
+    }
+    .brand-bar {
+      pointer-events: auto;
+      display: flex; align-items: center; gap: 14px;
+      background: var(--card-bg); backdrop-filter: blur(12px);
+      border: 1px solid var(--card-border); border-radius: 14px;
+      padding: 10px 18px; box-shadow: var(--shadow);
+    }
+    .brand-cube {
+      width: 34px; height: 34px; border-radius: 9px;
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      color: #fff; display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 18px; box-shadow: 0 4px 10px rgba(37,99,235,0.35);
+    }
+    .brand-title { font-weight: 800; font-size: 16px; letter-spacing: -0.01em; }
+    .brand-sub { font-size: 11px; color: var(--fg-mute); }
+    .back-2d {
+      font-size: 11px; font-weight: 700; color: var(--info); text-decoration: none; white-space: nowrap;
+      background: var(--info-bg); border: 1px solid rgba(37,99,235,0.25); border-radius: 999px; padding: 4px 10px;
+      transition: transform 0.15s;
+    }
+    .back-2d:hover { transform: translateX(2px); }
+
+    .status-bar {
+      pointer-events: auto;
+      display: flex; align-items: center; gap: 10px;
+      background: var(--card-bg); backdrop-filter: blur(12px);
+      border: 1px solid var(--card-border); border-radius: 14px;
+      padding: 8px 14px; box-shadow: var(--shadow); font-size: 12px;
+    }
+    .live-pill {
+      display: flex; align-items: center; gap: 6px;
+      background: var(--ok-bg); color: var(--ok);
+      padding: 4px 10px; border-radius: 999px; font-weight: 700; font-size: 11px;
+    }
+    .pulse { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); animation: pulse 1.8s infinite; }
+    @keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(16,185,129,0.5); } 50% { box-shadow: 0 0 0 6px transparent; } }
+    .clock-time { font-family: var(--font-mono); font-weight: 700; font-size: 14px; }
+
+    /* ★ 左側垂直 KPI 懸浮卡片列 (移至畫面左側，不擋中間 3D 標籤) ★ */
+    .hud-kpis {
+      position: absolute; top: 84px; left: 20px; z-index: 10;
+      display: flex; flex-direction: column; gap: 10px;
+      width: 225px; pointer-events: none;
+    }
+    .kpi-card {
+      pointer-events: auto;
+      background: var(--card-bg); backdrop-filter: blur(12px);
+      border: 1px solid var(--card-border); border-radius: 14px;
+      padding: 10px 14px; width: 100%; box-shadow: var(--shadow);
+      display: flex; align-items: center; gap: 12px;
+    }
+    .kpi-icon {
+      width: 36px; height: 36px; border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 17px; flex-shrink: 0;
+    }
+    .kpi-val-wrap { display: flex; flex-direction: column; min-width: 0; }
+    .kpi-lbl { font-size: 11px; color: var(--fg-mute); font-weight: 600; }
+    .kpi-val { font-size: 21px; font-weight: 800; font-family: var(--font-mono); line-height: 1.15; }
+    .kpi-delta { font-size: 10px; color: var(--fg-mute); font-family: var(--font-mono); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    /* 右側：视角控制按鈕 + 詳細資訊抽屜 */
+    .cam-controls {
+      position: absolute; top: 84px; right: 345px; z-index: 10;
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    .cam-btn {
+      width: 36px; height: 36px; border-radius: 10px;
+      background: var(--card-bg); backdrop-filter: blur(10px);
+      border: 1px solid var(--card-border); box-shadow: var(--shadow);
+      color: var(--fg); font-size: 15px; font-weight: 700; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: background 0.15s, transform 0.15s;
+    }
+    .cam-btn:hover { transform: scale(1.06); color: var(--info); }
+
+    .hud-inspector {
+      position: absolute; top: 84px; right: 20px; width: 315px;
+      max-height: calc(100vh - 210px); z-index: 10;
+      background: var(--card-bg); backdrop-filter: blur(14px);
+      border: 1px solid var(--card-border); border-radius: 16px;
+      box-shadow: var(--shadow); display: flex; flex-direction: column; overflow: hidden;
+    }
+    .insp-header {
+      padding: 14px 16px; border-bottom: 1px solid rgba(148,163,184,0.2);
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .insp-title { font-size: 14px; font-weight: 800; }
+    .insp-sub { font-size: 11px; color: var(--fg-mute); font-family: var(--font-mono); margin-top: 2px; }
+    .insp-body { padding: 14px 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
+
+    .detail-section h4 {
+      margin: 0 0 8px; font-size: 11px; letter-spacing: 0.06em;
+      color: var(--fg-mute); text-transform: uppercase; font-weight: 700;
+    }
+    .worker-list { display: flex; flex-direction: column; gap: 5px; }
+    .worker-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 6px 10px; background: rgba(148,163,184,0.08);
+      border-radius: 8px; font-size: 12px;
+    }
+    .worker-row .id { font-family: var(--font-mono); font-weight: 700; }
+    .worker-row .name { color: var(--fg-mute); font-size: 11px; margin-left: 6px; }
+    .worker-row .count { font-family: var(--font-mono); font-weight: 700; color: var(--info); }
+
+    .breakdown { display: flex; flex-direction: column; gap: 6px; }
+    .br-row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+    .br-row .lbl { min-width: 56px; color: var(--fg-mute); font-family: var(--font-mono); font-size: 11px; }
+    .br-row .bar { flex: 1; height: 7px; background: rgba(148,163,184,0.16); border-radius: 4px; overflow: hidden; position: relative; }
+    .br-row .bar .fill { position: absolute; inset: 0 auto 0 0; background: var(--ok); border-radius: 4px; }
+    .br-row .bar .fill.warn { background: var(--warn); }
+    .br-row .val { font-family: var(--font-mono); font-weight: 700; min-width: 36px; text-align: right; font-size: 11px; }
+
+    /* 底部懸浮面板 */
+    .hud-bottom {
+      position: absolute; bottom: 16px; left: 20px; right: 20px; z-index: 10;
+      display: grid; grid-template-columns: 1.4fr 1fr; gap: 14px; pointer-events: none;
+    }
+    .bottom-card {
+      pointer-events: auto;
+      background: var(--card-bg); backdrop-filter: blur(12px);
+      border: 1px solid var(--card-border); border-radius: 16px;
+      padding: 12px 18px; box-shadow: var(--shadow);
+      display: flex; flex-direction: column; justify-content: space-between;
+    }
+    .btm-header { display: flex; justify-content: space-between; align-items: center; font-size: 12px; font-weight: 700; margin-bottom: 6px; }
+    .btm-meta { font-size: 11px; color: var(--fg-mute); font-family: var(--font-mono); font-weight: 500; }
+
+    .cta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; height: 100%; align-items: center; }
+    .nav-btn {
+      display: flex; align-items: center; gap: 10px;
+      background: rgba(148,163,184,0.09); border: 1px solid rgba(148,163,184,0.22);
+      border-radius: 12px; padding: 10px 12px; text-decoration: none; color: var(--fg);
+      transition: all 0.2s;
+    }
+    .nav-btn:hover { transform: translateY(-2px); background: rgba(37,99,235,0.08); border-color: var(--info); }
+    .nav-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .nav-title { font-weight: 700; font-size: 13px; }
+    .nav-sub { font-size: 10px; color: var(--fg-mute); font-family: var(--font-mono); margin-top: 2px; }
+
+    .err-banner {
+      position: absolute; top: 72px; left: 50%; transform: translateX(-50%); z-index: 30;
+      display: none; background: #fee2e2; border: 1px solid #ef4444; color: #b91c1c;
+      padding: 6px 16px; border-radius: 999px; font-size: 12px; font-weight: 700; box-shadow: var(--shadow);
+    }
+
+    @media (max-width: 900px) {
+      .hud-kpis { flex-direction: row; width: auto; max-width: 100%; }
+      .kpi-card { width: auto; min-width: 150px; }
+      .hud-inspector { display: none; }
+      .cam-controls { right: 20px; }
+      .hud-bottom { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+  <div id="canvas-container"></div>
+  <div id="labels-container">
+    <!-- 路徑動態數據膠囊 -->
+    <div class="road-badge warn" id="badge-repaint">需補漆 —</div>
+    <div class="road-badge ok" id="badge-fpy">直行通道 —</div>
+  </div>
+
+  <div class="err-banner" id="err-banner">⚠️ 資料讀取失敗，請確認網路或系統設定</div>
+
+  <!-- 頂部導覽列 -->
+  <div class="hud-top">
+    <div class="brand-bar">
+      <div class="brand-cube">裕</div>
+      <div>
+        <div class="brand-title">PaintTrack 3D · 補漆房數位孿生看板</div>
+        <div class="brand-sub" id="data-src">裕器工業 · 塗裝部門 · Google Sheet 連線中…</div>
+      </div>
+      <a class="back-2d" href="factory-flow.html">🔙 2D 流程看板 →</a>
+    </div>
+
+    <div class="status-bar">
+      <div class="live-pill"><span class="pulse"></span>LIVE</div>
+      <span class="clock-time" id="clock">--:--:--</span>
+      <button class="cam-btn" id="btn-layout" title="切換橫向/縱向視角" style="width:auto; height:28px; padding:0 10px; font-size:11px;">🔃 切換橫/縱向</button>
+      <button class="cam-btn" id="theme-toggle" title="切換日/夜模式" style="width:auto; height:28px; padding:0 10px; font-size:11px;">🌓 主題</button>
+    </div>
+  </div>
+
+  <!-- 左側垂直 KPI 卡片欄 -->
+  <div class="hud-kpis">
+    <div class="kpi-card">
+      <div class="kpi-icon" style="background:var(--ok-bg); color:var(--ok);">📦</div>
+      <div class="kpi-val-wrap">
+        <span class="kpi-lbl">今日通過終檢</span>
+        <span class="kpi-val" id="kpi-pass">—</span>
+        <span class="kpi-delta" id="kpi-pass-delta">終檢階段 今日筆數</span>
+      </div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-icon" style="background:var(--info-bg); color:var(--info);">⚡</div>
+      <div class="kpi-val-wrap">
+        <span class="kpi-lbl">直行率 FPY</span>
+        <span class="kpi-val" id="kpi-fpy">—</span>
+        <span class="kpi-delta" id="kpi-fpy-delta">(終檢 − 補漆) ÷ 終檢</span>
+      </div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-icon" style="background:var(--warn-bg); color:var(--warn);">🎨</div>
+      <div class="kpi-val-wrap">
+        <span class="kpi-lbl">需補漆比例</span>
+        <span class="kpi-val" id="kpi-repaint">—</span>
+        <span class="kpi-delta" id="kpi-repaint-delta">補漆 ÷ 終檢</span>
+      </div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-icon" style="background:rgba(124,58,237,0.12); color:var(--purple);">👷</div>
+      <div class="kpi-val-wrap">
+        <span class="kpi-lbl">現場在場人力</span>
+        <span class="kpi-val" id="kpi-workers">—</span>
+        <span class="kpi-delta" id="kpi-workers-delta">今日有實績工號</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3D 鏡頭控制鈕 -->
+  <div class="cam-controls">
+    <button class="cam-btn" id="btn-zoom-in" title="拉近鏡頭">＋</button>
+    <button class="cam-btn" id="btn-zoom-out" title="拉遠鏡頭">－</button>
+    <button class="cam-btn" id="btn-reset-cam" title="重置等距視角">⟲</button>
+  </div>
+
+  <!-- 右側細節檢查面板 -->
+  <div class="hud-inspector">
+    <div class="insp-header">
+      <div>
+        <div class="insp-title" id="detail-name">整體概覽 · Overview</div>
+        <div class="insp-sub" id="detail-meta">點擊 3D 工站檢視明細</div>
+      </div>
+      <button class="cam-btn" id="btn-overview" style="width:auto; height:26px; padding:0 8px; font-size:11px;">總覽</button>
+    </div>
+    <div class="insp-body" id="detail-content">
+      <div style="font-size:12px; color:var(--fg-mute);">正在讀取 Google Sheet 即時資料…</div>
+    </div>
+  </div>
+
+  <!-- 底部懸浮艙：趨勢圖 + 現場碼表快速入口 -->
+  <div class="hud-bottom">
+    <div class="bottom-card">
+      <div class="btm-header">
+        <span>📈 近 2 小時產線流動趨勢（每 10 分鐘實績筆數）</span>
+        <span class="btm-meta" id="flow-summary">直行 — ｜ 需補漆 —</span>
+      </div>
+      <svg viewBox="0 0 600 42" style="width:100%; height:42px; overflow:visible;">
+        <defs>
+          <linearGradient id="trendGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#10b981" stop-opacity="0.35"/>
+            <stop offset="100%" stop-color="#10b981" stop-opacity="0.0"/>
+          </linearGradient>
+        </defs>
+        <polygon id="floor-trend-area" points="0,42 600,42" fill="url(#trendGrad)"/>
+        <polyline id="floor-trend" points="" fill="none" stroke="var(--ok)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+
+    <div class="bottom-card">
+      <div class="btm-header">
+        <span>🚀 現場工站碼表監控入口</span>
+        <span class="btm-meta">一鍵切換子看板</span>
+      </div>
+      <div class="cta-grid">
+        <a class="nav-btn" href="paint-stations.html#rework">
+          <span class="nav-dot" style="background:var(--warn);"></span>
+          <div>
+            <div class="nav-title">進入整修區動態 →</div>
+            <div class="nav-sub" id="nav-sub-rework">— 位作業員 · — PCS</div>
+          </div>
+        </a>
+        <a class="nav-btn" href="paint-stations.html#paint">
+          <span class="nav-dot" style="background:var(--info);"></span>
+          <div>
+            <div class="nav-title">進入補漆區動態 →</div>
+            <div class="nav-sub" id="nav-sub-paint">— 位作業員 · — PCS</div>
+          </div>
+        </a>
+      </div>
+    </div>
+  </div>
+
+<script>
+(function(){
+  // ============================================================================
+  // PART 1: SimCity 3D 場景 — 一字型主幹道 + 匚字型直角繞道
+  // ============================================================================
+  const container = document.getElementById('canvas-container');
+  const labelsContainer = document.getElementById('labels-container');
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 0.1, 1000);
+  // 稍微拉遠高度與距離，讓左右側邊欄與中央 3D 廠房保持舒適間距
+  camera.position.set(0, 36, 48);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  container.appendChild(renderer.domElement);
+
+  const controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.06;
+  controls.maxPolarAngle = Math.PI / 2.15;
+  controls.minDistance = 18;
+  controls.maxDistance = 85;
+  controls.target.set(0, 0, 1.0);
+
+  const ambientLight = new THREE.AmbientLight(0xffffff, 0.78);
+  scene.add(ambientLight);
+
+  const dirLight = new THREE.DirectionalLight(0xfffbeb, 0.85);
+  dirLight.position.set(22, 40, 28);
+  dirLight.castShadow = true;
+  dirLight.shadow.mapSize.width = 2048;
+  dirLight.shadow.mapSize.height = 2048;
+  const d = 30;
+  dirLight.shadow.camera.left = -d; dirLight.shadow.camera.right = d;
+  dirLight.shadow.camera.top = d;  dirLight.shadow.camera.bottom = -d;
+  dirLight.shadow.bias = -0.0005;
+  scene.add(dirLight);
+
+  // 廠區地板底座
+  const floorGroup = new THREE.Group();
+  scene.add(floorGroup);
+
+  const baseGeo = new THREE.BoxGeometry(48, 1.2, 24);
+  const baseMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.85 });
+  const baseMesh = new THREE.Mesh(baseGeo, baseMat);
+  baseMesh.position.y = -0.6;
+  baseMesh.receiveShadow = true;
+  floorGroup.add(baseMesh);
+
+  const gridHelper = new THREE.GridHelper(46, 46, 0xcbd5e1, 0xe2e8f0);
+  gridHelper.position.y = 0.01;
+  floorGroup.add(gridHelper);
+
+  function createTree(x, z) {
+    const g = new THREE.Group();
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.22, 0.8, 8), new THREE.MeshStandardMaterial({color: 0x92400e}));
+    trunk.position.y = 0.4;
+    const leaves = new THREE.Mesh(new THREE.SphereGeometry(0.75, 12, 12), new THREE.MeshStandardMaterial({color: 0x4ade80, roughness: 0.7}));
+    leaves.position.y = 1.2;
+    leaves.castShadow = true;
+    g.add(trunk, leaves);
+    g.position.set(x, 0, z);
+    floorGroup.add(g);
+  }
+  createTree(-21, -9.5); createTree(-21, 9.5); createTree(21, -9.5); createTree(21, 9.5);
+
+  const MAIN_Z = -1.5;
+  const BYPASS_Z = 6.2;
+
+  const STATIONS_CFG = {
+    unload: { id: 'unload', zone: 'ZONE A', title: '下線區', pos: new THREE.Vector3(-15, 0, MAIN_Z), color: 0x10b981 },
+    rework: { id: 'rework', zone: 'ZONE B', title: '整修區', pos: new THREE.Vector3(-5,  0, MAIN_Z), color: 0x3b82f6 },
+    paint:  { id: 'paint',  zone: 'ZONE C', title: '補漆區', pos: new THREE.Vector3(5,   0, MAIN_Z), color: 0xf59e0b },
+    final:  { id: 'final',  zone: 'ZONE D', title: '終檢區', pos: new THREE.Vector3(15,  0, MAIN_Z), color: 0x10b981 },
+  };
+
+  const stationMeshes = {};
+  const workerGroups = { rework: new THREE.Group(), paint: new THREE.Group(), final: new THREE.Group() };
+
+  function createPlatform(w, d, borderHex) {
+    const group = new THREE.Group();
+    const pad = new THREE.Mesh(
+      new THREE.BoxGeometry(w, 0.25, d),
+      new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6 })
+    );
+    pad.position.y = 0.125;
+    pad.receiveShadow = true; pad.castShadow = true;
+    group.add(pad);
+
+    const border = new THREE.Mesh(
+      new THREE.BoxGeometry(w + 0.25, 0.12, d + 0.25),
+      new THREE.MeshStandardMaterial({ color: borderHex, roughness: 0.4 })
+    );
+    border.position.y = 0.06;
+    group.add(border);
+    return { group, pad, border };
+  }
+
+  // 1. 下線區
+  (function buildUnload(){
+    const { group, border } = createPlatform(6.0, 6.0, 0x10b981);
+    group.position.copy(STATIONS_CFG.unload.pos);
+    for (let i = 0; i < 4; i++) {
+      const px = (i % 2) * 1.9 - 0.95;
+      const pz = Math.floor(i / 2) * 1.9 - 0.95;
+      const pallet = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.18, 1.4), new THREE.MeshStandardMaterial({color: 0xd97706}));
+      pallet.position.set(px, 0.34, pz);
+      const cargoH = 0.9 + (i % 2) * 0.45;
+      const cargo = new THREE.Mesh(new THREE.BoxGeometry(1.25, cargoH, 1.25), new THREE.MeshStandardMaterial({color: 0xcbd5e1, roughness: 0.5}));
+      cargo.position.set(px, 0.43 + cargoH/2, pz);
+      cargo.castShadow = true;
+      group.add(pallet, cargo);
+    }
+    const fl = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.9, 0.8), new THREE.MeshStandardMaterial({color: 0xfacc15}));
+    fl.position.set(-2.0, 0.7, 1.8); fl.castShadow = true;
+    group.add(fl);
+
+    group.userData = { id: 'unload' };
+    scene.add(group);
+    stationMeshes.unload = { group, border };
+  })();
+
+  // 2. 整修區
+  (function buildRework(){
+    const { group, border } = createPlatform(6.4, 6.0, 0x3b82f6);
+    group.position.copy(STATIONS_CFG.rework.pos);
+    for (let i = -1; i <= 1; i += 2) {
+      const table = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.85, 3.4), new THREE.MeshStandardMaterial({color: 0x475569}));
+      table.position.set(i * 1.45, 0.65, 0); table.castShadow = true;
+      const top = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.12, 3.6), new THREE.MeshStandardMaterial({color: 0x38bdf8}));
+      top.position.set(i * 1.45, 1.12, 0);
+      group.add(table, top);
+    }
+    const arch = new THREE.Mesh(new THREE.BoxGeometry(5.2, 0.15, 0.3), new THREE.MeshStandardMaterial({color: 0xe2e8f0, emissive: 0xffffff, emissiveIntensity: 0.3}));
+    arch.position.set(0, 2.7, 0);
+    group.add(arch, workerGroups.rework);
+    group.userData = { id: 'rework' };
+    scene.add(group);
+    stationMeshes.rework = { group, border };
+  })();
+
+  // 3. 補漆區
+  (function buildPaint(){
+    const { group, border } = createPlatform(6.4, 6.0, 0xf59e0b);
+    group.position.copy(STATIONS_CFG.paint.pos);
+
+    const booth = new THREE.Mesh(
+      new THREE.BoxGeometry(5.0, 2.7, 4.0),
+      new THREE.MeshPhysicalMaterial({ color: 0x93c5fd, transparent: true, opacity: 0.38, roughness: 0.1 })
+    );
+    booth.position.set(0, 1.6, 0); booth.castShadow = true;
+
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(5.2, 0.32, 4.2), new THREE.MeshStandardMaterial({color: 0xf59e0b}));
+    roof.position.set(0, 3.1, 0); roof.castShadow = true;
+
+    const duct = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 1.1, 16), new THREE.MeshStandardMaterial({color: 0x94a3b8}));
+    duct.position.set(1.3, 3.7, -0.6);
+
+    group.add(booth, roof, duct, workerGroups.paint);
+    group.userData = { id: 'paint' };
+    scene.add(group);
+    stationMeshes.paint = { group, border };
+  })();
+
+  // 4. 終檢區
+  (function buildFinal(){
+    const { group, border } = createPlatform(6.4, 6.0, 0x10b981);
+    group.position.copy(STATIONS_CFG.final.pos);
+
+    const p1 = new THREE.Mesh(new THREE.BoxGeometry(0.4, 2.8, 4.2), new THREE.MeshStandardMaterial({color: 0x1e293b}));
+    p1.position.set(-1.1, 1.6, 0); p1.castShadow = true;
+    const lightStrip = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.25, 4.3), new THREE.MeshStandardMaterial({color: 0x10b981, emissive: 0x10b981, emissiveIntensity: 0.6}));
+    lightStrip.position.set(-1.1, 3.05, 0);
+
+    const desk = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.85, 3.2), new THREE.MeshStandardMaterial({color: 0x334155}));
+    desk.position.set(1.0, 0.65, 0); desk.castShadow = true;
+
+    group.add(p1, lightStrip, desk, workerGroups.final);
+    group.userData = { id: 'final' };
+    scene.add(group);
+    stationMeshes.final = { group, border };
+  })();
+
+  function update3DWorkers(stationKey, workers) {
+    const g = workerGroups[stationKey];
+    if (!g) return;
+    while (g.children.length > 0) g.remove(g.children[0]);
+
+    workers.slice(0, 10).forEach((w, idx) => {
+      const avatar = new THREE.Group();
+      const bodyColor = w.active ? 0x2563eb : 0x94a3b8;
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.26, 0.62, 12), new THREE.MeshStandardMaterial({color: bodyColor}));
+      body.position.y = 0.56;
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.20, 12, 12), new THREE.MeshStandardMaterial({color: w.active ? 0xfbbf24 : 0xcbd5e1}));
+      head.position.y = 1.04;
+      avatar.add(body, head);
+
+      const row = Math.floor(idx / 5);
+      const col = idx % 5;
+      avatar.position.set(-1.8 + col * 0.9, 0, -2.3 - row * 0.6);
+      g.add(avatar);
+    });
+  }
+
+  // 動線：3 條直線幹道 + 1 條匚字型直角繞道
+  const pathUnloadToRework = new THREE.LineCurve3(
+    new THREE.Vector3(-12.0, 0.12, MAIN_Z),
+    new THREE.Vector3(-8.2,  0.12, MAIN_Z)
+  );
+  const pathReworkToPaint = new THREE.LineCurve3(
+    new THREE.Vector3(-1.8, 0.12, MAIN_Z),
+    new THREE.Vector3(1.8,  0.12, MAIN_Z)
+  );
+  const pathPaintToFinal = new THREE.LineCurve3(
+    new THREE.Vector3(8.2,  0.12, MAIN_Z),
+    new THREE.Vector3(11.8, 0.12, MAIN_Z)
+  );
+  const pathDirectBypass = new THREE.CurvePath();
+  const pB1 = new THREE.Vector3(-5.0, 0.12, MAIN_Z + 3.0);
+  const pB2 = new THREE.Vector3(-5.0, 0.12, BYPASS_Z);
+  const pB3 = new THREE.Vector3(15.0, 0.12, BYPASS_Z);
+  const pB4 = new THREE.Vector3(15.0, 0.12, MAIN_Z + 3.0);
+  pathDirectBypass.add(new THREE.LineCurve3(pB1, pB2));
+  pathDirectBypass.add(new THREE.LineCurve3(pB2, pB3));
+  pathDirectBypass.add(new THREE.LineCurve3(pB3, pB4));
+
+  function drawFlatSegment(v1, v2, hex, width = 0.55) {
+    const len = v1.distanceTo(v2);
+    const geo = new THREE.BoxGeometry(len + width * 0.5, 0.05, width);
+    const mat = new THREE.MeshStandardMaterial({ color: hex, roughness: 0.4 });
+    const mesh = new THREE.Mesh(geo, mat);
+    const mid = v1.clone().add(v2).multiplyScalar(0.5);
+    mesh.position.copy(mid);
+    const angle = Math.atan2(v2.z - v1.z, v2.x - v1.x);
+    mesh.rotation.y = -angle;
+    scene.add(mesh);
+
+    const arrowGeo = new THREE.ConeGeometry(0.28, 0.6, 3);
+    arrowGeo.rotateZ(-Math.PI / 2);
+    const arrowMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    const arrow = new THREE.Mesh(arrowGeo, arrowMat);
+    arrow.position.copy(mid).add(new THREE.Vector3(0, 0.04, 0));
+    arrow.scale.set(1, 0.15, 1);
+    arrow.rotation.y = -angle;
+    scene.add(arrow);
+  }
+
+  drawFlatSegment(new THREE.Vector3(-12.0, 0.05, MAIN_Z), new THREE.Vector3(-8.2, 0.05, MAIN_Z), 0x10b981);
+  drawFlatSegment(new THREE.Vector3(-1.8,  0.05, MAIN_Z), new THREE.Vector3(1.8,  0.05, MAIN_Z), 0xf59e0b);
+  drawFlatSegment(new THREE.Vector3(8.2,   0.05, MAIN_Z), new THREE.Vector3(11.8, 0.05, MAIN_Z), 0xf59e0b);
+
+  drawFlatSegment(new THREE.Vector3(-5.0, 0.05, MAIN_Z + 3.0), new THREE.Vector3(-5.0, 0.05, BYPASS_Z), 0x10b981);
+  drawFlatSegment(new THREE.Vector3(-5.0, 0.05, BYPASS_Z),     new THREE.Vector3(15.0, 0.05, BYPASS_Z), 0x10b981);
+  drawFlatSegment(new THREE.Vector3(15.0, 0.05, BYPASS_Z),     new THREE.Vector3(15.0, 0.05, MAIN_Z + 3.0), 0x10b981);
+
+  const movingCarts = [];
+  function spawnCart(curve, colorHex, speed, offset) {
+    const cart = new THREE.Group();
+    const base = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.22, 0.52), new THREE.MeshStandardMaterial({color: colorHex}));
+    base.position.y = 0.15;
+    const part = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.28, 0.38), new THREE.MeshStandardMaterial({color: 0xffffff}));
+    part.position.y = 0.38;
+    cart.add(base, part);
+    scene.add(cart);
+    movingCarts.push({ mesh: cart, curve, speed, t: offset });
+  }
+  spawnCart(pathUnloadToRework, 0x10b981, 0.38, 0.0);
+  spawnCart(pathUnloadToRework, 0x10b981, 0.38, 0.5);
+  spawnCart(pathReworkToPaint,  0xf59e0b, 0.35, 0.2);
+  spawnCart(pathPaintToFinal,   0xf59e0b, 0.35, 0.6);
+  spawnCart(pathDirectBypass,   0x10b981, 0.14, 0.0);
+  spawnCart(pathDirectBypass,   0x10b981, 0.14, 0.33);
+  spawnCart(pathDirectBypass,   0x10b981, 0.14, 0.66);
+
+  const pinElements = {};
+  Object.values(STATIONS_CFG).forEach(cfg => {
+    const el = document.createElement('div');
+    el.className = 'station-pin';
+    el.dataset.id = cfg.id;
+    el.innerHTML = `
+      <span class="pin-zone">${cfg.zone}</span>
+      <span class="pin-title">${cfg.title}</span>
+      <span class="pin-count" id="pin-count-${cfg.id}">—</span>
+      <span class="pin-meta info" id="pin-meta-${cfg.id}">讀取中</span>
+    `;
+    el.addEventListener('click', () => selectStation(cfg.id));
+    labelsContainer.appendChild(el);
+    pinElements[cfg.id] = el;
+  });
+
+  function projectToScreen(vec3, el) {
+    const v = vec3.clone().project(camera);
+    el.style.left = `${(v.x * 0.5 + 0.5) * window.innerWidth}px`;
+    el.style.top  = `${(-(v.y * 0.5) + 0.5) * window.innerHeight}px`;
+  }
+
+  function updatePinPositions() {
+    Object.values(STATIONS_CFG).forEach(cfg => {
+      projectToScreen(cfg.pos.clone().add(new THREE.Vector3(0, 4.2, 0)), pinElements[cfg.id]);
+    });
+    projectToScreen(new THREE.Vector3(0, 0.6, MAIN_Z), document.getElementById('badge-repaint'));
+    projectToScreen(new THREE.Vector3(5.0, 0.6, BYPASS_Z), document.getElementById('badge-fpy'));
+  }
+
+  const raycaster = new THREE.Raycaster();
+  const mouse = new THREE.Vector2();
+  renderer.domElement.addEventListener('pointerdown', (e) => {
+    mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+    mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+    raycaster.setFromCamera(mouse, camera);
+    const groups = Object.values(stationMeshes).map(m => m.group);
+    const intersects = raycaster.intersectObjects(groups, true);
+    if (intersects.length > 0) {
+      let obj = intersects[0].object;
+      while (obj && (!obj.userData || !obj.userData.id)) obj = obj.parent;
+      if (obj && obj.userData && obj.userData.id) selectStation(obj.userData.id);
+    }
+  });
+
+  let isVerticalView = false;
+  document.getElementById('btn-layout').onclick = () => {
+    isVerticalView = !isVerticalView;
+    if (isVerticalView) {
+      camera.position.set(-38, 38, 1.0);
+      controls.target.set(0, 0, 1.0);
+    } else {
+      camera.position.set(0, 36, 48);
+      controls.target.set(0, 0, 1.0);
+    }
+  };
+
+  document.getElementById('btn-zoom-in').onclick = () => { camera.position.multiplyScalar(0.85); };
+  document.getElementById('btn-zoom-out').onclick = () => { camera.position.multiplyScalar(1.15); };
+  document.getElementById('btn-reset-cam').onclick = () => {
+    isVerticalView = false;
+    camera.position.set(0, 36, 48);
+    controls.target.set(0, 0, 1.0);
+  };
+  document.getElementById('btn-overview').onclick = () => {
+    selectedStation = null;
+    Object.values(pinElements).forEach(el => el.classList.remove('selected'));
+    renderOverview();
+  };
+
+  const clock3D = new THREE.Clock();
+  function animate() {
+    requestAnimationFrame(animate);
+    const dt = clock3D.getDelta();
+    movingCarts.forEach(c => {
+      c.t = (c.t + dt * c.speed) % 1;
+      const pos = c.curve.getPointAt(c.t);
+      const tangent = c.curve.getTangentAt(c.t);
+      c.mesh.position.copy(pos);
+      c.mesh.lookAt(pos.clone().add(tangent));
+    });
+    controls.update();
+    updatePinPositions();
+    renderer.render(scene, camera);
+  }
+  animate();
+
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  // ============================================================================
+  // PART 2: Google Sheet API 資料串接與統計邏輯（與 factory-flow.html 相同）
+  // ============================================================================
+  // ── Google Sheet 連線（與 person_part_analysis.html 相同的 DEFAULT_CONFIG / localStorage key）──
+  const DEFAULT_CONFIG = {
+    sheetsId: '1xQoIxoLlM4LkKjDrYZ_87uIahtebPgPcG6Hitck1T5c',
+    apiKey:   'AIzaSyBMgXHsua64mciOFJwqH4NreGI11gMXR-s',
+    sheetName: '整修日報'
+  };
+  // 分頁名稱預設值；系統設定有 sheet_name / rework_sheet_name / final_sheet_name 時以系統設定為準
+  const DEFAULT_SHEETS = { paint: DEFAULT_CONFIG.sheetName, rework: '整修階段', final: '終檢階段' };
+  const SYSTEM_SETTINGS_RANGE = '系統設定!A2:B20';
+  const REFRESH_MS = 30000;
+  const OFFLINE_SEC = 15 * 60;
+
+  function lsGet(k) { try { return localStorage.getItem(k); } catch(e) { return null; } }
+  function getConn() {
+    return {
+      id:  lsGet('gsId')  || DEFAULT_CONFIG.sheetsId,
+      key: lsGet('gsKey') || DEFAULT_CONFIG.apiKey,
+    };
+  }
+
+  async function fetchAllSheets(sheets) {
+    const { id, key } = getConn();
+    const ranges = [SYSTEM_SETTINGS_RANGE, sheets.paint + '!A:F', sheets.rework + '!A:F', sheets.final + '!A:F'];
+    const qs = ranges.map(r => 'ranges=' + encodeURIComponent(r)).join('&');
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${id}/values:batchGet?key=${key}&${qs}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
+    const vr = json.valueRanges || [];
+    const settingsRaw = {};
+    ((vr[0] && vr[0].values) || []).forEach(row => {
+      const k = (row[0] || '').trim();
+      if (k) settingsRaw[k] = row[1];
+    });
+    return {
+      settingsRaw,
+      paint:  parseRows((vr[1] && vr[1].values) || []),
+      rework: parseRows((vr[2] && vr[2].values) || []),
+      final:  parseRows((vr[3] && vr[3].values) || []),
+    };
+  }
+
+  function parseRows(values) {
+    if (!values.length) return [];
+    const col = { ts: 0, date: 1, pid: 2, model: 3, part: 4, color: 5 };
+    const header = values[0].map(h => (h || '').trim());
+    const isHeader = header[1] && !/^\d/.test(header[1]);
+    if (isHeader) {
+      header.forEach((h, i) => {
+        if (/時間戳記/.test(h))            col.ts = i;
+        else if (/記錄日期|日期/.test(h))  col.date = i;
+        else if (/工號|員工|人員/.test(h)) col.pid = i;
+        else if (/車型/.test(h))           col.model = i;
+        else if (/種類|部件/.test(h))      col.part = i;
+        else if (/顏色/.test(h))           col.color = i;
+      });
+    }
+    const out = [];
+    (isHeader ? values.slice(1) : values).forEach(row => {
+      const rawDate = (row[col.date] || '').trim();
+      const pid = (row[col.pid] || '').trim();
+      if (!rawDate || !pid) return;
+      const date = normalizeDate(rawDate);
+      if (!date) return;
+      out.push({
+        date, pid,
+        ts:    parseTimestamp((row[col.ts] || '').trim()),
+        model: (row[col.model] || '').trim(),
+        part:  (row[col.part]  || '').trim(),
+        color: (row[col.color] || '').trim().toUpperCase(),
+      });
+    });
+    return out;
+  }
+
+  function normalizeDate(s) {
+    s = s.trim().replace(/\s*(上午|下午|AM|PM)[\s\d:：]*$/i, '').trim();
+    s = s.split('T')[0].trim().split(' ')[0].replace(/-/g, '/');
+    const m1 = s.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
+    if (m1) return `${m1[1]}/${m1[2].padStart(2,'0')}/${m1[3].padStart(2,'0')}`;
+    const m2 = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (m2) return `${m2[3]}/${m2[1].padStart(2,'0')}/${m2[2].padStart(2,'0')}`;
+    return '';
+  }
+
+  function parseTimestamp(raw) {
+    const m = raw.match(/(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})\s*(上午|下午|AM|PM)?\s*(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?/i);
+    if (!m) return null;
+    let h = parseInt(m[5], 10);
+    const ap = (m[4] || m[8] || '').toUpperCase();
+    if ((ap === '下午' || ap === 'PM') && h < 12) h += 12;
+    if ((ap === '上午' || ap === 'AM') && h === 12) h = 0;
+    return new Date(+m[1], +m[2] - 1, +m[3], h, +m[6], +(m[7] || 0));
+  }
+
+  function todaySlash() {
+    const d = new Date();
+    return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
+  }
+  function hhmm(d) {
+    return d ? String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0') : '—';
+  }
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function tick() {
+    const d = new Date();
+    document.getElementById('clock').textContent =
+      String(d.getHours()).padStart(2,'0') + ':' +
+      String(d.getMinutes()).padStart(2,'0') + ':' +
+      String(d.getSeconds()).padStart(2,'0');
+  }
+  tick(); setInterval(tick, 1000);
+
+  // 下線數（與 factory-flow.html 相同：每天隨機 300~500，每 2:00~2:30 減 1，共用 localStorage key）
+  let unloadCount;
+  try {
+    const today = new Date().toDateString();
+    const storedDate = localStorage.getItem('unload_date');
+    if (storedDate !== today) {
+      unloadCount = 300 + Math.floor(Math.random() * 201);
+      localStorage.setItem('unload_date', today);
+      localStorage.setItem('unload_count', String(unloadCount));
+    } else {
+      unloadCount = parseInt(localStorage.getItem('unload_count') || '400', 10);
+    }
+  } catch(e) {
+    unloadCount = 300 + Math.floor(Math.random() * 201);
+  }
+  const unloadInitial = unloadCount;
+
+  function renderUnloadPin() {
+    document.getElementById('pin-count-unload').textContent = unloadCount + ' PCS';
+    document.getElementById('pin-meta-unload').textContent = '已處理 ' + (unloadInitial - unloadCount);
+  }
+  renderUnloadPin();
+  function scheduleUnloadDecrement() {
+    // Random interval between 2:00 and 2:30 (120000~150000 ms)
+    const nextDelay = 120000 + Math.random() * 30000;
+    setTimeout(() => {
+      if (unloadCount > 20) {
+        unloadCount -= 1;
+        try { localStorage.setItem('unload_count', String(unloadCount)); } catch(e) {}
+        renderUnloadPin();
+        if (selectedStation === 'unload') renderDetail('unload');
+        else if (!selectedStation) renderOverview();
+      }
+      scheduleUnloadDecrement();
+    }, nextDelay);
+  }
+  scheduleUnloadDecrement();
+
+  let stats = null;
+  let selectedStation = null;
+
+  function selectStation(id) {
+    selectedStation = id;
+    Object.values(pinElements).forEach(el => el.classList.toggle('selected', el.dataset.id === id));
+    renderDetail(id);
+  }
+
+  function summarize(recs) {
+    const now = Date.now();
+    const byPid = {}, byModel = {};
+    let last = null;
+    recs.forEach(r => {
+      const p = byPid[r.pid] || (byPid[r.pid] = { pid: r.pid, count: 0, lastTs: null });
+      p.count++;
+      if (r.ts && (!p.lastTs || r.ts > p.lastTs)) p.lastTs = r.ts;
+      if (r.ts && (!last || r.ts > last)) last = r.ts;
+      const m = r.model || '（未填）';
+      byModel[m] = (byModel[m] || 0) + 1;
+    });
+    const workers = Object.values(byPid).sort((a, b) => b.count - a.count);
+    workers.forEach(w => { w.active = !!w.lastTs && (now - w.lastTs) / 1000 <= OFFLINE_SEC; });
+    return { count: recs.length, workers, activeCount: workers.filter(w => w.active).length, byModel, last, recs };
+  }
+
+  function pct(n) { return n == null ? '—' : Math.round(n * 100) + '%'; }
+
+  function renderAll() {
+    if (!stats) return;
+    const { rework, paint, final } = stats;
+
+    document.getElementById('pin-count-rework').textContent = rework.count + ' PCS';
+    document.getElementById('pin-meta-rework').textContent = `${rework.workers.length} 人 (${rework.activeCount} 在線)`;
+    update3DWorkers('rework', rework.workers);
+
+    document.getElementById('pin-count-paint').textContent = paint.count + ' PCS';
+    document.getElementById('pin-meta-paint').textContent = `${paint.workers.length} 人 (${paint.activeCount} 在線)`;
+    document.getElementById('pin-meta-paint').className = 'pin-meta warn';
+    update3DWorkers('paint', paint.workers);
+
+    document.getElementById('pin-count-final').textContent = final.count + ' PCS';
+    document.getElementById('pin-meta-final').textContent = final.last ? `最後 ${hhmm(final.last)}` : `${final.workers.length} 人`;
+    document.getElementById('pin-meta-final').className = 'pin-meta ok';
+    update3DWorkers('final', final.workers);
+
+    const fpy     = final.count > 0 ? Math.max(0, Math.min(1, (final.count - paint.count) / final.count)) : null;
+    const repaint = final.count > 0 ? Math.max(0, Math.min(1, paint.count / final.count)) : null;
+
+    document.getElementById('kpi-pass').textContent = final.count;
+    document.getElementById('kpi-pass-delta').textContent = final.last ? `最後實績 ${hhmm(final.last)}` : '終檢階段 今日筆數';
+    document.getElementById('kpi-fpy').textContent = pct(fpy);
+    document.getElementById('kpi-fpy-delta').textContent = `(終檢 ${final.count} − 補漆 ${paint.count}) ÷ 終檢`;
+    document.getElementById('kpi-repaint').textContent = pct(repaint);
+    document.getElementById('kpi-repaint-delta').textContent = `補漆 ${paint.count} ÷ 終檢 ${final.count}`;
+    document.getElementById('flow-summary').textContent = `直行 ${pct(fpy)} ｜ 需補漆 ${pct(repaint)}`;
+
+    document.getElementById('badge-repaint').textContent = `需補漆 ${pct(repaint)}`;
+    document.getElementById('badge-fpy').textContent = `直行通道 ${pct(fpy)}`;
+
+    const allPids = new Set([...rework.workers, ...paint.workers, ...final.workers].map(w => w.pid));
+    document.getElementById('kpi-workers').textContent = allPids.size;
+    document.getElementById('kpi-workers-delta').textContent = `整修 ${rework.workers.length} · 補漆 ${paint.workers.length} · 終檢 ${final.workers.length}`;
+
+    document.getElementById('nav-sub-rework').textContent = `${rework.workers.length} 位作業員 · ${rework.count} PCS`;
+    document.getElementById('nav-sub-paint').textContent  = `${paint.workers.length} 位作業員 · ${paint.count} PCS`;
+
+    renderTrend([...rework.recs, ...paint.recs, ...final.recs]);
+    if (selectedStation) renderDetail(selectedStation); else renderOverview();
+  }
+
+  function renderTrend(recs) {
+    const BUCKETS = 12, SPAN = 10 * 60 * 1000;
+    const end = Date.now();
+    const trend = new Array(BUCKETS).fill(0);
+    recs.forEach(r => {
+      if (!r.ts) return;
+      const idx = BUCKETS - 1 - Math.floor((end - r.ts) / SPAN);
+      if (idx >= 0 && idx < BUCKETS) trend[idx]++;
+    });
+    const maxTrend = Math.max(1, Math.max.apply(null, trend));
+    const polyPts = trend.map((v, i) => {
+      const x = (i / (trend.length - 1)) * 600;
+      const y = 38 - (v / maxTrend) * 32;
+      return x + ',' + y;
+    }).join(' ');
+    document.getElementById('floor-trend').setAttribute('points', polyPts);
+    document.getElementById('floor-trend-area').setAttribute('points', '0,42 ' + polyPts + ' 600,42');
+  }
+
+  function barRows(rows) {
+    return '<div class="breakdown">' + rows.map(r =>
+      '<div class="br-row"><span class="lbl">'+esc(r[0])+'</span><div class="bar"><div class="fill '+(r[3]==='warn'?'warn':'')+'" style="width:'+r[2]+'%;"></div></div><span class="val">'+esc(r[1])+'</span></div>'
+    ).join('') + '</div>';
+  }
+  function modelRows(byModel, cls) {
+    const entries = Object.entries(byModel).sort((a, b) => b[1] - a[1]).slice(0, 5);
+    const max = entries.length ? entries[0][1] : 1;
+    return entries.map(([m, n]) => [m, n, Math.round(n / max * 100), cls]);
+  }
+  function section(title, inner) {
+    return '<div class="detail-section"><h4>' + esc(title) + '</h4>' + inner + '</div>';
+  }
+
+  function renderOverview() {
+    if (!stats) return;
+    const { rework, paint, final } = stats;
+    document.getElementById('detail-name').textContent = '整體概覽 · Overview';
+    document.getElementById('detail-meta').textContent = '點擊 3D 工站檢視明細';
+    const max = Math.max(1, rework.count, paint.count, final.count);
+    const left = barRows([
+      ['下線(估)', unloadCount, 100, 'ok'],
+      ['整修', rework.count, Math.round(rework.count / max * 100), 'ok'],
+      ['補漆', paint.count,  Math.round(paint.count  / max * 100), 'warn'],
+      ['終檢', final.count,  Math.round(final.count  / max * 100), 'ok'],
+    ]);
+    const models = Object.entries(final.byModel).sort((a, b) => b[1] - a[1]).slice(0, 5);
+    const fpyRows = models.map(([m, n]) => {
+      const p = paint.byModel[m] || 0;
+      const v = Math.max(0, Math.min(1, (n - p) / n));
+      return [m, Math.round(v * 100) + '%', Math.round(v * 100), v >= 0.5 ? 'ok' : 'warn'];
+    });
+    document.getElementById('detail-content').innerHTML =
+      section('各站今日實績 · Station Status', left) +
+      section('主力車型直行率 · FPY by Model', fpyRows.length ? barRows(fpyRows) : '<div style="font-size:12px;color:var(--fg-mute);">今日終檢尚無資料</div>');
+  }
+
+  const STATION_META = {
+    rework: { name: 'ZONE B · 整修區', key: 'rework', right: '整修車型分布' },
+    paint:  { name: 'ZONE C · 補漆區', key: 'paint',  right: '需補漆車型排行' },
+    final:  { name: 'ZONE D · 終檢區', key: 'final',  right: '終檢車型分布' },
+  };
+
+  function renderDetail(id) {
+    const content = document.getElementById('detail-content');
+    if (id === 'unload') {
+      document.getElementById('detail-name').textContent = 'ZONE A · 下線區';
+      document.getElementById('detail-meta').textContent = '塗裝線下線估算';
+      content.innerHTML = section('今日下線進度', barRows([
+        ['剩餘待處理', unloadCount, Math.round(unloadCount / Math.max(1, unloadInitial) * 100), 'ok'],
+        ['已消耗', unloadInitial - unloadCount, Math.round((unloadInitial - unloadCount) / Math.max(1, unloadInitial) * 100), 'ok'],
+      ]));
+      return;
+    }
+    const meta = STATION_META[id];
+    if (!meta || !stats) return;
+    const s = stats[meta.key];
+    document.getElementById('detail-name').textContent = meta.name;
+    document.getElementById('detail-meta').textContent = `${s.workers.length} 位作業員 · ${s.activeCount} 位在線`;
+    const workersHtml = s.workers.length
+      ? '<div class="worker-list">' + s.workers.slice(0, 8).map(w =>
+          '<div class="worker-row"><span><span class="id">'+esc(w.pid)+'</span><span class="name">最後 '+hhmm(w.lastTs)+(w.active?'':' · 離線')+'</span></span><span class="count">'+w.count+' PCS</span></div>'
+        ).join('') + '</div>'
+      : '<div style="font-size:12px;color:var(--fg-mute);">今日尚無實績</div>';
+    const rows = modelRows(s.byModel, id === 'paint' ? 'warn' : 'ok');
+    content.innerHTML =
+      section('今日作業員實績', workersHtml) +
+      section(meta.right, rows.length ? barRows(rows) : '<div style="font-size:12px;color:var(--fg-mute);">尚無車型資料</div>');
+  }
+
+  let currentSheets = Object.assign({}, DEFAULT_SHEETS);
+  try { currentSheets.paint = (JSON.parse(lsGet('sysSettingsCache') || 'null') || {}).sheet_name || currentSheets.paint; } catch(e) {}
+
+  async function refresh() {
+    const srcEl = document.getElementById('data-src');
+    const errEl = document.getElementById('err-banner');
+    try {
+      let data = await fetchAllSheets(currentSheets);
+      const s = data.settingsRaw;
+      const wanted = {
+        paint:  (s.sheet_name        || '').trim() || DEFAULT_SHEETS.paint,
+        rework: (s.rework_sheet_name || '').trim() || DEFAULT_SHEETS.rework,
+        final:  (s.final_sheet_name  || '').trim() || DEFAULT_SHEETS.final,
+      };
+      if (Object.keys(wanted).some(k => wanted[k] !== currentSheets[k])) { // 系統設定改了分頁名稱
+        currentSheets = wanted;
+        data = await fetchAllSheets(currentSheets);
+      }
+      const t = todaySlash();
+      stats = {
+        rework: summarize(data.rework.filter(r => r.date === t)),
+        paint:  summarize(data.paint.filter(r => r.date === t)),
+        final:  summarize(data.final.filter(r => r.date === t)),
+      };
+      renderAll();
+      errEl.style.display = 'none';
+      srcEl.textContent = '資料來源：Google Sheet · 最後更新 ' + hhmm(new Date());
+    } catch (e) {
+      console.error('[PaintTrack 3D] 讀取失敗', e);
+      errEl.style.display = 'block';
+      if (stats) srcEl.textContent = srcEl.textContent.replace(/（.*）$/, '') + '（讀取失敗，顯示上次資料）';
+    }
+  }
+  refresh();
+  setInterval(refresh, REFRESH_MS);
+
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const root = document.documentElement;
+    const isDark = root.getAttribute('data-theme') === 'dark';
+    root.setAttribute('data-theme', isDark ? 'light' : 'dark');
+    baseMat.color.setHex(isDark ? 0xf8fafc : 0x1e293b);
+  });
+})();
+</script>
+</body>
+</html>
