@@ -1,0 +1,840 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>補漆房流程看板</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&family=Noto+Sans+TC:wght@400;500;700&display=swap">
+<style>
+/* Design: overhead factory floor view, dark industrial palette, status-driven color, flowing particles on paths */
+:root {
+  --bg: #0b1016;
+  --panel: #121a24;
+  --panel-up: #1a2432;
+  --border: #273347;
+  --border-up: #3b4a62;
+  --fg: #e9edf2;
+  --fg-mute: #7f8da2;
+  --fg-dim: #4e596a;
+
+  --ok: #4ade80;
+  --ok-fill: rgba(74,222,128,.08);
+  --warn: #fbbf24;
+  --warn-fill: rgba(251,191,36,.08);
+  --crit: #f87171;
+  --crit-fill: rgba(248,113,113,.08);
+  --info: #60a5fa;
+  --purple: #a78bfa;
+
+  --font-ui: 'Inter', 'Noto Sans TC', -apple-system, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
+
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #f1f4f8;
+    --panel: #ffffff;
+    --panel-up: #ffffff;
+    --border: #dde3ec;
+    --border-up: #a9b4c4;
+    --fg: #0d1420;
+    --fg-mute: #556579;
+    --fg-dim: #8b96a8;
+    --ok: #16a34a;
+    --ok-fill: rgba(22,163,74,.08);
+    --warn: #d97706;
+    --warn-fill: rgba(217,119,6,.08);
+    --crit: #dc2626;
+    --crit-fill: rgba(220,38,38,.08);
+    --info: #0369a1;
+    --purple: #7c3aed;
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #f1f4f8;
+  --panel: #ffffff;
+  --panel-up: #ffffff;
+  --border: #dde3ec;
+  --border-up: #a9b4c4;
+  --fg: #0d1420;
+  --fg-mute: #556579;
+  --fg-dim: #8b96a8;
+  --ok: #16a34a;
+  --ok-fill: rgba(22,163,74,.08);
+  --warn: #d97706;
+  --warn-fill: rgba(217,119,6,.08);
+  --crit: #dc2626;
+  --crit-fill: rgba(220,38,38,.08);
+  --info: #0369a1;
+  --purple: #7c3aed;
+  color-scheme: light;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.shell { max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+
+.topbar { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+.title-group { display: flex; flex-direction: column; gap: 2px; }
+.title { font-size: 18px; font-weight: 700; letter-spacing: 0.02em; }
+.title .accent { color: var(--ok); }
+.subtitle { color: var(--fg-mute); font-size: 12px; letter-spacing: 0.02em; }
+.clock { display: flex; gap: 10px; align-items: center; color: var(--fg-mute); font-size: 12px; }
+.clock .time { color: var(--fg); font-family: var(--font-mono); font-weight: 600; font-size: 15px; }
+.pulse { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 0 var(--ok); animation: pulse 2s infinite; }
+@keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(74,222,128,.5); } 50% { box-shadow: 0 0 0 6px transparent; } }
+
+.kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+@media (max-width: 640px) { .kpi-row { grid-template-columns: repeat(2, 1fr); } }
+.kpi { background: var(--panel); border: 1px solid var(--border); padding: 14px; display: flex; flex-direction: column; gap: 4px; position: relative; overflow: hidden; }
+.kpi .lbl { font-size: 11px; color: var(--fg-mute); letter-spacing: 0.08em; text-transform: uppercase; }
+.kpi .val { font-size: 28px; font-weight: 700; font-family: var(--font-mono); letter-spacing: -0.02em; }
+.kpi .delta { font-size: 11px; color: var(--fg-mute); margin-top: 2px; }
+.kpi .delta.up { color: var(--ok); }
+.kpi .delta.down { color: var(--crit); }
+.kpi .stripe { position: absolute; left: 0; top: 0; bottom: 0; width: 3px; }
+
+.panel { background: var(--panel); border: 1px solid var(--border); }
+.panel-title { padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+.panel-title .ttl { font-size: 13px; font-weight: 600; letter-spacing: 0.04em; }
+.panel-title .meta { font-size: 11px; color: var(--fg-mute); font-family: var(--font-mono); }
+.panel-body { padding: 16px; }
+
+/* Factory floor SVG */
+.floor { padding: 0; overflow: hidden; }
+.floor svg { width: 100%; height: auto; display: block; background:
+  radial-gradient(circle at 50% 50%, rgba(74,222,128,.03), transparent 60%),
+  var(--panel);
+}
+.station { cursor: pointer; transition: filter 0.2s; }
+.station:hover { filter: brightness(1.3); }
+.station.selected .station-rect { stroke-width: 3; }
+.station-rect { fill: var(--panel-up); stroke: var(--border-up); stroke-width: 1.5; }
+.station-rect.ok { stroke: var(--ok); fill: var(--ok-fill); }
+.station-rect.warn { stroke: var(--warn); fill: var(--warn-fill); }
+.station-rect.crit { stroke: var(--crit); fill: var(--crit-fill); }
+.station-name { fill: var(--fg); font-size: 15px; font-weight: 600; }
+.station-count { fill: var(--fg); font-size: 28px; font-weight: 700; font-family: var(--font-mono); }
+.station-sub { fill: var(--fg-mute); font-size: 10px; letter-spacing: 0.08em; }
+.station-pct { font-size: 11px; font-family: var(--font-mono); font-weight: 600; }
+.station-pct.ok { fill: var(--ok); }
+.station-pct.warn { fill: var(--warn); }
+.station-pct.crit { fill: var(--crit); }
+
+.worker-dot { fill: var(--info); }
+.worker-dot.off { fill: var(--fg-dim); }
+
+.flow-line { stroke: var(--border-up); stroke-width: 2; fill: none; stroke-dasharray: 4 4; }
+.flow-line.main { stroke: var(--ok); stroke-dasharray: none; stroke-width: 2; opacity: 0.3; }
+.flow-line.direct { stroke: var(--ok); stroke-dasharray: none; stroke-width: 2.5; opacity: 0.4; }
+.flow-line.rework { stroke: var(--warn); stroke-dasharray: none; stroke-width: 2; opacity: 0.4; }
+
+.flow-label { fill: var(--fg-mute); font-size: 10px; font-family: var(--font-mono); letter-spacing: 0.05em; }
+
+.particle { fill: var(--ok); }
+.particle.warn { fill: var(--warn); }
+
+/* Legend */
+.legend { padding: 10px 16px; display: flex; gap: 20px; flex-wrap: wrap; font-size: 11px; color: var(--fg-mute); border-top: 1px solid var(--border); }
+.legend .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+
+/* Timeline */
+.timeline { display: block; width: 100%; height: 90px; }
+.tl-area { fill: var(--ok-fill); }
+.tl-line { stroke: var(--ok); stroke-width: 1.5; fill: none; }
+.tl-grid { stroke: var(--border); stroke-width: 0.5; stroke-dasharray: 2 3; }
+.tl-label { fill: var(--fg-mute); font-size: 9px; font-family: var(--font-mono); }
+
+/* Detail panel */
+.detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 640px) { .detail-grid { grid-template-columns: 1fr; } }
+.detail-section h4 { margin: 0 0 10px; font-size: 12px; letter-spacing: 0.08em; color: var(--fg-mute); text-transform: uppercase; font-weight: 600; }
+.worker-list { display: flex; flex-direction: column; gap: 6px; }
+.worker-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; background: var(--panel-up); border: 1px solid var(--border); font-size: 13px; }
+.worker-row .id { font-family: var(--font-mono); font-weight: 600; }
+.worker-row .name { color: var(--fg-mute); font-size: 12px; margin-left: 6px; }
+.worker-row .count { font-family: var(--font-mono); font-weight: 600; }
+
+.breakdown { display: flex; flex-direction: column; gap: 4px; }
+.br-row { display: flex; align-items: center; gap: 10px; font-size: 12px; }
+.br-row .lbl { min-width: 60px; color: var(--fg-mute); font-family: var(--font-mono); }
+.br-row .bar { flex: 1; height: 6px; background: var(--panel-up); position: relative; overflow: hidden; }
+.br-row .bar .fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--ok); }
+.br-row .bar .fill.warn { background: var(--warn); }
+.br-row .val { font-family: var(--font-mono); font-weight: 600; min-width: 36px; text-align: right; }
+
+.toggle-note { padding: 12px 16px; border-top: 1px solid var(--border); color: var(--fg-mute); font-size: 11px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+.theme-btn { background: var(--panel-up); border: 1px solid var(--border-up); color: var(--fg-mute); padding: 4px 10px; font-size: 11px; cursor: pointer; font-family: inherit; }
+.theme-btn:hover { color: var(--fg); border-color: var(--fg-mute); }
+
+.demo-tag { display: inline-block; padding: 2px 8px; background: var(--purple); color: #fff; font-size: 10px; font-weight: 600; letter-spacing: 0.1em; margin-left: 8px; vertical-align: middle; }
+
+/* Station navigation buttons (CTA to live station view) */
+.station-nav { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+@media (max-width: 640px) { .station-nav { grid-template-columns: 1fr; } }
+.nav-btn {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  padding: 16px 20px;
+  text-decoration: none;
+  color: var(--fg);
+  transition: border-color 0.2s, transform 0.2s, background 0.2s;
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+}
+.nav-btn:hover { transform: translateY(-1px); background: var(--panel-up); }
+.nav-btn.rework { border-left: 3px solid var(--warn); }
+.nav-btn.rework:hover { border-color: var(--warn); }
+.nav-btn.paint { border-left: 3px solid var(--info); }
+.nav-btn.paint:hover { border-color: var(--info); }
+.nav-icon {
+  width: 44px; height: 44px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--panel-up);
+  border: 1px solid var(--border);
+  font-size: 20px;
+  flex-shrink: 0;
+}
+.nav-btn.rework .nav-icon { color: var(--warn); }
+.nav-btn.paint .nav-icon { color: var(--info); }
+.nav-text { flex: 1; min-width: 0; }
+.nav-title { font-weight: 700; font-size: 15px; letter-spacing: 0.01em; display: flex; align-items: center; gap: 6px; }
+.nav-title .live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ok); animation: pulse 1.5s infinite; }
+.nav-sub { color: var(--fg-mute); font-size: 11px; margin-top: 3px; letter-spacing: 0.03em; font-family: var(--font-mono); }
+.nav-arrow { color: var(--fg-mute); font-size: 22px; font-weight: 600; transition: transform 0.2s, color 0.2s; }
+.nav-btn:hover .nav-arrow { transform: translateX(3px); color: var(--fg); }
+.nav-btn.rework:hover .nav-arrow { color: var(--warn); }
+.nav-btn.paint:hover .nav-arrow { color: var(--info); }
+
+/* Live data status */
+.data-src { font-size: 11px; color: var(--fg-mute); font-family: var(--font-mono); letter-spacing: 0.02em; }
+.err-banner { display: none; background: var(--crit-fill); border: 1px solid var(--crit); color: var(--crit); padding: 8px 14px; font-size: 13px; font-weight: 600; }
+.empty-note { font-size: 12px; color: var(--fg-mute); padding: 6px 0; }
+</style>
+
+<div class="shell">
+  <div class="topbar">
+    <div class="title-group">
+      <div class="title">補漆房 <span class="accent">流程看板</span></div>
+      <div class="subtitle">裕器工業 · 塗裝部門 · 下線 → 整修 → 補漆 → 終檢</div>
+      <div class="data-src" id="data-src">資料來源：Google Sheet · 讀取中…</div>
+    </div>
+    <div class="clock">
+      <span class="pulse"></span>
+      即時更新 · <span class="time" id="clock">--:--:--</span>
+    </div>
+  </div>
+
+  <div class="err-banner" id="err-banner">⚠️ 資料讀取失敗，請確認網路或系統設定</div>
+
+  <div class="kpi-row">
+    <div class="kpi">
+      <div class="stripe" style="background: var(--ok);"></div>
+      <div class="lbl">今日通過終檢</div>
+      <div class="val" id="kpi-pass">—</div>
+      <div class="delta" id="kpi-pass-delta">終檢階段 今日筆數</div>
+    </div>
+    <div class="kpi">
+      <div class="stripe" style="background: var(--info);"></div>
+      <div class="lbl">直行率 FPY</div>
+      <div class="val" id="kpi-fpy">—</div>
+      <div class="delta" id="kpi-fpy-delta">(終檢 − 補漆) ÷ 終檢</div>
+    </div>
+    <div class="kpi">
+      <div class="stripe" style="background: var(--warn);"></div>
+      <div class="lbl">需補漆比例</div>
+      <div class="val" id="kpi-repaint">—</div>
+      <div class="delta" id="kpi-repaint-delta">補漆 ÷ 終檢</div>
+    </div>
+    <div class="kpi">
+      <div class="stripe" style="background: var(--purple);"></div>
+      <div class="lbl">現場在場人力</div>
+      <div class="val" id="kpi-workers">—</div>
+      <div class="delta" id="kpi-workers-delta">今日有實績的工號</div>
+    </div>
+  </div>
+
+  <div class="station-nav">
+    <a class="nav-btn rework" href="paint-stations.html#rework">
+      <div class="nav-icon">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+      </div>
+      <div class="nav-text">
+        <div class="nav-title"><span class="live-dot"></span>進入整修區動態</div>
+        <div class="nav-sub" id="nav-sub-rework">— 位作業員 · — PCS · 碼表監控</div>
+      </div>
+      <div class="nav-arrow">→</div>
+    </a>
+    <a class="nav-btn paint" href="paint-stations.html#paint">
+      <div class="nav-icon">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 11h2m-1 -1v2M7.5 13A4.5 4.5 0 0 0 12 17.5v2A6.5 6.5 0 0 1 5.5 13h2zM12 2a7 7 0 0 0-7 7v4h14V9a7 7 0 0 0-7-7z"/><circle cx="8.5" cy="7.5" r="1"/><circle cx="12" cy="5.5" r="1"/><circle cx="15.5" cy="7.5" r="1"/></svg>
+      </div>
+      <div class="nav-text">
+        <div class="nav-title"><span class="live-dot"></span>進入補漆區動態</div>
+        <div class="nav-sub" id="nav-sub-paint">— 位作業員 · — PCS · 碼表監控</div>
+      </div>
+      <div class="nav-arrow">→</div>
+    </a>
+  </div>
+
+  <div class="panel floor">
+    <div class="panel-title">
+      <span class="ttl">現場流程 · Factory Floor</span>
+      <span class="meta">點擊工站查看詳細</span>
+    </div>
+    <svg id="floor-svg" viewBox="0 0 1200 420" preserveAspectRatio="xMidYMid meet" role="img" aria-label="factory floor">
+      <defs>
+        <path id="path-u-r" d="M 190 210 L 310 210" />
+        <path id="path-r-p" d="M 490 210 L 610 190" />
+        <path id="path-r-f-direct" d="M 490 210 Q 650 320, 820 230" />
+        <path id="path-p-f" d="M 790 190 L 820 210" />
+        <marker id="arrow-ok" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+          <path d="M 0 0 L 7 4 L 0 8 z" fill="var(--ok)" opacity="0.6"/>
+        </marker>
+        <marker id="arrow-warn" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+          <path d="M 0 0 L 7 4 L 0 8 z" fill="var(--warn)" opacity="0.6"/>
+        </marker>
+        <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+          <path d="M 40 0 L 0 0 0 40" fill="none" stroke="var(--border)" stroke-width="0.5" opacity="0.5"/>
+        </pattern>
+      </defs>
+
+      <rect width="1200" height="420" fill="url(#grid)"/>
+
+      <!-- Zone labels (floor markings) -->
+      <text x="110" y="60" class="flow-label" text-anchor="middle">ZONE A · 下線區</text>
+      <text x="400" y="60" class="flow-label" text-anchor="middle">ZONE B · 整修區</text>
+      <text x="700" y="60" class="flow-label" text-anchor="middle">ZONE C · 補漆區</text>
+      <text x="920" y="60" class="flow-label" text-anchor="middle">ZONE D · 終檢區</text>
+      <line x1="40" y1="70" x2="180" y2="70" stroke="var(--border-up)" stroke-width="1"/>
+      <line x1="330" y1="70" x2="470" y2="70" stroke="var(--border-up)" stroke-width="1"/>
+      <line x1="630" y1="70" x2="770" y2="70" stroke="var(--border-up)" stroke-width="1"/>
+      <line x1="850" y1="70" x2="990" y2="70" stroke="var(--border-up)" stroke-width="1"/>
+
+      <!-- Flow lines -->
+      <path class="flow-line main" d="M 190 210 L 310 210" marker-end="url(#arrow-ok)"/>
+      <path class="flow-line rework" d="M 490 210 L 610 190" marker-end="url(#arrow-warn)"/>
+      <path class="flow-line direct" d="M 490 210 Q 650 320, 820 230" marker-end="url(#arrow-ok)"/>
+      <path class="flow-line main" d="M 790 190 L 820 210" marker-end="url(#arrow-ok)"/>
+
+      <!-- Flow labels -->
+      <text x="250" y="200" class="flow-label" text-anchor="middle">下線 → 整修</text>
+      <text x="550" y="180" class="flow-label" text-anchor="middle" id="flow-repaint">需補漆 —</text>
+      <text x="650" y="340" class="flow-label" text-anchor="middle" id="flow-fpy">直行 —</text>
+      <text x="810" y="180" class="flow-label" text-anchor="middle">補完 → 終檢</text>
+
+      <!-- Flowing particles -->
+      <g>
+        <!-- 下線 → 整修 -->
+        <circle class="particle" r="4">
+          <animateMotion dur="4s" repeatCount="indefinite"><mpath href="#path-u-r"/></animateMotion>
+        </circle>
+        <circle class="particle" r="4">
+          <animateMotion dur="4s" begin="2s" repeatCount="indefinite"><mpath href="#path-u-r"/></animateMotion>
+        </circle>
+        <!-- 整修 → 補漆 -->
+        <circle class="particle warn" r="4">
+          <animateMotion dur="4.5s" repeatCount="indefinite"><mpath href="#path-r-p"/></animateMotion>
+        </circle>
+        <circle class="particle warn" r="4">
+          <animateMotion dur="4.5s" begin="1.5s" repeatCount="indefinite"><mpath href="#path-r-p"/></animateMotion>
+        </circle>
+        <circle class="particle warn" r="4">
+          <animateMotion dur="4.5s" begin="3s" repeatCount="indefinite"><mpath href="#path-r-p"/></animateMotion>
+        </circle>
+        <!-- 整修 → 終檢 直行 -->
+        <circle class="particle" r="4">
+          <animateMotion dur="9s" repeatCount="indefinite"><mpath href="#path-r-f-direct"/></animateMotion>
+        </circle>
+        <!-- 補漆 → 終檢 -->
+        <circle class="particle warn" r="4">
+          <animateMotion dur="5s" repeatCount="indefinite"><mpath href="#path-p-f"/></animateMotion>
+        </circle>
+        <circle class="particle warn" r="4">
+          <animateMotion dur="5s" begin="1.7s" repeatCount="indefinite"><mpath href="#path-p-f"/></animateMotion>
+        </circle>
+        <circle class="particle warn" r="4">
+          <animateMotion dur="5s" begin="3.4s" repeatCount="indefinite"><mpath href="#path-p-f"/></animateMotion>
+        </circle>
+      </g>
+
+      <!-- Station: 下線（無系統資料，維持每日隨機 + 緩慢遞減） -->
+      <g class="station" data-id="unload" data-name="下線區" transform="translate(40, 140)">
+        <rect class="station-rect ok" width="150" height="140" rx="4"/>
+        <text class="station-name" x="75" y="30" text-anchor="middle">下線</text>
+        <text class="station-sub" x="75" y="48" text-anchor="middle">UNLOAD · 剩餘</text>
+        <text class="station-count" id="unload-count" x="75" y="92" text-anchor="middle">400</text>
+        <text class="station-sub" x="75" y="110" text-anchor="middle">PCS REMAINING</text>
+        <text class="station-pct ok" id="unload-pct" x="75" y="128" text-anchor="middle">▼ 處理中</text>
+      </g>
+
+      <!-- Station: 整修 -->
+      <g class="station" data-id="rework" data-name="整修區" transform="translate(310, 140)">
+        <rect class="station-rect" id="st-rework-rect" width="180" height="140" rx="4"/>
+        <text class="station-name" x="90" y="30" text-anchor="middle">整修</text>
+        <text class="station-sub" id="st-rework-sub" x="90" y="48" text-anchor="middle">REWORK · — 人</text>
+        <text class="station-count" id="st-rework-count" x="90" y="92" text-anchor="middle">—</text>
+        <text class="station-sub" x="90" y="110" text-anchor="middle">PCS · 今日筆數</text>
+        <text class="station-pct ok" id="st-rework-pct" x="90" y="128" text-anchor="middle"></text>
+        <g id="st-rework-dots"></g>
+      </g>
+
+      <!-- Station: 補漆 -->
+      <g class="station" data-id="paint" data-name="補漆區" transform="translate(610, 140)">
+        <rect class="station-rect" id="st-paint-rect" width="180" height="140" rx="4"/>
+        <text class="station-name" x="90" y="30" text-anchor="middle">補漆</text>
+        <text class="station-sub" id="st-paint-sub" x="90" y="48" text-anchor="middle">TOUCH-UP · — 人</text>
+        <text class="station-count" id="st-paint-count" x="90" y="92" text-anchor="middle">—</text>
+        <text class="station-sub" x="90" y="110" text-anchor="middle">PCS · 今日筆數</text>
+        <text class="station-pct warn" id="st-paint-pct" x="90" y="128" text-anchor="middle"></text>
+        <g id="st-paint-dots"></g>
+      </g>
+
+      <!-- Station: 終檢 -->
+      <g class="station" data-id="final" data-name="終檢區" transform="translate(820, 140)">
+        <rect class="station-rect" id="st-final-rect" width="180" height="140" rx="4"/>
+        <text class="station-name" x="90" y="30" text-anchor="middle">終檢</text>
+        <text class="station-sub" id="st-final-sub" x="90" y="48" text-anchor="middle">FINAL · — 人</text>
+        <text class="station-count" id="st-final-count" x="90" y="92" text-anchor="middle">—</text>
+        <text class="station-sub" x="90" y="110" text-anchor="middle">PCS · 今日筆數</text>
+        <text class="station-pct ok" id="st-final-pct" x="90" y="128" text-anchor="middle"></text>
+        <g id="st-final-dots"></g>
+      </g>
+
+      <!-- Timeline strip -->
+      <text x="40" y="340" class="flow-label">近 2 小時流動 · 每 10 分鐘（整修＋補漆＋終檢 筆數）</text>
+      <g transform="translate(40, 345)">
+        <rect width="1120" height="50" fill="var(--panel-up)" stroke="var(--border)" stroke-width="0.5"/>
+        <polyline id="floor-trend" points="" fill="var(--ok-fill)" stroke="var(--ok)" stroke-width="1.5"/>
+      </g>
+    </svg>
+    <div class="legend">
+      <span><span class="dot" style="background: var(--ok);"></span>綠色 = 直行流動 / 工站有作業中</span>
+      <span><span class="dot" style="background: var(--warn);"></span>黃色 = 需補漆路徑</span>
+      <span><span class="dot" style="background: var(--info);"></span>藍色 = 在場作業員（15 分鐘內有實績）</span>
+      <span><span class="dot" style="background: var(--fg-dim);"></span>灰色 = 今日有實績但 15 分鐘無輸入</span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">
+      <span class="ttl"><span id="detail-name">整體概覽 · Overview</span></span>
+      <span class="meta" id="detail-meta">點擊任一工站 →</span>
+    </div>
+    <div class="panel-body">
+      <div id="detail-content" class="detail-grid">
+        <div class="empty-note">讀取中…</div>
+      </div>
+    </div>
+    <div class="toggle-note">
+      <span>整修 / 補漆 / 終檢數字來自 Google Sheet，每 30 秒自動更新。下線數字目前無系統來源（塗裝線為紙本），為估算顯示。</span>
+      <button class="theme-btn" id="theme-toggle">切換主題</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  // ── Google Sheet 連線（與 person_part_analysis.html 相同的 DEFAULT_CONFIG / localStorage key）──
+  const DEFAULT_CONFIG = {
+    sheetsId: '1xQoIxoLlM4LkKjDrYZ_87uIahtebPgPcG6Hitck1T5c',
+    apiKey:   'AIzaSyBMgXHsua64mciOFJwqH4NreGI11gMXR-s',
+    sheetName: '整修日報'
+  };
+  const REWORK_SHEET = '整修階段';
+  const FINAL_SHEET  = '終檢階段';
+  const SYSTEM_SETTINGS_RANGE = '系統設定!A2:B20';
+  const REFRESH_MS = 30000;
+  const OFFLINE_SEC = 15 * 60; // 超過 15 分鐘沒有實績 → 視為離線
+
+  function lsGet(k) { try { return localStorage.getItem(k); } catch(e) { return null; } }
+  function lsSet(k, v) { try { localStorage.setItem(k, v); } catch(e) {} }
+
+  function getConn() {
+    return {
+      id:  lsGet('gsId')  || DEFAULT_CONFIG.sheetsId,
+      key: lsGet('gsKey') || DEFAULT_CONFIG.apiKey,
+    };
+  }
+
+  // 一次 batchGet 讀取 系統設定 + 3 個階段分頁，節省 API 配額
+  async function fetchAllSheets(paintSheet) {
+    const { id, key } = getConn();
+    const ranges = [SYSTEM_SETTINGS_RANGE, paintSheet + '!A:F', REWORK_SHEET + '!A:F', FINAL_SHEET + '!A:F'];
+    const qs = ranges.map(r => 'ranges=' + encodeURIComponent(r)).join('&');
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${id}/values:batchGet?key=${key}&${qs}`;
+    const res = await fetch(url);
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => null);
+      throw new Error((errJson && errJson.error && errJson.error.message) || `HTTP ${res.status}`);
+    }
+    const json = await res.json();
+    const vr = json.valueRanges || [];
+    const settingsRaw = {};
+    ((vr[0] && vr[0].values) || []).forEach(row => {
+      const k = (row[0] || '').trim();
+      if (k) settingsRaw[k] = row[1];
+    });
+    return {
+      settingsRaw,
+      paint:  parseRows((vr[1] && vr[1].values) || []),
+      rework: parseRows((vr[2] && vr[2].values) || []),
+      final:  parseRows((vr[3] && vr[3].values) || []),
+    };
+  }
+
+  // 欄位：A 時間戳記, B 記錄日期, C 工號, D 車型, E 種類/部件, F 顏色（有 header 時依名稱自動對應）
+  function parseRows(values) {
+    if (!values.length) return [];
+    const col = { ts: 0, date: 1, pid: 2, model: 3, part: 4, color: 5 };
+    const header = values[0].map(h => (h || '').trim());
+    const isHeader = header[1] && !/^\d/.test(header[1]);
+    if (isHeader) {
+      header.forEach((h, i) => {
+        if (/時間戳記/.test(h))            col.ts = i;
+        else if (/記錄日期|日期/.test(h))  col.date = i;
+        else if (/工號|員工|人員/.test(h)) col.pid = i;
+        else if (/車型/.test(h))           col.model = i;
+        else if (/種類|部件/.test(h))      col.part = i;
+        else if (/顏色/.test(h))           col.color = i;
+      });
+    }
+    const out = [];
+    (isHeader ? values.slice(1) : values).forEach(row => {
+      const rawDate = (row[col.date] || '').trim();
+      const pid = (row[col.pid] || '').trim();
+      if (!rawDate || !pid) return;
+      const date = normalizeDate(rawDate);
+      if (!date) return;
+      out.push({
+        date, pid,
+        ts:    parseTimestamp((row[col.ts] || '').trim()),
+        model: (row[col.model] || '').trim(),
+        part:  (row[col.part]  || '').trim(),
+        color: (row[col.color] || '').trim().toUpperCase(),
+      });
+    });
+    return out;
+  }
+
+  function normalizeDate(s) {
+    s = s.trim().replace(/\s*(上午|下午|AM|PM)[\s\d:：]*$/i, '').trim();
+    s = s.split('T')[0].trim().split(' ')[0];
+    s = s.replace(/-/g, '/');
+    const m1 = s.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
+    if (m1) return `${m1[1]}/${m1[2].padStart(2,'0')}/${m1[3].padStart(2,'0')}`;
+    const m2 = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (m2) return `${m2[3]}/${m2[1].padStart(2,'0')}/${m2[2].padStart(2,'0')}`;
+    return '';
+  }
+
+  // 「2026/10/10 上午08:08:58」→ Date（本機時區）
+  function parseTimestamp(raw) {
+    const m = raw.match(/(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})\s*(上午|下午|AM|PM)?\s*(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?/i);
+    if (!m) return null;
+    let h = parseInt(m[5], 10);
+    const ap = (m[4] || m[8] || '').toUpperCase();
+    if ((ap === '下午' || ap === 'PM') && h < 12) h += 12;
+    if ((ap === '上午' || ap === 'AM') && h === 12) h = 0;
+    return new Date(+m[1], +m[2] - 1, +m[3], h, +m[6], +(m[7] || 0));
+  }
+
+  function todaySlash() {
+    const d = new Date();
+    return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
+  }
+  function hhmm(d) {
+    return d ? String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0') : '—';
+  }
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  // Clock
+  function tick() {
+    const d = new Date();
+    const h = String(d.getHours()).padStart(2, '0');
+    const m = String(d.getMinutes()).padStart(2, '0');
+    const s = String(d.getSeconds()).padStart(2, '0');
+    document.getElementById('clock').textContent = h+':'+m+':'+s;
+  }
+  tick(); setInterval(tick, 1000);
+
+  // Unload count (demo): random 300~500 at daily reset, slow countdown
+  let unloadCount;
+  try {
+    const today = new Date().toDateString();
+    const storedDate = localStorage.getItem('unload_date');
+    if (storedDate !== today) {
+      unloadCount = 300 + Math.floor(Math.random() * 201);
+      localStorage.setItem('unload_date', today);
+      localStorage.setItem('unload_count', String(unloadCount));
+    } else {
+      unloadCount = parseInt(localStorage.getItem('unload_count') || '400', 10);
+    }
+  } catch(e) {
+    unloadCount = 300 + Math.floor(Math.random() * 201);
+  }
+  const unloadInitial = unloadCount;
+  function renderUnload() {
+    const el = document.getElementById('unload-count');
+    const pctEl = document.getElementById('unload-pct');
+    if (el) el.textContent = unloadCount;
+    if (pctEl) {
+      const consumed = unloadInitial - unloadCount;
+      pctEl.textContent = unloadCount > 50 ? ('已處理 ' + consumed) : '即將完結';
+    }
+  }
+  renderUnload();
+  function scheduleUnloadDecrement() {
+    // Random interval between 2:00 and 2:30 (120000~150000 ms)
+    const nextDelay = 120000 + Math.random() * 30000;
+    setTimeout(() => {
+      if (unloadCount > 20) {
+        unloadCount -= 1;
+        try { localStorage.setItem('unload_count', String(unloadCount)); } catch(e) {}
+        renderUnload();
+      }
+      scheduleUnloadDecrement();
+    }, nextDelay);
+  }
+  scheduleUnloadDecrement();
+
+  // ── 各工站今日統計 ────────────────────────────────────────────────────────
+  let stats = null;          // { rework, paint, final }，每個為 summarize() 結果
+  let selectedStation = null;
+
+  function summarize(recs) {
+    const now = Date.now();
+    const byPid = {};
+    const byModel = {};
+    let last = null;
+    recs.forEach(r => {
+      const p = byPid[r.pid] || (byPid[r.pid] = { pid: r.pid, count: 0, lastTs: null });
+      p.count++;
+      if (r.ts && (!p.lastTs || r.ts > p.lastTs)) p.lastTs = r.ts;
+      if (r.ts && (!last || r.ts > last)) last = r.ts;
+      const m = r.model || '（未填）';
+      byModel[m] = (byModel[m] || 0) + 1;
+    });
+    const workers = Object.values(byPid).sort((a, b) => b.count - a.count);
+    workers.forEach(w => { w.active = !!w.lastTs && (now - w.lastTs) / 1000 <= OFFLINE_SEC; });
+    return {
+      count: recs.length,
+      workers,
+      activeCount: workers.filter(w => w.active).length,
+      byModel,
+      last,
+      recs,
+    };
+  }
+
+  function pct(n) { return n == null ? '—' : Math.round(n * 100) + '%'; }
+
+  function renderStation(key, s, subPrefix) {
+    document.getElementById(`st-${key}-count`).textContent = s.count;
+    document.getElementById(`st-${key}-sub`).textContent = `${subPrefix} · ${s.workers.length} 人`;
+    document.getElementById(`st-${key}-rect`).setAttribute('class', 'station-rect' + (s.activeCount > 0 ? ' ok' : ''));
+    const dots = document.getElementById(`st-${key}-dots`);
+    dots.innerHTML = s.workers.slice(0, 12).map((w, i) =>
+      `<circle class="worker-dot${w.active ? '' : ' off'}" cx="${18 + i * 12}" cy="134" r="3.5"/>`).join('');
+  }
+
+  function renderAll() {
+    if (!stats) return;
+    const { rework, paint, final } = stats;
+
+    renderStation('rework', rework, 'REWORK');
+    renderStation('paint', paint, 'TOUCH-UP');
+    renderStation('final', final, 'FINAL');
+    document.getElementById('st-rework-pct').textContent = rework.last ? '最後 ' + hhmm(rework.last) : '';
+    document.getElementById('st-final-pct').textContent  = final.last  ? '最後 ' + hhmm(final.last)  : '';
+
+    // 直行率 = (終檢 − 補漆) / 終檢；需補漆率 = 補漆 / 終檢（早班補漆可能先於終檢，結果夾在 0~100%）
+    const fpy     = final.count > 0 ? Math.max(0, Math.min(1, (final.count - paint.count) / final.count)) : null;
+    const repaint = final.count > 0 ? Math.max(0, Math.min(1, paint.count / final.count)) : null;
+
+    document.getElementById('kpi-pass').textContent = final.count;
+    document.getElementById('kpi-pass-delta').textContent = final.last ? `終檢階段 今日筆數 · 最後 ${hhmm(final.last)}` : '終檢階段 今日筆數';
+    document.getElementById('kpi-fpy').textContent = pct(fpy);
+    document.getElementById('kpi-fpy-delta').textContent = `(終檢 ${final.count} − 補漆 ${paint.count}) ÷ 終檢`;
+    document.getElementById('kpi-repaint').textContent = pct(repaint);
+    document.getElementById('kpi-repaint-delta').textContent = `補漆 ${paint.count} ÷ 終檢 ${final.count}`;
+    document.getElementById('st-paint-pct').textContent = repaint != null ? '需補漆 ' + pct(repaint) : '';
+    document.getElementById('flow-repaint').textContent = '需補漆 ' + pct(repaint);
+    document.getElementById('flow-fpy').textContent = '直行 ' + pct(fpy);
+
+    const allPids = new Set([...rework.workers, ...paint.workers, ...final.workers].map(w => w.pid));
+    document.getElementById('kpi-workers').textContent = allPids.size;
+    document.getElementById('kpi-workers-delta').textContent =
+      `整修 ${rework.workers.length} · 補漆 ${paint.workers.length} · 終檢 ${final.workers.length}`;
+
+    document.getElementById('nav-sub-rework').textContent = `${rework.workers.length} 位作業員 · ${rework.count} PCS · 碼表監控`;
+    document.getElementById('nav-sub-paint').textContent  = `${paint.workers.length} 位作業員 · ${paint.count} PCS · 碼表監控`;
+
+    renderTrend([...rework.recs, ...paint.recs, ...final.recs]);
+    if (selectedStation) renderDetail(selectedStation); else renderOverview();
+  }
+
+  // 近 2 小時、每 10 分鐘一格的筆數
+  function renderTrend(recs) {
+    const BUCKETS = 12, SPAN = 10 * 60 * 1000;
+    const end = Date.now();
+    const trend = new Array(BUCKETS).fill(0);
+    recs.forEach(r => {
+      if (!r.ts) return;
+      const idx = BUCKETS - 1 - Math.floor((end - r.ts) / SPAN);
+      if (idx >= 0 && idx < BUCKETS) trend[idx]++;
+    });
+    const maxTrend = Math.max(1, Math.max.apply(null, trend));
+    const polyPts = trend.map((v, i) => {
+      const x = (i / (trend.length - 1)) * 1120;
+      const y = 50 - (v / maxTrend) * 40;
+      return x + ',' + y;
+    }).join(' ');
+    document.getElementById('floor-trend').setAttribute('points', '0,50 ' + polyPts + ' 1120,50');
+  }
+
+  // ── 詳細面板 ──────────────────────────────────────────────────────────────
+  function barRows(rows) {
+    // rows: [label, value, widthPct, cls]
+    return '<div class="breakdown">' + rows.map(r =>
+      '<div class="br-row"><span class="lbl">'+esc(r[0])+'</span><div class="bar"><div class="fill '+(r[3]==='warn'?'warn':'')+'" style="width:'+r[2]+'%;"></div></div><span class="val">'+esc(r[1])+'</span></div>'
+    ).join('') + '</div>';
+  }
+  function modelRows(byModel, cls) {
+    const entries = Object.entries(byModel).sort((a, b) => b[1] - a[1]).slice(0, 5);
+    const max = entries.length ? entries[0][1] : 1;
+    return entries.map(([m, n]) => [m, n, Math.round(n / max * 100), cls]);
+  }
+  function section(title, inner) {
+    return '<div class="detail-section"><h4>' + esc(title) + '</h4>' + inner + '</div>';
+  }
+  function noteHtml(text) {
+    return '<div style="grid-column: 1 / -1; margin-top: 6px; padding-top: 12px; border-top: 1px solid var(--border); font-size: 12px; color: var(--fg-mute);">💡 ' + esc(text) + '</div>';
+  }
+  function empty(text) { return '<div class="empty-note">' + esc(text) + '</div>'; }
+
+  function renderOverview() {
+    const { rework, paint, final } = stats;
+    document.getElementById('detail-name').textContent = '整體概覽 · Overview';
+    document.getElementById('detail-meta').textContent = '點擊任一工站 →';
+    const max = Math.max(1, rework.count, paint.count, final.count);
+    const left = barRows([
+      ['下線(估)', unloadCount, 100, 'ok'],
+      ['整修', rework.count, Math.round(rework.count / max * 100), 'ok'],
+      ['補漆', paint.count,  Math.round(paint.count  / max * 100), 'warn'],
+      ['終檢', final.count,  Math.round(final.count  / max * 100), 'ok'],
+    ]);
+    // 車型直行率 = (終檢_m − 補漆_m) / 終檢_m，取終檢筆數前 5 名車型
+    const models = Object.entries(final.byModel).sort((a, b) => b[1] - a[1]).slice(0, 5);
+    const fpyRows = models.map(([m, n]) => {
+      const p = paint.byModel[m] || 0;
+      const v = Math.max(0, Math.min(1, (n - p) / n));
+      return [m, Math.round(v * 100) + '%', Math.round(v * 100), v >= 0.5 ? 'ok' : 'warn'];
+    });
+    document.getElementById('detail-content').innerHTML =
+      section('工站狀態 · Station Status', left) +
+      section('直行率拆解 · FPY by Model', fpyRows.length ? barRows(fpyRows) : empty('今日終檢尚無資料')) +
+      noteHtml('直行率以「(終檢 − 補漆) ÷ 終檢」計算；車型以終檢筆數前 5 名列出。');
+  }
+
+  const STATION_META = {
+    rework: { name: '整修區 · Rework',    key: 'rework', right: '車型分布' },
+    paint:  { name: '補漆區 · Touch-up',  key: 'paint',  right: '車型需補漆筆數' },
+    final:  { name: '終檢區 · Final',     key: 'final',  right: '車型分布' },
+  };
+
+  function renderDetail(id) {
+    const content = document.getElementById('detail-content');
+    if (id === 'unload') {
+      document.getElementById('detail-name').textContent = '下線區 · Unload';
+      document.getElementById('detail-meta').textContent = '無系統資料';
+      content.innerHTML =
+        section('今日下線（估算）', barRows([
+          ['剩餘', unloadCount, Math.round(unloadCount / Math.max(1, unloadInitial) * 100), 'ok'],
+          ['已處理', unloadInitial - unloadCount, Math.round((unloadInitial - unloadCount) / Math.max(1, unloadInitial) * 100), 'ok'],
+        ])) +
+        noteHtml('塗裝線下線數目前只有紙本記錄，此處為每日隨機初始值 + 緩慢遞減的估算顯示。');
+      return;
+    }
+    const meta = STATION_META[id];
+    if (!meta || !stats) return;
+    const s = stats[meta.key];
+    document.getElementById('detail-name').textContent = meta.name;
+    document.getElementById('detail-meta').textContent = `${s.workers.length} 位作業員 · ${s.activeCount} 位 15 分鐘內有實績`;
+    const workersHtml = s.workers.length
+      ? '<div class="worker-list">' + s.workers.slice(0, 8).map(w =>
+          '<div class="worker-row"><span><span class="id">'+esc(w.pid)+'</span><span class="name">最後 '+hhmm(w.lastTs)+(w.active?'':' · 離線')+'</span></span><span class="count">'+w.count+' 筆</span></div>'
+        ).join('') + '</div>'
+      : empty('今日尚無實績');
+    const rows = modelRows(s.byModel, id === 'paint' ? 'warn' : 'ok');
+    content.innerHTML =
+      section('今日作業員', workersHtml) +
+      section(meta.right, rows.length ? barRows(rows) : empty('今日尚無資料')) +
+      noteHtml(`今日 ${s.count} 筆${s.last ? '，最後一筆 ' + hhmm(s.last) : ''}。`);
+  }
+
+  // Click handlers
+  document.querySelectorAll('.station').forEach(st => {
+    st.addEventListener('click', () => {
+      document.querySelectorAll('.station').forEach(s => s.classList.remove('selected'));
+      st.classList.add('selected');
+      selectedStation = st.dataset.id;
+      renderDetail(selectedStation);
+    });
+  });
+
+  // ── 讀取 Google Sheet（載入時一次，之後每 30 秒）──────────────────────────
+  async function refresh() {
+    const srcEl = document.getElementById('data-src');
+    const errEl = document.getElementById('err-banner');
+    try {
+      let paintSheet = DEFAULT_CONFIG.sheetName;
+      try { paintSheet = (JSON.parse(lsGet('sysSettingsCache') || 'null') || {}).sheet_name || paintSheet; } catch(e) {}
+      let data = await fetchAllSheets(paintSheet);
+      const sheetName = (data.settingsRaw.sheet_name || '').trim();
+      if (sheetName && sheetName !== paintSheet) data = await fetchAllSheets(sheetName); // 系統設定改了補漆分頁名稱
+      const t = todaySlash();
+      stats = {
+        rework: summarize(data.rework.filter(r => r.date === t)),
+        paint:  summarize(data.paint.filter(r => r.date === t)),
+        final:  summarize(data.final.filter(r => r.date === t)),
+      };
+      renderAll();
+      errEl.style.display = 'none';
+      srcEl.textContent = '資料來源：Google Sheet · 最後更新 ' + hhmm(new Date());
+    } catch (e) {
+      console.error('[factory-flow] 讀取失敗', e);
+      errEl.style.display = 'block';
+      if (stats) srcEl.textContent = srcEl.textContent.replace(/（.*）$/, '') + '（讀取失敗，顯示上次資料）';
+    }
+  }
+  refresh();
+  setInterval(refresh, REFRESH_MS);
+
+  // Theme toggle
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const root = document.documentElement;
+    const cur = root.getAttribute('data-theme');
+    if (cur === 'light') { root.setAttribute('data-theme', 'dark'); }
+    else { root.setAttribute('data-theme', 'light'); }
+  });
+})();
+</script>
+
+</body></html>

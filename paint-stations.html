@@ -1,0 +1,1034 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>補漆工站動態</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap">
+<style>
+/* Design: operator floor view - large status cards per worker, live stopwatch, parts flying to a shared destination lane */
+:root {
+  --bg: #0a0f16;
+  --panel: #121a24;
+  --panel-up: #1a2432;
+  --panel-high: #243246;
+  --border: #273347;
+  --border-up: #3b4a62;
+  --fg: #e9edf2;
+  --fg-mute: #7f8da2;
+  --fg-dim: #4e596a;
+
+  --ok: #22c55e;
+  --ok-glow: rgba(34,197,94,.4);
+  --ok-fill: rgba(34,197,94,.08);
+  --warn: #f59e0b;
+  --warn-glow: rgba(245,158,11,.4);
+  --warn-fill: rgba(245,158,11,.08);
+  --crit: #ef4444;
+  --crit-glow: rgba(239,68,68,.4);
+  --crit-fill: rgba(239,68,68,.08);
+  --info: #38bdf8;
+  --purple: #a78bfa;
+  --dim: #475569;
+
+  --font-ui: 'Inter', 'Noto Sans TC', -apple-system, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
+
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #eef2f7;
+    --panel: #ffffff;
+    --panel-up: #ffffff;
+    --panel-high: #f1f5f9;
+    --border: #e2e8f0;
+    --border-up: #cbd5e1;
+    --fg: #0f172a;
+    --fg-mute: #64748b;
+    --fg-dim: #94a3b8;
+    --ok: #16a34a;
+    --warn: #d97706;
+    --crit: #dc2626;
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #eef2f7;
+  --panel: #ffffff;
+  --panel-up: #ffffff;
+  --panel-high: #f1f5f9;
+  --border: #e2e8f0;
+  --border-up: #cbd5e1;
+  --fg: #0f172a;
+  --fg-mute: #64748b;
+  --fg-dim: #94a3b8;
+  --ok: #16a34a;
+  --warn: #d97706;
+  --crit: #dc2626;
+  color-scheme: light;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 10px;
+  font-variant-numeric: tabular-nums;
+  overflow-x: hidden;
+}
+
+.shell { max-width: 1760px; margin: 0 auto; display: flex; flex-direction: column; gap: 7px; }
+
+/* Topbar */
+.topbar { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+.title-group { display: flex; flex-direction: column; gap: 1px; }
+.back-link {
+  color: var(--fg-mute);
+  text-decoration: none;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  margin-bottom: 2px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+  width: fit-content;
+  transition: color 0.2s, gap 0.2s;
+}
+.back-link:hover { color: var(--info); gap: 7px; }
+.back-link .arrow { font-size: 14px; line-height: 1; }
+.title { font-size: 17px; font-weight: 700; letter-spacing: 0.02em; }
+.title .accent { color: var(--info); }
+.subtitle { color: var(--fg-mute); font-size: 12px; letter-spacing: 0.04em; }
+.clock { display: flex; gap: 10px; align-items: center; color: var(--fg-mute); font-size: 12px; }
+.clock .time { color: var(--fg); font-family: var(--font-mono); font-weight: 600; font-size: 15px; }
+.pulse { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); animation: pulse 1.5s infinite; }
+@keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(34,197,94,.6); } 50% { box-shadow: 0 0 0 8px transparent; } }
+
+/* Tabs */
+.tabs { display: flex; gap: 2px; background: var(--panel); border: 1px solid var(--border); padding: 2px; width: fit-content; }
+.tab { padding: 6px 14px; font-size: 12px; font-weight: 500; cursor: pointer; color: var(--fg-mute); border: none; background: none; font-family: inherit; letter-spacing: 0.02em; }
+.tab.active { background: var(--panel-up); color: var(--fg); }
+.tab .count { color: var(--fg-dim); margin-left: 6px; font-family: var(--font-mono); font-size: 11px; }
+
+/* Segment + KPI */
+.summary-row { display: grid; grid-template-columns: minmax(200px, 1.4fr) 4fr; gap: 8px; }
+@media (max-width: 760px) { .summary-row { grid-template-columns: 1fr; } }
+.segment-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  padding: 10px 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  gap: 3px;
+  position: relative;
+  overflow: hidden;
+  min-height: 86px;
+}
+.segment-card .lbl { font-size: 12px; color: var(--fg-mute); letter-spacing: 0.14em; text-transform: uppercase; font-weight: 600; }
+.segment-card .seg-name { font-size: 28px; font-weight: 800; font-family: var(--font-mono); color: var(--info); letter-spacing: -0.01em; line-height: 1.1; }
+.segment-card .seg-time { color: var(--fg-mute); font-size: 13px; font-family: var(--font-mono); font-weight: 500; }
+.segment-card .seg-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: var(--border); }
+.segment-card .seg-bar .fill { height: 100%; background: var(--info); transition: width 1s linear; box-shadow: 0 0 8px rgba(56,189,248,.5); }
+
+.kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+@media (max-width: 500px) { .kpi-row { grid-template-columns: repeat(2, 1fr); } }
+.kpi-mini {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  gap: 4px;
+  min-height: 86px;
+}
+.kpi-mini .lbl { font-size: 12px; color: var(--fg-mute); letter-spacing: 0.14em; text-transform: uppercase; font-weight: 600; }
+.kpi-mini .val { font-size: 38px; font-weight: 800; font-family: var(--font-mono); letter-spacing: -0.02em; line-height: 1; }
+.kpi-mini .val.ok { color: var(--ok); }
+.kpi-mini .val.warn { color: var(--warn); }
+.kpi-mini .val.crit { color: var(--crit); }
+
+/* Worker grid */
+.worker-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(205px, 1fr)); gap: 8px; }
+.worker-grid.few { grid-template-columns: repeat(auto-fit, minmax(260px, 380px)); }
+
+.worker-card {
+  background: var(--panel);
+  border: 2px solid var(--border);
+  padding: 10px 12px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: background 0.4s, border-color 0.3s, transform 0.3s, box-shadow 0.3s;
+  overflow: hidden;
+  min-height: 180px;
+}
+.worker-card.ok {
+  background: linear-gradient(135deg, rgba(34,197,94,.28), rgba(34,197,94,.08) 65%), var(--panel);
+  border-color: var(--ok);
+  box-shadow: inset 0 0 20px rgba(34,197,94,.08);
+}
+.worker-card.warn {
+  background: linear-gradient(135deg, rgba(245,158,11,.28), rgba(245,158,11,.08) 65%), var(--panel);
+  border-color: var(--warn);
+  box-shadow: inset 0 0 20px rgba(245,158,11,.08);
+}
+.worker-card.crit {
+  background: linear-gradient(135deg, rgba(239,68,68,.32), rgba(239,68,68,.1) 65%), var(--panel);
+  border-color: var(--crit);
+  box-shadow: inset 0 0 20px rgba(239,68,68,.1);
+  animation: critPulse 2.5s ease-in-out infinite;
+}
+.worker-card.off {
+  opacity: 0.5;
+  background: var(--panel);
+  border-color: var(--border);
+  border-style: dashed;
+}
+@keyframes critPulse {
+  0%, 100% { box-shadow: inset 0 0 20px rgba(239,68,68,.1); }
+  50% { box-shadow: inset 0 0 32px rgba(239,68,68,.25); }
+}
+
+.worker-card.completed { animation: cardFlash 0.6s ease; }
+@keyframes cardFlash {
+  0% { box-shadow: 0 0 0 0 var(--ok-glow); transform: scale(1); border-color: var(--ok); }
+  50% { box-shadow: 0 0 24px 2px var(--ok-glow); transform: scale(1.015); border-color: var(--ok); }
+  100% { box-shadow: 0 0 0 0 transparent; transform: scale(1); }
+}
+
+.wc-head { display: flex; justify-content: space-between; align-items: center; }
+.wc-id { font-family: var(--font-mono); font-weight: 800; font-size: 22px; letter-spacing: 0.03em; }
+.wc-name { font-size: 13px; color: var(--fg-mute); margin-left: 6px; font-weight: 600; }
+
+.wc-status { display: flex; align-items: center; gap: 5px; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 700; padding: 3px 8px; border: 1.5px solid currentColor; }
+.wc-status .indicator { width: 8px; height: 8px; border-radius: 50%; }
+.worker-card.ok .wc-status { color: var(--ok); background: rgba(34,197,94,.12); }
+.worker-card.warn .wc-status { color: var(--warn); background: rgba(245,158,11,.12); }
+.worker-card.crit .wc-status { color: var(--crit); background: rgba(239,68,68,.15); }
+.worker-card.off .wc-status { color: var(--fg-dim); background: var(--panel-up); border-color: var(--border); }
+.worker-card.ok .indicator { background: var(--ok); box-shadow: 0 0 8px var(--ok-glow); }
+.worker-card.warn .indicator { background: var(--warn); box-shadow: 0 0 8px var(--warn-glow); }
+.worker-card.crit .indicator { background: var(--crit); box-shadow: 0 0 8px var(--crit-glow); animation: dotBlink 1s infinite; }
+.worker-card.off .indicator { background: var(--dim); }
+@keyframes dotBlink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+/* Stopwatch */
+.wc-watch { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 5px 0; background: rgba(0,0,0,.3); border: 1px solid var(--border); margin: 0 -4px; border-radius: 2px; }
+:root[data-theme="light"] .wc-watch { background: rgba(0,0,0,.05); }
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) .wc-watch { background: rgba(0,0,0,.05); }
+}
+.wc-watch .wlbl { font-size: 9px; color: var(--fg-mute); letter-spacing: 0.14em; text-transform: uppercase; font-weight: 600; }
+.wc-watch .wval { font-family: var(--font-mono); font-weight: 800; font-size: 30px; letter-spacing: 0.02em; line-height: 1.1; }
+.wc-watch .wval.ok { color: var(--fg); }
+.wc-watch .wval.warn { color: var(--warn); }
+.wc-watch .wval.crit { color: var(--crit); }
+.wc-watch .wval.off { color: var(--fg-dim); }
+.worker-card.off .wc-watch .wval { font-size: 20px; }
+
+/* Stats */
+.wc-stats { display: flex; flex-direction: column; gap: 4px; }
+.stat-row { display: flex; justify-content: space-between; align-items: center; font-size: 12px; }
+.stat-row .lbl { color: var(--fg-mute); letter-spacing: 0.03em; font-weight: 500; }
+.stat-row .val { font-family: var(--font-mono); font-weight: 700; font-size: 13px; }
+.stat-row .pct { padding: 1px 7px; font-size: 11px; font-weight: 700; margin-left: 4px; }
+.pct.ok { background: var(--ok-fill); color: var(--ok); }
+.pct.warn { background: var(--warn-fill); color: var(--warn); }
+.pct.crit { background: var(--crit-fill); color: var(--crit); }
+
+.wc-bar { height: 5px; background: rgba(0,0,0,.3); position: relative; overflow: hidden; border-radius: 3px; }
+:root[data-theme="light"] .wc-bar { background: rgba(0,0,0,.08); }
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) .wc-bar { background: rgba(0,0,0,.08); }
+}
+.wc-bar .fill { position: absolute; left: 0; top: 0; bottom: 0; transition: width 0.5s ease; border-radius: 4px; }
+.worker-card.ok .wc-bar .fill { background: var(--ok); box-shadow: 0 0 8px var(--ok-glow); }
+.worker-card.warn .wc-bar .fill { background: var(--warn); box-shadow: 0 0 8px var(--warn-glow); }
+.worker-card.crit .wc-bar .fill { background: var(--crit); box-shadow: 0 0 8px var(--crit-glow); }
+
+/* Current item */
+.wc-item { font-size: 10px; color: var(--fg-mute); border-top: 1px dashed var(--border); padding-top: 4px; display: flex; justify-content: space-between; font-weight: 500; }
+.wc-item .code { font-family: var(--font-mono); color: var(--fg); font-weight: 700; font-size: 11px; }
+
+/* +1 Bubble animation */
+.plus-one { position: absolute; top: 12px; right: 12px; font-family: var(--font-mono); font-size: 18px; font-weight: 700; color: var(--ok); pointer-events: none; animation: floatUp 1.2s ease forwards; }
+@keyframes floatUp {
+  0% { opacity: 0; transform: translateY(10px) scale(0.8); }
+  20% { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(-30px) scale(1.1); }
+}
+
+/* Flying part */
+.flying-part {
+  position: fixed;
+  width: 28px;
+  height: 28px;
+  background: var(--ok);
+  border: 2px solid #fff;
+  border-radius: 4px;
+  z-index: 100;
+  box-shadow: 0 0 12px var(--ok-glow);
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  transition: all 1.2s cubic-bezier(0.5, 0, 0.5, 1.2);
+}
+
+/* Final inspection lane (bottom) */
+.lane {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  padding: 7px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  position: relative;
+  overflow: hidden;
+}
+.lane-left { display: flex; flex-direction: column; gap: 1px; }
+.lane-lbl { font-size: 9px; color: var(--fg-mute); letter-spacing: 0.1em; text-transform: uppercase; }
+.lane-title { font-size: 12px; font-weight: 700; color: var(--info); display: flex; align-items: center; gap: 6px; }
+.lane-count { font-family: var(--font-mono); font-size: 22px; font-weight: 700; color: var(--fg); line-height: 1; letter-spacing: -0.02em; }
+.lane-count.bump { animation: bump 0.4s ease; }
+@keyframes bump { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.15); color: var(--ok); } }
+
+.lane-vis { flex: 1; min-width: 200px; height: 28px; position: relative; background: var(--panel-up); border: 1px dashed var(--border); overflow: hidden; }
+.lane-vis .track { position: absolute; left: 10px; right: 10px; top: 50%; height: 1px; background: var(--border-up); }
+.lane-vis .part-in-lane {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 18px; height: 18px;
+  background: var(--ok);
+  border: 1.5px solid #fff;
+  border-radius: 3px;
+  animation: slideRight 4s linear forwards;
+}
+@keyframes slideRight {
+  0% { right: 100%; opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { right: -5%; opacity: 0; }
+}
+
+.lane-dest { font-size: 11px; color: var(--fg-mute); letter-spacing: 0.08em; text-align: right; display: flex; align-items: center; gap: 6px; }
+.lane-dest .arrow { color: var(--info); font-size: 16px; }
+
+/* Toolbar */
+.toolbar { display: flex; justify-content: space-between; align-items: center; padding: 6px 12px; background: var(--panel); border: 1px solid var(--border); font-size: 10px; color: var(--fg-mute); flex-wrap: wrap; gap: 10px; }
+.toolbar .legend-items { display: flex; gap: 16px; flex-wrap: wrap; }
+.toolbar .legend-items span { display: flex; align-items: center; gap: 6px; }
+.toolbar .dot { width: 8px; height: 8px; border-radius: 50%; }
+.theme-btn { background: var(--panel-up); border: 1px solid var(--border-up); color: var(--fg-mute); padding: 4px 10px; font-size: 11px; cursor: pointer; font-family: inherit; }
+.theme-btn:hover { color: var(--fg); border-color: var(--fg-mute); }
+
+.demo-tag { display: inline-block; padding: 2px 8px; background: var(--purple); color: #fff; font-size: 10px; font-weight: 700; letter-spacing: 0.1em; margin-left: 8px; vertical-align: middle; border-radius: 2px; }
+
+.inflow-icon {
+  position: absolute;
+  left: -14px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 14px;
+  height: 14px;
+  background: var(--info);
+  border-radius: 2px;
+  animation: inflowPulse 2s ease-in-out infinite;
+}
+@keyframes inflowPulse {
+  0%, 100% { transform: translateY(-50%) translateX(-20px); opacity: 0; }
+  40% { transform: translateY(-50%) translateX(0); opacity: 1; }
+  60% { transform: translateY(-50%) translateX(0); opacity: 1; }
+  100% { transform: translateY(-50%) translateX(20px); opacity: 0; }
+}
+
+/* Live data status */
+.data-src { font-size: 11px; color: var(--fg-mute); font-family: var(--font-mono); letter-spacing: 0.02em; }
+.err-banner { display: none; background: var(--crit-fill); border: 1px solid var(--crit); color: var(--crit); padding: 8px 14px; font-size: 13px; font-weight: 600; }
+.empty-grid { grid-column: 1 / -1; background: var(--panel); border: 1px dashed var(--border); padding: 36px 16px; text-align: center; color: var(--fg-mute); font-size: 14px; }
+.target-tag { font-size: 10px; color: var(--fg-dim); margin-left: 4px; }
+</style>
+
+<div class="shell">
+  <div class="topbar">
+    <div class="title-group">
+      <a class="back-link" href="factory-flow.html"><span class="arrow">←</span> 返回流程看板</a>
+      <div class="title">補漆房 <span class="accent">工站動態</span></div>
+      <div class="subtitle" id="subtitle">裕器工業 · 塗裝部門 · 補漆區即時監控</div>
+      <div class="data-src" id="data-src">資料來源：Google Sheet · 讀取中…</div>
+    </div>
+    <div class="clock">
+      <span class="pulse"></span>
+      即時刷新 · <span class="time" id="clock">--:--:--</span>
+    </div>
+  </div>
+
+  <div class="err-banner" id="err-banner">⚠️ 資料讀取失敗，請確認網路或系統設定</div>
+
+  <div class="tabs">
+    <button class="tab active" data-station="paint">補漆區 <span class="count" id="tab-count-paint">— 人</span></button>
+    <button class="tab" data-station="rework">整修區 <span class="count" id="tab-count-rework">— 人</span></button>
+  </div>
+
+  <div class="summary-row">
+    <div class="segment-card">
+      <div class="lbl">目前時段</div>
+      <div class="seg-name" id="seg-name">—</div>
+      <div class="seg-time" id="seg-time">—</div>
+      <div class="seg-bar"><div class="fill" id="seg-progress" style="width: 0%;"></div></div>
+    </div>
+    <div class="kpi-row">
+      <div class="kpi-mini">
+        <div class="lbl">在場人力</div>
+        <div class="val" id="kpi-workers">—</div>
+      </div>
+      <div class="kpi-mini">
+        <div class="lbl">今日累計</div>
+        <div class="val" id="kpi-total">—</div>
+      </div>
+      <div class="kpi-mini">
+        <div class="lbl">本段產出</div>
+        <div class="val" id="kpi-seg">—</div>
+      </div>
+      <div class="kpi-mini">
+        <div class="lbl" id="kpi-rate-lbl">時段達成率</div>
+        <div class="val" id="kpi-rate">—</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="worker-grid" id="worker-grid"></div>
+
+  <div class="lane" id="lane">
+    <div class="lane-left">
+      <div class="lane-lbl">送往下站</div>
+      <div class="lane-title">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg>
+        終檢流入區
+      </div>
+      <div><span class="lane-count" id="lane-count">—</span> <span style="color: var(--fg-mute); font-size: 11px;">PCS TODAY · 終檢階段</span></div>
+    </div>
+    <div class="lane-vis" id="lane-vis">
+      <div class="track"></div>
+    </div>
+    <div class="lane-dest">
+      <span>終檢區</span>
+      <span class="arrow">→</span>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <div class="legend-items">
+      <span><span class="dot" style="background: var(--ok);"></span>綠 ≥ 100%</span>
+      <span><span class="dot" style="background: var(--warn);"></span>黃 80~99%</span>
+      <span><span class="dot" style="background: var(--crit);"></span>紅 &lt; 80%</span>
+      <span><span class="dot" style="background: var(--dim);"></span>灰 離線 &gt; 15 分</span>
+      <span style="color: var(--fg-dim);">·</span>
+      <span>碼表 = 距上一筆實績秒數</span>
+      <span style="color: var(--fg-dim);">·</span>
+      <span>達成率 = 實績 ÷ 至今應達（依在場時間）</span>
+    </div>
+    <button class="theme-btn" id="theme-toggle">切換主題</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  // ── Google Sheet 連線（與 person_part_analysis.html 相同的 DEFAULT_CONFIG / localStorage key）──
+  const DEFAULT_CONFIG = {
+    sheetsId: '1xQoIxoLlM4LkKjDrYZ_87uIahtebPgPcG6Hitck1T5c',
+    apiKey:   'AIzaSyBMgXHsua64mciOFJwqH4NreGI11gMXR-s',
+    sheetName: '整修日報'
+  };
+  const REWORK_SHEET = '整修階段';
+  const FINAL_SHEET  = '終檢階段';
+  const SYSTEM_SETTINGS_RANGE = '系統設定!A2:B20';
+  const SYSTEM_SETTINGS_DEFAULTS = { bx_target: 51, mz_target: 39, pf_coef: 0.7 };
+  const REFRESH_MS = 30000;
+  const OFFLINE_SEC = 15 * 60;   // 超過 15 分鐘沒有實績 → 離線
+  const MAX_WORKERS = 8;
+  const DEFAULT_AVG_SEC = 300;   // 只有 1 筆時，碼表顏色判定用的預設節拍
+
+  // 遲到／早退容錯（與 person_part_analysis.html 相同）
+  const LATE_BUFFER_MIN = 90;
+  const EARLY_LEAVE_BUFFER_MIN = 90;
+  const MZ_CODES = new Set(['51','A4D','41W','46V','PZ','TAS']);
+
+  function lsGet(k) { try { return localStorage.getItem(k); } catch(e) { return null; } }
+
+  function getConn() {
+    return {
+      id:  lsGet('gsId')  || DEFAULT_CONFIG.sheetsId,
+      key: lsGet('gsKey') || DEFAULT_CONFIG.apiKey,
+    };
+  }
+
+  // 一次 batchGet 讀取 系統設定 + 3 個階段分頁，節省 API 配額
+  async function fetchAllSheets(paintSheet) {
+    const { id, key } = getConn();
+    const ranges = [SYSTEM_SETTINGS_RANGE, paintSheet + '!A:F', REWORK_SHEET + '!A:F', FINAL_SHEET + '!A:F'];
+    const qs = ranges.map(r => 'ranges=' + encodeURIComponent(r)).join('&');
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${id}/values:batchGet?key=${key}&${qs}`;
+    const res = await fetch(url);
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => null);
+      throw new Error((errJson && errJson.error && errJson.error.message) || `HTTP ${res.status}`);
+    }
+    const json = await res.json();
+    const vr = json.valueRanges || [];
+    const settingsRaw = {};
+    ((vr[0] && vr[0].values) || []).forEach(row => {
+      const k = (row[0] || '').trim();
+      if (k) settingsRaw[k] = row[1];
+    });
+    return {
+      settingsRaw,
+      paint:  parseRows((vr[1] && vr[1].values) || []),
+      rework: parseRows((vr[2] && vr[2].values) || []),
+      final:  parseRows((vr[3] && vr[3].values) || []),
+    };
+  }
+
+  function buildSettings(raw) {
+    const d = SYSTEM_SETTINGS_DEFAULTS;
+    const bx = parseInt(raw.bx_target, 10);
+    const mz = parseInt(raw.mz_target, 10);
+    const pf = parseFloat(raw.pf_coef);
+    const rw = parseInt(raw.rework_target, 10);
+    const bxTarget = Number.isFinite(bx) ? bx : d.bx_target;
+    return {
+      sheet_name:    (raw.sheet_name || '').trim() || DEFAULT_CONFIG.sheetName,
+      bx_target:     bxTarget,
+      mz_target:     Number.isFinite(mz) ? mz : d.mz_target,
+      pf_coef:       Number.isFinite(pf) ? pf : d.pf_coef,
+      // 整修目標：系統設定有 rework_target 就用，沒有先暫用補漆的 bx_target
+      rework_target: Number.isFinite(rw) ? rw : bxTarget,
+      rework_target_is_default: !Number.isFinite(rw),
+    };
+  }
+
+  // 欄位：A 時間戳記, B 記錄日期, C 工號, D 車型, E 種類/部件, F 顏色（有 header 時依名稱自動對應）
+  function parseRows(values) {
+    if (!values.length) return [];
+    const col = { ts: 0, date: 1, pid: 2, model: 3, part: 4, color: 5 };
+    const header = values[0].map(h => (h || '').trim());
+    const isHeader = header[1] && !/^\d/.test(header[1]);
+    if (isHeader) {
+      header.forEach((h, i) => {
+        if (/時間戳記/.test(h))            col.ts = i;
+        else if (/記錄日期|日期/.test(h))  col.date = i;
+        else if (/工號|員工|人員/.test(h)) col.pid = i;
+        else if (/車型/.test(h))           col.model = i;
+        else if (/種類|部件/.test(h))      col.part = i;
+        else if (/顏色/.test(h))           col.color = i;
+      });
+    }
+    const out = [];
+    (isHeader ? values.slice(1) : values).forEach(row => {
+      const rawDate = (row[col.date] || '').trim();
+      const pid = (row[col.pid] || '').trim();
+      if (!rawDate || !pid) return;
+      const date = normalizeDate(rawDate);
+      if (!date) return;
+      const ts = parseTimestamp((row[col.ts] || '').trim());
+      out.push({
+        date, pid, ts,
+        tsMin: ts ? ts.getHours() * 60 + ts.getMinutes() : null,
+        model: (row[col.model] || '').trim(),
+        part:  (row[col.part]  || '').trim(),
+        color: (row[col.color] || '').trim().toUpperCase(),
+      });
+    });
+    return out;
+  }
+
+  function normalizeDate(s) {
+    s = s.trim().replace(/\s*(上午|下午|AM|PM)[\s\d:：]*$/i, '').trim();
+    s = s.split('T')[0].trim().split(' ')[0];
+    s = s.replace(/-/g, '/');
+    const m1 = s.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
+    if (m1) return `${m1[1]}/${m1[2].padStart(2,'0')}/${m1[3].padStart(2,'0')}`;
+    const m2 = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (m2) return `${m2[3]}/${m2[1].padStart(2,'0')}/${m2[2].padStart(2,'0')}`;
+    return '';
+  }
+
+  // 「2026/10/10 上午08:08:58」→ Date（本機時區）
+  function parseTimestamp(raw) {
+    const m = raw.match(/(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})\s*(上午|下午|AM|PM)?\s*(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?/i);
+    if (!m) return null;
+    let h = parseInt(m[5], 10);
+    const ap = (m[4] || m[8] || '').toUpperCase();
+    if ((ap === '下午' || ap === 'PM') && h < 12) h += 12;
+    if ((ap === '上午' || ap === 'AM') && h === 12) h = 0;
+    return new Date(+m[1], +m[2] - 1, +m[3], h, +m[6], +(m[7] || 0));
+  }
+
+  function todaySlash() {
+    const d = new Date();
+    return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
+  }
+  function hhmm(d) {
+    return d ? String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0') : '—';
+  }
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+  function fmtQty(n) {
+    const r = Math.round((n + Number.EPSILON) * 10) / 10;
+    return Number.isInteger(r) ? String(r) : r.toFixed(1);
+  }
+
+  // ── 時段 / 班別 / 動態目標（移植自 person_part_analysis.html）─────────────────
+  const SEGMENTS = [
+    { name:'第一段', label:'08:00～10:00', start: 8*60,      end: 10*60,    min: 120 },
+    { name:'第二段', label:'10:10～12:00', start: 10*60+10,  end: 12*60,    min: 110 },
+    { name:'第三段', label:'12:30～14:30', start: 12*60+30,  end: 14*60+30, min: 120 },
+    { name:'第四段', label:'14:40～16:30', start: 14*60+40,  end: 16*60+30, min: 110 },
+    { name:'第五段', label:'16:40～18:30', start: 16*60+40,  end: 18*60+30, min: 110 },
+    { name:'第六段', label:'19:00～21:00', start: 19*60,     end: 21*60,    min: 120 },
+  ];
+  const FULL_WORK_MIN = SEGMENTS.reduce((s, g) => s + g.min, 0); // 690
+  const SHIFT_SEG_COUNT = { normal: 4, ot2: 5, ot4: 6 };
+  const BREAKS = [
+    { start: 10*60,    end: 10*60+10 },
+    { start: 12*60,    end: 12*60+30 },
+    { start: 14*60+30, end: 14*60+40 },
+    { start: 16*60+30, end: 16*60+40 },
+    { start: 18*60+30, end: 19*60    },
+  ];
+  const SHIFT_START = 8*60, SHIFT_END = 21*60;
+
+  function nowMin() { const d = new Date(); return d.getHours()*60 + d.getMinutes() + d.getSeconds()/60; }
+
+  function determineShiftKey(lastTsMin) {
+    if (lastTsMin == null)        return 'normal';
+    if (lastTsMin <= 16*60+30)    return 'normal';
+    if (lastTsMin <= 18*60+30)    return 'ot2';
+    return 'ot4';
+  }
+
+  // 休息時間的輸入歸屬於剛結束的時段
+  function getSegmentIdx(mins) {
+    if (mins == null) return -1;
+    if (mins < SEGMENTS[0].start) return -1;
+    for (let i = 0; i < SEGMENTS.length; i++) {
+      const segEnd = (i + 1 < SEGMENTS.length) ? SEGMENTS[i + 1].start : SEGMENTS[i].end;
+      if (mins >= SEGMENTS[i].start && mins < segEnd) return i;
+    }
+    return -1;
+  }
+
+  function workMinBetween(fromMin, toMin) {
+    return SEGMENTS.reduce((s, g) => s + Math.max(0, Math.min(toMin, g.end) - Math.max(fromMin, g.start)), 0);
+  }
+
+  // 每人日目標：依班別工時縮放 + 遲到／早退依實際在場時間打折（同 getPersonsDailyBreakdown）
+  function computePersonTarget(p, bxTarget, mzTarget, nowMins) {
+    const total = p.bxQty + p.mzQty;
+    let blended;
+    if (total === 0)          blended = 0;
+    else if (p.mzQty === 0)   blended = bxTarget;
+    else if (p.bxQty === 0)   blended = mzTarget;
+    else                      blended = bxTarget * (p.bxQty / total) + mzTarget * (p.mzQty / total);
+
+    const lastMin  = p.lastTs  ? p.lastTs.getHours()*60  + p.lastTs.getMinutes()  : null;
+    const firstMin = p.firstTs ? p.firstTs.getHours()*60 + p.firstTs.getMinutes() : null;
+    const segCount = SHIFT_SEG_COUNT[determineShiftKey(lastMin)];
+    const workMin  = SEGMENTS.slice(0, segCount).reduce((s, g) => s + g.min, 0);
+    let dayTarget  = blended * workMin / FULL_WORK_MIN;
+
+    const expStart = SEGMENTS[0].start;
+    const expEnd   = SEGMENTS[segCount - 1].end;
+    const isLate     = firstMin != null && firstMin > expStart + LATE_BUFFER_MIN;
+    const inProgress = nowMins < expEnd - EARLY_LEAVE_BUFFER_MIN;
+    const isEarly    = !inProgress && lastMin != null && lastMin < expEnd - EARLY_LEAVE_BUFFER_MIN;
+    let actStartMin = isLate  ? firstMin : expStart;
+    let actEndMin   = isEarly ? lastMin  : expEnd;
+    let actWorkMin  = workMinBetween(actStartMin, actEndMin);
+    if (actWorkMin <= 0) {
+      const seg = SEGMENTS[Math.max(0, getSegmentIdx(firstMin))];
+      actStartMin = seg.start; actEndMin = seg.end; actWorkMin = seg.min;
+    }
+    const attendRatio = (isLate || isEarly) ? Math.min(1, actWorkMin / workMin) : 1;
+    dayTarget *= attendRatio;
+    Object.assign(p, { dayTarget, actStartMin, actEndMin, actWorkMin });
+  }
+
+  // 該人在 [fromMin, toMin) 的應達目標（只計實際在場區間內的工作分鐘）
+  function planBetween(p, fromMin, toMin) {
+    if (!p.actWorkMin) return 0;
+    const a = Math.max(fromMin, p.actStartMin), b = Math.min(toMin, p.actEndMin);
+    if (b <= a) return 0;
+    return p.dayTarget * workMinBetween(a, b) / p.actWorkMin;
+  }
+
+  // ── 狀態 ────────────────────────────────────────────────────────────────
+  let currentStation = 'paint';
+  let settings = null;
+  let dayData = { paint: [], rework: [], final: [] }; // 今日記錄
+  let prevCounts = null;  // { paint: {pid: n}, rework: {pid: n} }，偵測新完成筆數
+  let finalCount = null;
+  const grid = document.getElementById('worker-grid');
+
+  function eqQty(model) {
+    const m = (model || '').trim();
+    if (m === 'TF') return 0.3;
+    if (m === 'PF') return settings ? settings.pf_coef : SYSTEM_SETTINGS_DEFAULTS.pf_coef;
+    return 1;
+  }
+
+  // 依工號彙整某工站今日資料，算出每人的累計、本段、碼表起點、當前品項與目標
+  function buildWorkers(station) {
+    const recs = dayData[station];
+    const isPaint = station === 'paint';
+    const map = {};
+    recs.forEach(r => {
+      const p = map[r.pid] || (map[r.pid] = { pid: r.pid, count: 0, bxQty: 0, mzQty: 0, firstTs: null, lastTs: null, lastRec: null, segRaw: {} });
+      const q = isPaint ? eqQty(r.model) : 1;
+      p.count++;
+      if (isPaint && MZ_CODES.has(r.color)) p.mzQty += q; else p.bxQty += q;
+      if (r.ts) {
+        if (!p.firstTs || r.ts < p.firstTs) p.firstTs = r.ts;
+        if (!p.lastTs || r.ts >= p.lastTs) { p.lastTs = r.ts; p.lastRec = r; }
+        const si = getSegmentIdx(r.tsMin);
+        if (si >= 0) p.segRaw[si] = (p.segRaw[si] || 0) + q;
+      }
+      if (!p.lastRec) p.lastRec = r;
+    });
+
+    const now = nowMin();
+    const curSeg = getSegmentIdx(now);
+    const bx = isPaint ? settings.bx_target : settings.rework_target;
+    const mz = isPaint ? settings.mz_target : settings.rework_target;
+    const list = Object.values(map);
+    list.forEach(p => {
+      p.done = p.bxQty + p.mzQty;
+      computePersonTarget(p, bx, mz, now);
+      p.planSoFar = planBetween(p, 0, now);
+      p.segDone   = curSeg >= 0 ? (p.segRaw[curSeg] || 0) : 0;
+      p.segTarget = curSeg >= 0 ? planBetween(p, SEGMENTS[curSeg].start, SEGMENTS[curSeg].end) : 0;
+      p.segPlanSoFar = curSeg >= 0 ? planBetween(p, SEGMENTS[curSeg].start, Math.min(now, SEGMENTS[curSeg].end)) : 0;
+      p.avgSec = (p.count > 1 && p.firstTs && p.lastTs && p.lastTs > p.firstTs)
+        ? (p.lastTs - p.firstTs) / 1000 / (p.count - 1) : DEFAULT_AVG_SEC;
+      const r = p.lastRec;
+      p.currentItem = r ? [r.model, r.part, r.color].filter(Boolean).join(' · ') : '—';
+    });
+    return list;
+  }
+
+  function secSince(w) { return w.lastTs ? Math.max(0, (Date.now() - w.lastTs) / 1000) : Infinity; }
+  function isOffline(w) { return secSince(w) > OFFLINE_SEC; }
+
+  // 顯示對象：最近有實績的前 8 人，再依工號排序
+  function displayWorkers(station) {
+    return buildWorkers(station)
+      .sort((a, b) => (b.lastTs || 0) - (a.lastTs || 0))
+      .slice(0, MAX_WORKERS)
+      .sort((a, b) => a.pid.localeCompare(b.pid));
+  }
+
+  function rateOf(done, plan) { return plan > 0 ? Math.round(done / plan * 100) : null; }
+  function rateCls(pct) { return pct == null ? '' : pct >= 100 ? 'ok' : pct >= 80 ? 'warn' : 'crit'; }
+
+  function getStatus(w) {
+    if (isOffline(w)) return 'off';
+    const pct = rateOf(w.done, w.planSoFar);
+    return rateCls(pct) || 'ok';
+  }
+
+  function getWatchClass(w) {
+    if (isOffline(w)) return 'off';
+    const r = secSince(w) / w.avgSec;
+    if (r < 1.5) return 'ok';
+    if (r < 3) return 'warn';
+    return 'crit';
+  }
+
+  function fmtWatch(sec) {
+    if (!isFinite(sec)) return '--:--';
+    if (sec >= 3600) return Math.floor(sec / 3600) + 'h' + String(Math.floor(sec % 3600 / 60)).padStart(2,'0') + 'm';
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+  }
+
+  let shownWorkers = [];
+
+  function renderGrid() {
+    if (!settings) return;
+    shownWorkers = displayWorkers(currentStation);
+    grid.innerHTML = '';
+    if (!shownWorkers.length) {
+      grid.classList.remove('few');
+      grid.innerHTML = '<div class="empty-grid">今日尚無' + (currentStation === 'paint' ? '補漆' : '整修') + '實績</div>';
+      return;
+    }
+    // Narrower cards when the team is small (prevents stretched layout)
+    grid.classList.toggle('few', shownWorkers.length <= 3);
+    shownWorkers.forEach(w => {
+      const status = getStatus(w);
+      const off = status === 'off';
+      const watchClass = getWatchClass(w);
+      const pct = rateOf(w.done, w.planSoFar);
+      const segPct = rateOf(w.segDone, w.segPlanSoFar);
+      const barWidth = w.dayTarget > 0 ? Math.min(100, w.done / w.dayTarget * 100) : 0;
+
+      const card = document.createElement('div');
+      card.className = 'worker-card ' + status;
+      card.dataset.pid = w.pid;
+      card.innerHTML = `
+        <div class="wc-head">
+          <div><span class="wc-id">${esc(w.pid)}</span></div>
+          <div class="wc-status"><span class="indicator"></span>${off ? '離線' : status === 'ok' ? '正常' : status === 'warn' ? '偏慢' : '落後'}</div>
+        </div>
+        <div class="wc-watch">
+          <div class="wlbl">${off ? 'OFFLINE · 距上一筆' : '當下作業碼表'}</div>
+          <div class="wval ${watchClass}">${fmtWatch(secSince(w))}</div>
+        </div>
+        <div class="wc-stats">
+          <div class="stat-row">
+            <span class="lbl">今日累計</span>
+            <span class="val">${fmtQty(w.done)} / ${Math.round(w.dayTarget)}${pct != null ? `<span class="pct ${rateCls(pct)}">${pct}%</span>` : ''}</span>
+          </div>
+          <div class="wc-bar"><div class="fill" style="width: ${barWidth}%;"></div></div>
+          <div class="stat-row">
+            <span class="lbl">本段時段</span>
+            <span class="val">${fmtQty(w.segDone)} / ${Math.round(w.segTarget)}${segPct != null ? `<span class="pct ${rateCls(segPct)}">${segPct}%</span>` : ''}</span>
+          </div>
+        </div>
+        <div class="wc-item">
+          <span>當前品項 · ${hhmm(w.lastTs)}</span>
+          <span class="code">${esc(w.currentItem)}</span>
+        </div>
+      `;
+      grid.appendChild(card);
+    });
+  }
+
+  function renderKpis() {
+    if (!settings) return;
+    const list = buildWorkers(currentStation);
+    const now = nowMin();
+    const curSeg = getSegmentIdx(now);
+    const total = list.reduce((s, w) => s + w.done, 0);
+    const segDone = list.reduce((s, w) => s + w.segDone, 0);
+    const segPlan = list.reduce((s, w) => s + w.segPlanSoFar, 0);
+    const active = list.filter(w => !isOffline(w)).length;
+
+    document.getElementById('kpi-workers').textContent = active;
+    document.getElementById('kpi-total').textContent = fmtQty(total);
+    document.getElementById('kpi-seg').textContent = curSeg >= 0 ? fmtQty(segDone) : '—';
+    const rate = curSeg >= 0 ? rateOf(segDone, segPlan) : null;
+    const rEl = document.getElementById('kpi-rate');
+    rEl.textContent = rate != null ? rate + '%' : '—';
+    rEl.className = 'val ' + rateCls(rate);
+    document.getElementById('kpi-rate-lbl').textContent =
+      currentStation === 'rework' && settings.rework_target_is_default ? '時段達成率（暫定目標）' : '時段達成率';
+
+    document.getElementById('tab-count-paint').textContent  = new Set(dayData.paint.map(r => r.pid)).size + ' 人';
+    document.getElementById('tab-count-rework').textContent = new Set(dayData.rework.map(r => r.pid)).size + ' 人';
+    document.getElementById('subtitle').textContent =
+      '裕器工業 · 塗裝部門 · ' + (currentStation === 'paint' ? '補漆區' : '整修區') + '即時監控' +
+      (currentStation === 'rework' ? ` · 每人目標 ${settings.rework_target}${settings.rework_target_is_default ? '（暫用補漆保險桿目標）' : ''}` : '');
+  }
+
+  function renderSegment() {
+    const now = nowMin();
+    const nameEl = document.getElementById('seg-name');
+    const timeEl = document.getElementById('seg-time');
+    const barEl  = document.getElementById('seg-progress');
+    const seg = SEGMENTS.find(g => now >= g.start && now < g.end);
+    if (seg) {
+      nameEl.textContent = seg.name;
+      timeEl.textContent = seg.label.replace('～', ' – ') + ' · 剩 ' + Math.ceil(seg.end - now) + ' 分';
+      barEl.style.width = Math.min(100, (now - seg.start) / seg.min * 100) + '%';
+      return;
+    }
+    barEl.style.width = '0%';
+    if (now < SHIFT_START) { nameEl.textContent = '班前'; timeEl.textContent = Math.ceil(SHIFT_START - now) + ' 分鐘後開班'; return; }
+    if (now >= SHIFT_END)  { nameEl.textContent = '已下班'; timeEl.textContent = '今日時段結束'; return; }
+    const brk = BREAKS.find(b => now >= b.start && now < b.end);
+    nameEl.textContent = '休息中';
+    timeEl.textContent = brk ? Math.ceil(brk.end - now) + ' 分鐘後復工' : '—';
+  }
+
+  // ── 完成動畫 ─────────────────────────────────────────────────────────────
+  function flyPart(fromCard) {
+    const rect = fromCard.getBoundingClientRect();
+    const lane = document.getElementById('lane');
+    const laneRect = lane.getBoundingClientRect();
+
+    const part = document.createElement('div');
+    part.className = 'flying-part';
+    part.textContent = '■';
+    part.style.left = (rect.left + rect.width/2 - 14) + 'px';
+    part.style.top = (rect.top + rect.height/2 - 14) + 'px';
+    document.body.appendChild(part);
+
+    requestAnimationFrame(() => {
+      part.style.left = (laneRect.left + 40) + 'px';
+      part.style.top = (laneRect.top + laneRect.height/2 - 14) + 'px';
+      part.style.transform = 'scale(0.6) rotate(180deg)';
+    });
+
+    setTimeout(() => {
+      part.remove();
+      const laneEl = document.getElementById('lane-count');
+      laneEl.classList.remove('bump');
+      void laneEl.offsetWidth;
+      laneEl.classList.add('bump');
+      const vis = document.getElementById('lane-vis');
+      const slider = document.createElement('div');
+      slider.className = 'part-in-lane';
+      vis.appendChild(slider);
+      setTimeout(() => slider.remove(), 4000);
+    }, 1100);
+  }
+
+  function celebrate(pid, n) {
+    const card = grid.querySelector(`.worker-card[data-pid="${CSS.escape(pid)}"]`);
+    if (!card) return;
+    const bubble = document.createElement('div');
+    bubble.className = 'plus-one';
+    bubble.textContent = '+' + n;
+    card.appendChild(bubble);
+    setTimeout(() => bubble.remove(), 1200);
+    card.classList.remove('completed');
+    void card.offsetWidth;
+    card.classList.add('completed');
+    flyPart(card);
+  }
+
+  function countByPid(recs) {
+    const m = {};
+    recs.forEach(r => { m[r.pid] = (m[r.pid] || 0) + 1; });
+    return m;
+  }
+
+  // ── 讀取 Google Sheet（載入時一次，之後每 30 秒）──────────────────────────
+  async function refresh() {
+    const srcEl = document.getElementById('data-src');
+    const errEl = document.getElementById('err-banner');
+    try {
+      let paintSheet = DEFAULT_CONFIG.sheetName;
+      try { paintSheet = (JSON.parse(lsGet('sysSettingsCache') || 'null') || {}).sheet_name || paintSheet; } catch(e) {}
+      let data = await fetchAllSheets(paintSheet);
+      settings = buildSettings(data.settingsRaw);
+      if (settings.sheet_name !== paintSheet) data = await fetchAllSheets(settings.sheet_name); // 系統設定改了補漆分頁名稱
+      const t = todaySlash();
+      dayData = {
+        paint:  data.paint.filter(r => r.date === t),
+        rework: data.rework.filter(r => r.date === t),
+        final:  data.final.filter(r => r.date === t),
+      };
+      finalCount = dayData.final.length;
+      document.getElementById('lane-count').textContent = finalCount;
+
+      const counts = { paint: countByPid(dayData.paint), rework: countByPid(dayData.rework) };
+      renderGrid();
+      renderKpis();
+      // 有新筆數 → 完成動畫（首次載入不觸發）
+      if (prevCounts) {
+        const prev = prevCounts[currentStation];
+        Object.entries(counts[currentStation]).forEach(([pid, n]) => {
+          const diff = n - (prev[pid] || 0);
+          if (diff > 0) celebrate(pid, diff);
+        });
+      }
+      prevCounts = counts;
+
+      errEl.style.display = 'none';
+      srcEl.textContent = '資料來源：Google Sheet · 最後更新 ' + hhmm(new Date());
+    } catch (e) {
+      console.error('[paint-stations] 讀取失敗', e);
+      errEl.style.display = 'block';
+      if (settings) srcEl.textContent = srcEl.textContent.replace(/（.*）$/, '') + '（讀取失敗，顯示上次資料）';
+    }
+  }
+
+  // ── 每秒：時鐘 + 碼表（依最後一筆時間戳記本機計算）+ 時段 ─────────────────
+  let lastMinuteRendered = -1;
+  function tick() {
+    const d = new Date();
+    document.getElementById('clock').textContent =
+      String(d.getHours()).padStart(2,'0') + ':' +
+      String(d.getMinutes()).padStart(2,'0') + ':' +
+      String(d.getSeconds()).padStart(2,'0');
+    renderSegment();
+
+    // 每分鐘重算一次卡片（離線判定、應達目標隨時間推進）
+    if (settings && d.getMinutes() !== lastMinuteRendered) {
+      lastMinuteRendered = d.getMinutes();
+      renderGrid();
+      renderKpis();
+      return;
+    }
+    grid.querySelectorAll('.worker-card').forEach(card => {
+      const w = shownWorkers.find(x => x.pid === card.dataset.pid);
+      const watchEl = card.querySelector('.wc-watch .wval');
+      if (!w || !watchEl) return;
+      watchEl.textContent = fmtWatch(secSince(w));
+      watchEl.className = 'wval ' + getWatchClass(w);
+    });
+  }
+
+  // ── 工站切換（tab / #paint #rework / ?paint ?rework）────────────────────────
+  function setStation(st) {
+    if (st !== 'paint' && st !== 'rework') return;
+    currentStation = st;
+    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.station === st));
+    renderGrid();
+    renderKpis();
+  }
+
+  document.querySelectorAll('.tab').forEach(t => {
+    t.addEventListener('click', () => {
+      try { history.replaceState(null, '', location.pathname + location.search.replace(/^\?(paint|rework)$/, '') + '#' + t.dataset.station); } catch(e) {}
+      setStation(t.dataset.station);
+    });
+  });
+
+  function stationFromUrl() {
+    const h = (location.hash || '').replace('#', '').toLowerCase();
+    if (h === 'paint' || h === 'rework') return h;
+    const q = (location.search || '').replace('?', '').toLowerCase();
+    if (/(^|&)(station=)?rework(&|$)/.test(q)) return 'rework';
+    if (/(^|&)(station=)?paint(&|$)/.test(q)) return 'paint';
+    return null;
+  }
+  window.addEventListener('hashchange', () => { const st = stationFromUrl(); if (st) setStation(st); });
+
+  // Theme
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const root = document.documentElement;
+    const cur = root.getAttribute('data-theme');
+    root.setAttribute('data-theme', cur === 'light' ? 'dark' : 'light');
+  });
+
+  setStation(stationFromUrl() || 'paint');
+  tick();
+  setInterval(tick, 1000);
+  refresh();
+  setInterval(refresh, REFRESH_MS);
+})();
+</script>
+
+</body></html>
