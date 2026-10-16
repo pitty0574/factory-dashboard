@@ -210,6 +210,10 @@ body {
 .wc-head { display: flex; justify-content: space-between; align-items: center; }
 .wc-id { font-family: var(--font-mono); font-weight: 800; font-size: 22px; letter-spacing: 0.03em; }
 .wc-name { font-size: 13px; color: var(--fg-mute); margin-left: 6px; font-weight: 600; }
+/* 工號下方的姓名（員工表對照），放在 .wc-id 內，0.6em 以工號字級為基準 */
+.worker-name-sub { display: block; font-size: 0.6em; color: #94A3B8; font-weight: normal; margin-top: 2px; line-height: 1; font-family: var(--font-ui); letter-spacing: normal; }
+:root[data-theme="light"] .worker-name-sub { color: #64748B; }
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) .worker-name-sub { color: #64748B; } }
 
 .wc-status { display: flex; align-items: center; gap: 5px; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 700; padding: 3px 8px; border: 1.5px solid currentColor; }
 .wc-status .indicator { width: 8px; height: 8px; border-radius: 50%; }
@@ -463,6 +467,8 @@ body {
   const SYSTEM_SETTINGS_DEFAULTS = { bx_target: 51, mz_target: 39, pf_coef: 0.7 };
   const REFRESH_MS = 30000;
   const OFFLINE_SEC = 15 * 60;   // 超過 15 分鐘沒有實績 → 離線
+  const WORKER_SHEET_RANGE = '員工表!A2:D1000';
+  const WORKER_MAP_REFRESH_MS = 15 * 60 * 1000; // 員工表每 15 分鐘重讀一次（30 秒 refresh 不重讀，省 API 配額）
   const MAX_WORKERS = 8;
   const DEFAULT_AVG_SEC = 300;   // 只有 1 筆時，碼表顏色判定用的預設節拍
 
@@ -680,6 +686,50 @@ body {
     return p.dayTarget * workMinBetween(a, b) / p.actWorkMin;
   }
 
+  // ── 員工表（A 工號 / B 姓名 / C 崗位 / D 狀態）：工號顯示為「8631 (麥爾)」，離職者不顯示、不計入統計 ──
+  let WORKER_MAP = {}; // { '8631': { name:'麥爾', role:'補漆', active:true }, ... }
+
+  async function loadWorkerMap() {
+    try {
+      const { id, key } = getConn();
+      const url = `https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${encodeURIComponent(WORKER_SHEET_RANGE)}?key=${key}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json();
+      const rows = json.values || [];
+      const map = {};
+      rows.forEach(r => {
+        const [id, name, role, status] = r;
+        if (!id || !String(id).trim()) return;
+        map[String(id).trim()] = {
+          name:   (name || '').trim(),
+          role:   (role || '').trim(),
+          active: (status || '').trim() !== '離職'
+        };
+      });
+      WORKER_MAP = map;
+    } catch(e) {
+      console.warn('員工表讀取失敗，使用純工號顯示', e);
+      WORKER_MAP = {}; // 讀失敗就退回純工號，看板不要壞
+    }
+  }
+
+  // 回傳 HTML（工號 + 下一行小字姓名），寫入時需用 innerHTML；查無姓名只回傳工號，不留空白行
+  function formatWorkerId(id) {
+    if (id == null || id === '') return '';
+    const sid = String(id).trim();
+    const info = WORKER_MAP[sid];
+    if (!info || !info.name) return esc(sid);
+    return esc(sid) + '<span class="worker-name-sub">' + esc(info.name) + '</span>';
+  }
+
+  function isActiveWorker(id) {
+    const info = WORKER_MAP[String(id == null ? '' : id).trim()];
+    // 查無員工 → 預設顯示（避免新員工還沒登錄時被隱藏）
+    if (!info) return true;
+    return info.active;
+  }
+
   // ── 狀態 ────────────────────────────────────────────────────────────────
   let currentStation = 'paint';
   let settings = null;
@@ -796,7 +846,7 @@ body {
       card.dataset.pid = w.pid;
       card.innerHTML = `
         <div class="wc-head">
-          <div><span class="wc-id">${esc(w.pid)}</span></div>
+          <div><span class="wc-id">${formatWorkerId(w.pid)}</span></div>
           <div class="wc-status"><span class="indicator"></span>${off ? '離線' : status === 'ok' ? '正常' : status === 'warn' ? '偏慢' : '落後'}</div>
         </div>
         <div class="wc-watch">
@@ -934,10 +984,11 @@ body {
       settings = buildSettings(data.settingsRaw);
       if (settings.sheet_name !== paintSheet) data = await fetchAllSheets(settings.sheet_name); // 系統設定改了補漆分頁名稱
       const t = todaySlash();
+      const isToday = r => r.date === t && isActiveWorker(r.pid); // 排除員工表標記「離職」的工號
       dayData = {
-        paint:  data.paint.filter(r => r.date === t),
-        rework: data.rework.filter(r => r.date === t),
-        final:  data.final.filter(r => r.date === t),
+        paint:  data.paint.filter(isToday),
+        rework: data.rework.filter(isToday),
+        final:  data.final.filter(isToday),
       };
       finalCount = dayData.final.length;
       document.getElementById('lane-count').textContent = finalCount;
@@ -1026,8 +1077,10 @@ body {
   setStation(stationFromUrl() || 'paint');
   tick();
   setInterval(tick, 1000);
-  refresh();
+  // 先讀員工表再載入看板資料；之後看板每 30 秒刷新，員工表每 15 分鐘重讀
+  loadWorkerMap().then(refresh);
   setInterval(refresh, REFRESH_MS);
+  setInterval(() => { loadWorkerMap().then(refresh); }, WORKER_MAP_REFRESH_MS);
 })();
 </script>
 

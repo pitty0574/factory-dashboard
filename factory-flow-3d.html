@@ -199,6 +199,9 @@
     .worker-row .id { font-family: var(--font-mono); font-weight: 700; }
     .worker-row .name { color: var(--fg-mute); font-size: 11px; margin-left: 6px; }
     .worker-row .count { font-family: var(--font-mono); font-weight: 700; color: var(--info); }
+    /* 工號後的姓名（員工表對照）：工號仍為視覺主角；本頁預設淺色主題 */
+    .worker-name { font-size: 0.75em; color: #64748B; margin-left: 4px; font-weight: normal; font-family: var(--font-ui); }
+    [data-theme="dark"] .worker-name { color: #94A3B8; }
 
     .breakdown { display: flex; flex-direction: column; gap: 6px; }
     .br-row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
@@ -765,6 +768,8 @@
   const SYSTEM_SETTINGS_RANGE = '系統設定!A2:B20';
   const REFRESH_MS = 30000;
   const OFFLINE_SEC = 15 * 60;
+  const WORKER_SHEET_RANGE = '員工表!A2:D1000';
+  const WORKER_MAP_REFRESH_MS = 15 * 60 * 1000; // 員工表每 15 分鐘重讀一次（30 秒 refresh 不重讀，省 API 配額）
 
   function lsGet(k) { try { return localStorage.getItem(k); } catch(e) { return null; } }
   function getConn() {
@@ -858,6 +863,50 @@
   }
   function esc(s) {
     return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  // ── 員工表（A 工號 / B 姓名 / C 崗位 / D 狀態）：工號顯示為「8631 (麥爾)」，離職者不顯示、不計入統計 ──
+  let WORKER_MAP = {}; // { '8631': { name:'麥爾', role:'補漆', active:true }, ... }
+
+  async function loadWorkerMap() {
+    try {
+      const { id, key } = getConn();
+      const url = `https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${encodeURIComponent(WORKER_SHEET_RANGE)}?key=${key}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json();
+      const rows = json.values || [];
+      const map = {};
+      rows.forEach(r => {
+        const [id, name, role, status] = r;
+        if (!id || !String(id).trim()) return;
+        map[String(id).trim()] = {
+          name:   (name || '').trim(),
+          role:   (role || '').trim(),
+          active: (status || '').trim() !== '離職'
+        };
+      });
+      WORKER_MAP = map;
+    } catch(e) {
+      console.warn('員工表讀取失敗，使用純工號顯示', e);
+      WORKER_MAP = {}; // 讀失敗就退回純工號，看板不要壞
+    }
+  }
+
+  // 回傳 HTML（姓名包在 span 裡），寫入時需用 innerHTML
+  function formatWorkerId(id) {
+    if (id == null || id === '') return '';
+    const sid = String(id).trim();
+    const info = WORKER_MAP[sid];
+    if (!info || !info.name) return esc(sid);
+    return esc(sid) + '<span class="worker-name">(' + esc(info.name) + ')</span>';
+  }
+
+  function isActiveWorker(id) {
+    const info = WORKER_MAP[String(id == null ? '' : id).trim()];
+    // 查無員工 → 預設顯示（避免新員工還沒登錄時被隱藏）
+    if (!info) return true;
+    return info.active;
   }
 
   function tick() {
@@ -1058,7 +1107,7 @@
     document.getElementById('detail-meta').textContent = `${s.workers.length} 位作業員 · ${s.activeCount} 位在線`;
     const workersHtml = s.workers.length
       ? '<div class="worker-list">' + s.workers.slice(0, 8).map(w =>
-          '<div class="worker-row"><span><span class="id">'+esc(w.pid)+'</span><span class="name">最後 '+hhmm(w.lastTs)+(w.active?'':' · 離線')+'</span></span><span class="count">'+w.count+' PCS</span></div>'
+          '<div class="worker-row"><span><span class="id">'+formatWorkerId(w.pid)+'</span><span class="name">最後 '+hhmm(w.lastTs)+(w.active?'':' · 離線')+'</span></span><span class="count">'+w.count+' PCS</span></div>'
         ).join('') + '</div>'
       : '<div style="font-size:12px;color:var(--fg-mute);">今日尚無實績</div>';
     const rows = modelRows(s.byModel, id === 'paint' ? 'warn' : 'ok');
@@ -1086,10 +1135,11 @@
         data = await fetchAllSheets(currentSheets);
       }
       const t = todaySlash();
+      const isToday = r => r.date === t && isActiveWorker(r.pid); // 排除員工表標記「離職」的工號
       stats = {
-        rework: summarize(data.rework.filter(r => r.date === t)),
-        paint:  summarize(data.paint.filter(r => r.date === t)),
-        final:  summarize(data.final.filter(r => r.date === t)),
+        rework: summarize(data.rework.filter(isToday)),
+        paint:  summarize(data.paint.filter(isToday)),
+        final:  summarize(data.final.filter(isToday)),
       };
       renderAll();
       errEl.style.display = 'none';
@@ -1100,8 +1150,10 @@
       if (stats) srcEl.textContent = srcEl.textContent.replace(/（.*）$/, '') + '（讀取失敗，顯示上次資料）';
     }
   }
-  refresh();
+  // 先讀員工表再載入看板資料；之後看板每 30 秒刷新，員工表每 15 分鐘重讀
+  loadWorkerMap().then(refresh);
   setInterval(refresh, REFRESH_MS);
+  setInterval(() => { loadWorkerMap().then(refresh); }, WORKER_MAP_REFRESH_MS);
 
   document.getElementById('theme-toggle').addEventListener('click', () => {
     const root = document.documentElement;
