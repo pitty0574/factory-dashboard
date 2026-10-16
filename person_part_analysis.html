@@ -129,10 +129,53 @@
   .score-row-silver { background: #eef1f3 !important; }
   .score-detail-row td { padding: 0 !important; }
   .score-expand-icon { display: inline-block; width: 14px; color: #185fa5; }
+
+  /* ── 即時看板主題（深色＝原樣；淺色供工廠投影） ── */
+  :root {
+    --rt-bg: #0f1117;          --rt-panel: #131929;        --rt-table-bg: #161b27;
+    --rt-panel-border: #1e2d50; --rt-divider: #1e2a40;     --rt-row-border: #1e2535;
+    --rt-ring-track: #1e2330;  --rt-current-row: #1a2744;
+    --rt-table-shadow: 0 4px 24px rgba(0,0,0,0.5);         --rt-card-shadow: none;
+    --rt-zebra: transparent;   --rt-thead-bg: transparent;
+    --rt-text: #e0e0e0;        --rt-text-strong: #ffffff;  --rt-text-dim: #ccc;    --rt-text-sub: #aaa;
+    --rt-muted: #445;          --rt-muted2: #556;          --rt-plan: #888;        --rt-past-sub: #666;
+    --rt-future: #333;         --rt-future-name: #444;
+    --rt-accent: #5b9cf6;      --rt-accent2: #8ab4f8;      --rt-accent3: #60c8ff;  --rt-highlight: #f0c040;
+    --rt-ok: #1D9E75;          --rt-warn: #e67e22;         --rt-crit: #e74c3c;     --rt-off: #aaa;  --rt-off-dim: #555;
+  }
+  html[data-theme="light"] {
+    --rt-bg: #F1F5F9;          --rt-panel: #FFFFFF;        --rt-table-bg: #FFFFFF;
+    --rt-panel-border: #CBD5E1; --rt-divider: #CBD5E1;     --rt-row-border: #E2E8F0;
+    --rt-ring-track: #E2E8F0;  --rt-current-row: #DBEAFE;
+    --rt-table-shadow: 0 1px 3px rgba(15,23,42,0.08), 0 0 0 1px #CBD5E1;
+    --rt-card-shadow: 0 1px 3px rgba(15,23,42,0.08);
+    --rt-zebra: #F8FAFC;       --rt-thead-bg: #F8FAFC;
+    --rt-text: #0F172A;        --rt-text-strong: #0F172A;  --rt-text-dim: #334155; --rt-text-sub: #475569;
+    --rt-muted: #64748B;       --rt-muted2: #475569;       --rt-plan: #475569;     --rt-past-sub: #64748B;
+    --rt-future: #94A3B8;      --rt-future-name: #94A3B8;
+    --rt-accent: #1D4ED8;      --rt-accent2: #1E40AF;      --rt-accent3: #0369A1;  --rt-highlight: #B45309;
+    --rt-ok: #15803D;          --rt-warn: #B45309;         --rt-crit: #B91C1C;     --rt-off: #64748B;  --rt-off-dim: #94A3B8;
+  }
+  #view-realtime thead tr { background: var(--rt-thead-bg); }
+  #rtTbody tr:nth-child(even), #rtAttendanceBody tbody tr:nth-child(even) { background: var(--rt-zebra); }
+
+  /* 主題切換按鈕 */
+  .theme-toggle { position: fixed; top: 12px; right: 12px; z-index: 2000; font-size: 13px; font-weight: 600; padding: 6px 14px; border-radius: 999px; cursor: pointer; background: #1e293b; color: #f1f5f9; border: 1px solid #334155; box-shadow: 0 2px 8px rgba(0,0,0,0.25); }
+  html[data-theme="light"] .theme-toggle { background: #FFFFFF; color: #0F172A; border-color: #CBD5E1; box-shadow: 0 1px 4px rgba(15,23,42,0.12); }
+  .page-header { padding-right: 84px; }
 </style>
+<script>
+  // 盡早套用主題，避免頁面先閃深色
+  (function () {
+    var t = 'dark';
+    try { t = localStorage.getItem('person_part_theme') === 'light' ? 'light' : 'dark'; } catch (e) {}
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
 </head>
 <body>
-<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;">
+<button id="themeToggleBtn" class="theme-toggle" onclick="toggleTheme()">🌞 淺色</button>
+<div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;">
   <div>
     <h1 id="pageTitle">個人部件分析 — 保險桿 vs 馬自達</h1>
     <div style="margin:-0.5rem 0 1rem;"><a href="worker_analysis.html" target="_blank" rel="noopener" style="font-size:12px;color:#185fa5;text-decoration:none;">🔗 深度分析工具</a></div>
@@ -330,37 +373,37 @@
 
   <!-- Realtime Board -->
   <div id="view-realtime" style="display:none;">
-  <div style="background:#0f1117;border-radius:16px;padding:1rem 1.2rem 1.2rem;margin:-0.5rem;">
+  <div style="background:var(--rt-bg);border-radius:16px;padding:1rem 1.2rem 1.2rem;margin:-0.5rem;">
 
     <!-- 頂部一列：日期 ｜ 目前時段 ｜ 距下次休息 ｜ 倒數 ｜ 更新時間 -->
-    <div style="display:flex;align-items:center;gap:0;margin-bottom:0.8rem;background:#131929;border-radius:12px;padding:0.6rem 1.2rem;flex-wrap:wrap;row-gap:4px;">
+    <div style="display:flex;align-items:center;gap:0;margin-bottom:0.8rem;background:var(--rt-panel);border-radius:12px;padding:0.6rem 1.2rem;flex-wrap:wrap;row-gap:4px;">
       <div style="display:flex;align-items:center;gap:0.5rem;margin-right:1.6rem;">
-        <span style="font-size:13px;color:#445;white-space:nowrap;">日期</span>
-        <span id="rtDate" style="font-size:20px;font-weight:700;color:#e0e0e0;">—</span>
+        <span style="font-size:13px;color:var(--rt-muted);white-space:nowrap;">日期</span>
+        <span id="rtDate" style="font-size:20px;font-weight:700;color:var(--rt-text);">—</span>
       </div>
-      <div style="width:1px;height:28px;background:#1e2a40;margin-right:1.6rem;"></div>
+      <div style="width:1px;height:28px;background:var(--rt-divider);margin-right:1.6rem;"></div>
       <div style="display:flex;align-items:center;gap:0.5rem;margin-right:1.6rem;">
-        <span style="font-size:13px;color:#445;white-space:nowrap;">目前時段</span>
-        <span id="rtCurSeg" style="font-size:18px;font-weight:600;color:#5b9cf6;">—</span>
+        <span style="font-size:13px;color:var(--rt-muted);white-space:nowrap;">目前時段</span>
+        <span id="rtCurSeg" style="font-size:18px;font-weight:600;color:var(--rt-accent);">—</span>
       </div>
-      <div style="width:1px;height:28px;background:#1e2a40;margin-right:1.6rem;"></div>
+      <div style="width:1px;height:28px;background:var(--rt-divider);margin-right:1.6rem;"></div>
       <div style="display:flex;align-items:center;gap:0.5rem;margin-right:1.6rem;">
-        <span style="font-size:13px;color:#445;white-space:nowrap;">距下次休息</span>
-        <span id="rtNextBreak" style="font-size:18px;font-weight:600;color:#f0c040;">—</span>
+        <span style="font-size:13px;color:var(--rt-muted);white-space:nowrap;">距下次休息</span>
+        <span id="rtNextBreak" style="font-size:18px;font-weight:600;color:var(--rt-highlight);">—</span>
       </div>
-      <div style="width:1px;height:28px;background:#1e2a40;margin-right:1.6rem;"></div>
+      <div style="width:1px;height:28px;background:var(--rt-divider);margin-right:1.6rem;"></div>
       <div style="display:flex;align-items:center;gap:0.5rem;flex:1;">
-        <span style="font-size:13px;color:#445;white-space:nowrap;">生產班別</span>
-        <span style="font-size:13px;color:#8ab4f8;">班別依個人最後實績時間自動判定</span>
+        <span style="font-size:13px;color:var(--rt-muted);white-space:nowrap;">生產班別</span>
+        <span style="font-size:13px;color:var(--rt-accent2);">班別依個人最後實績時間自動判定</span>
       </div>
       <div style="display:flex;align-items:center;gap:1rem;margin-left:auto;">
         <div style="text-align:right;">
-          <div style="font-size:11px;color:#445;">最後更新</div>
-          <div id="rtLastUpdate" style="font-size:13px;color:#556;">—</div>
+          <div style="font-size:11px;color:var(--rt-muted);">最後更新</div>
+          <div id="rtLastUpdate" style="font-size:13px;color:var(--rt-muted2);">—</div>
         </div>
-        <div style="background:#0f1117;border-radius:20px;padding:5px 16px;border:1px solid #1e2a40;text-align:center;">
-          <div style="font-size:10px;color:#445;letter-spacing:0.5px;">下次更新</div>
-          <div id="rtCountdown" style="font-size:20px;font-weight:700;color:#5b9cf6;line-height:1.2;">5:00</div>
+        <div style="background:var(--rt-bg);border-radius:20px;padding:5px 16px;border:1px solid var(--rt-divider);text-align:center;">
+          <div style="font-size:10px;color:var(--rt-muted);letter-spacing:0.5px;">下次更新</div>
+          <div id="rtCountdown" style="font-size:20px;font-weight:700;color:var(--rt-accent);line-height:1.2;">5:00</div>
         </div>
       </div>
     </div>
@@ -368,35 +411,35 @@
     <!-- 圓形進度條（置中） -->
     <div style="display:flex;justify-content:center;margin-bottom:0.8rem;">
       <svg viewBox="0 0 220 220" style="width:200px;height:200px;">
-        <circle cx="110" cy="110" r="90" fill="none" stroke="#1e2330" stroke-width="20"/>
+        <circle cx="110" cy="110" r="90" fill="none" stroke-width="20" style="stroke:var(--rt-ring-track);"/>
         <circle id="rtProgressCircle" cx="110" cy="110" r="90" fill="none"
-          stroke="#555" stroke-width="20" stroke-linecap="round"
+          stroke-width="20" stroke-linecap="round"
           stroke-dasharray="565" stroke-dashoffset="565"
           transform="rotate(-90 110 110)"
-          style="transition:stroke-dashoffset 0.6s ease, stroke 0.4s;"/>
+          style="stroke:var(--rt-off-dim);transition:stroke-dashoffset 0.6s ease, stroke 0.4s;"/>
         <text id="rtProgressPct" x="110" y="104" text-anchor="middle"
-          fill="#888" font-size="52" font-weight="800" font-family="system-ui">—</text>
-        <text x="110" y="140" text-anchor="middle" fill="#445" font-size="15"
+          style="fill:var(--rt-plan);" font-size="52" font-weight="800" font-family="system-ui">—</text>
+        <text x="110" y="140" text-anchor="middle" style="fill:var(--rt-muted);" font-size="15"
           font-family="system-ui">整體達成率</text>
       </svg>
     </div>
 
     <!-- 今日出勤說明 -->
-    <div id="rtTableInfo" style="font-size:13px;color:#445;text-align:center;margin-bottom:0.5rem;"></div>
-    <div style="font-size:12px;color:#556;text-align:center;margin-bottom:0.5rem;">※ 各時段的實績包含該時段結束後至下段開始前的休息時間輸入</div>
-    <div style="font-size:12px;color:#556;text-align:center;margin-bottom:0.5rem;">※ 各時段目標依該時段實際在場作業員動態計算<br>晚到或早退超過 90 分鐘者，其日目標按在場時間比例打折</div>
+    <div id="rtTableInfo" style="font-size:13px;color:var(--rt-muted);text-align:center;margin-bottom:0.5rem;"></div>
+    <div style="font-size:12px;color:var(--rt-muted2);text-align:center;margin-bottom:0.5rem;">※ 各時段的實績包含該時段結束後至下段開始前的休息時間輸入</div>
+    <div style="font-size:12px;color:var(--rt-muted2);text-align:center;margin-bottom:0.5rem;">※ 各時段目標依該時段實際在場作業員動態計算<br>晚到或早退超過 90 分鐘者，其日目標按在場時間比例打折</div>
 
     <!-- 合計時段表格 -->
-    <div style="background:#161b27;border-radius:12px;overflow:hidden;margin-bottom:1rem;box-shadow:0 4px 24px rgba(0,0,0,0.5);">
+    <div style="background:var(--rt-table-bg);border-radius:12px;overflow:hidden;margin-bottom:1rem;box-shadow:var(--rt-table-shadow);">
       <table style="width:100%;border-collapse:collapse;">
         <thead>
-          <tr style="border-bottom:2px solid #1e2a40;font-size:15px;color:#556;">
+          <tr style="border-bottom:2px solid var(--rt-divider);font-size:15px;color:var(--rt-muted2);">
             <th style="text-align:left;padding:14px 16px;font-weight:600;">時段</th>
             <th style="text-align:center;padding:14px 10px;font-weight:600;">時間</th>
             <th style="text-align:center;padding:14px 12px;font-weight:600;">計畫目標</th>
             <th style="text-align:center;padding:14px 12px;font-weight:600;">累計計畫</th>
-            <th style="text-align:center;padding:14px 12px;font-weight:600;color:#60c8ff;">實績</th>
-            <th style="text-align:center;padding:14px 12px;font-weight:600;color:#60c8ff;">累計實績</th>
+            <th style="text-align:center;padding:14px 12px;font-weight:600;color:var(--rt-accent3);">實績</th>
+            <th style="text-align:center;padding:14px 12px;font-weight:600;color:var(--rt-accent3);">累計實績</th>
             <th style="text-align:center;padding:14px 10px;font-weight:600;">階段達成率</th>
             <th style="text-align:center;padding:14px 10px;font-weight:600;">累積達成率</th>
           </tr>
@@ -406,10 +449,10 @@
     </div>
 
     <!-- 出勤明細（可展開） -->
-    <div style="background:#161b27;border-radius:12px;overflow:hidden;margin-bottom:1rem;box-shadow:0 4px 24px rgba(0,0,0,0.5);">
-      <div id="rtAttendanceToggle" onclick="toggleRtAttendanceDetail()" style="cursor:pointer;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;font-size:14px;color:#8ab4f8;letter-spacing:1px;user-select:none;">
+    <div style="background:var(--rt-table-bg);border-radius:12px;overflow:hidden;margin-bottom:1rem;box-shadow:var(--rt-table-shadow);">
+      <div id="rtAttendanceToggle" onclick="toggleRtAttendanceDetail()" style="cursor:pointer;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;font-size:14px;color:var(--rt-accent2);letter-spacing:1px;user-select:none;">
         <span>👥 出勤明細</span>
-        <span id="rtAttendanceCaret" style="color:#556;">▶</span>
+        <span id="rtAttendanceCaret" style="color:var(--rt-muted2);">▶</span>
       </div>
       <div id="rtAttendanceBody" style="display:none;padding:0 16px 14px;overflow-x:auto;"></div>
     </div>
@@ -418,9 +461,9 @@
     <div id="rtOverall" style="display:flex;gap:12px;"></div>
 
     <!-- 當月累積區塊 -->
-    <div style="border-top:1px solid #1e2a40;margin-top:16px;padding-top:14px;">
+    <div style="border-top:1px solid var(--rt-divider);margin-top:16px;padding-top:14px;">
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:10px;">
-        <div id="rtMonthlyTitle" style="font-size:14px;color:#445;letter-spacing:1px;">📅 當月累積</div>
+        <div id="rtMonthlyTitle" style="font-size:14px;color:var(--rt-muted);letter-spacing:1px;">📅 當月累積</div>
         <div style="display:flex;align-items:center;gap:6px;">
           <button id="rtMonthPrev" class="quick-btn" onclick="shiftRtMonth(-1)">◀ 上月</button>
           <select id="rtMonthSelect" onchange="onRtMonthChange()" style="font-size:12px;padding:4px 10px;border:0.5px solid #185fa5;border-radius:6px;background:#e6f1fb;color:#185fa5;font-weight:700;"></select>
@@ -2287,17 +2330,17 @@ function stopRealtimeTimer() {
 }
 
 function rtRateColor(rate) {
-  if (rate === null) return '#aaa';
-  if (rate >= 100)  return '#1D9E75';
-  if (rate >= 85)   return '#e67e22';
-  return '#e74c3c';
+  if (rate === null) return 'var(--rt-off)';
+  if (rate >= 100)  return 'var(--rt-ok)';
+  if (rate >= 85)   return 'var(--rt-warn)';
+  return 'var(--rt-crit)';
 }
 
 function rtStatus(rate) {
-  if (rate === null) return { emoji: '', text: '', color: '#aaa' };
-  if (rate >= 100)  return { emoji: '😊', text: '已達標',   color: '#1D9E75' };
-  if (rate >= 85)   return { emoji: '💪', text: '加油衝刺', color: '#e67e22' };
-  return                   { emoji: '😢', text: '需要加速', color: '#e74c3c' };
+  if (rate === null) return { emoji: '', text: '', color: 'var(--rt-off)' };
+  if (rate >= 100)  return { emoji: '😊', text: '已達標',   color: 'var(--rt-ok)' };
+  if (rate >= 85)   return { emoji: '💪', text: '加油衝刺', color: 'var(--rt-warn)' };
+  return                   { emoji: '😢', text: '需要加速', color: 'var(--rt-crit)' };
 }
 
 function updateRtProgress(rate) {
@@ -2415,7 +2458,7 @@ function renderRtTableMerged(segActuals, activeBreakdowns, hasTsData, curSegIdx,
   SEGMENTS.forEach((s, i) => { acc += segPlans[i]; endCumPlan.push(acc); });
 
   function rateCell(r) {
-    if (r === null) return '<span style="color:#555;font-size:20px;">—</span>';
+    if (r === null) return '<span style="color:var(--rt-off-dim);font-size:20px;">—</span>';
     const st = rtStatus(r);
     return `<span style="color:${st.color};font-weight:800;font-size:22px;">${r}%</span><br><span style="font-size:18px;">${st.emoji}</span>`;
   }
@@ -2448,28 +2491,28 @@ function renderRtTableMerged(segActuals, activeBreakdowns, hasTsData, curSegIdx,
 
     let rowStyle, nameColor, subColor;
     if (isCurrent && isToday) {
-      rowStyle = 'background:#1a2744;';
-      nameColor = '#fff'; subColor = '#8ab4f8';
+      rowStyle = 'background:var(--rt-current-row);';
+      nameColor = 'var(--rt-text-strong)'; subColor = 'var(--rt-accent2)';
     } else if (isFuture && isToday) {
       rowStyle = '';
-      nameColor = '#444'; subColor = '#333';
+      nameColor = 'var(--rt-future-name)'; subColor = 'var(--rt-future)';
     } else {
       rowStyle = '';
-      nameColor = '#ccc'; subColor = '#666';
+      nameColor = 'var(--rt-text-dim)'; subColor = 'var(--rt-past-sub)';
     }
 
     const fw = isCurrent ? '700' : '500';
 
     const tr = document.createElement('tr');
-    tr.style.cssText = `border-bottom:1px solid #1e2535;height:70px;${rowStyle}`;
+    tr.style.cssText = `border-bottom:1px solid var(--rt-row-border);height:70px;${rowStyle}`;
     tr.innerHTML = `
       <td style="padding:0 16px;font-size:19px;font-weight:${fw};color:${nameColor};">${seg.name}<br>
         <span style="font-size:12px;color:${subColor};">${seg.label}</span></td>
-      <td style="text-align:center;padding:0 10px;font-size:15px;color:#556;">${seg.min}分</td>
-      <td style="text-align:center;padding:0 12px;font-size:20px;color:#888;">${segPlanDisp}</td>
-      <td style="text-align:center;padding:0 12px;font-size:20px;color:#888;">${cumPlanDisp}</td>
-      <td style="text-align:center;padding:0 12px;font-size:20px;font-weight:600;color:${isFuture?'#333':'#e0e0e0'};">${actualDisp}</td>
-      <td style="text-align:center;padding:0 12px;font-size:20px;font-weight:600;color:${isFuture?'#333':'#e0e0e0'};">${cumActDisp}</td>
+      <td style="text-align:center;padding:0 10px;font-size:15px;color:var(--rt-muted2);">${seg.min}分</td>
+      <td style="text-align:center;padding:0 12px;font-size:20px;color:var(--rt-plan);">${segPlanDisp}</td>
+      <td style="text-align:center;padding:0 12px;font-size:20px;color:var(--rt-plan);">${cumPlanDisp}</td>
+      <td style="text-align:center;padding:0 12px;font-size:20px;font-weight:600;color:${isFuture?'var(--rt-future)':'var(--rt-text)'};">${actualDisp}</td>
+      <td style="text-align:center;padding:0 12px;font-size:20px;font-weight:600;color:${isFuture?'var(--rt-future)':'var(--rt-text)'};">${cumActDisp}</td>
       <td style="text-align:center;padding:0 10px;">${rateCell(segRate)}</td>
       <td style="text-align:center;padding:0 10px;">${rateCell(cumRate)}</td>`;
     tbody.appendChild(tr);
@@ -2492,12 +2535,12 @@ function toggleRtAttendanceDetail() {
 function renderRtAttendanceDetail(activeBreakdowns) {
   const body = document.getElementById('rtAttendanceBody');
   if (!body) return;
-  if (!activeBreakdowns.length) { body.innerHTML = '<div style="font-size:13px;color:#556;padding:8px 0;">尚無出勤資料</div>'; return; }
+  if (!activeBreakdowns.length) { body.innerHTML = '<div style="font-size:13px;color:var(--rt-muted2);padding:8px 0;">尚無出勤資料</div>'; return; }
 
   const rows = activeBreakdowns.slice().sort((a, b) => String(a.pid).localeCompare(String(b.pid)));
   const cellStyle = 'text-align:center;padding:8px 10px;font-size:15px;';
   const head = `
-    <tr style="border-bottom:2px solid #1e2a40;font-size:13px;color:#556;">
+    <tr style="border-bottom:2px solid var(--rt-divider);font-size:13px;color:var(--rt-muted2);">
       <th style="text-align:left;padding:8px 10px;font-weight:600;">工號</th>
       <th style="${cellStyle}font-weight:600;">到場</th>
       <th style="${cellStyle}font-weight:600;">離場</th>
@@ -2506,18 +2549,18 @@ function renderRtAttendanceDetail(activeBreakdowns) {
     </tr>`;
   const body_ = rows.map(p => {
     let status, color;
-    if (p.isLate && p.isEarly) { status = '遲到・早退'; color = '#e74c3c'; }
-    else if (p.isLate)         { status = '遲到';       color = '#e67e22'; }
-    else if (p.isEarly)        { status = '早退';       color = '#e67e22'; }
-    else if (p.inProgress)     { status = '在場中';     color = '#8ab4f8'; }
-    else                       { status = '正常';       color = '#1D9E75'; }
+    if (p.isLate && p.isEarly) { status = '遲到・早退'; color = 'var(--rt-crit)'; }
+    else if (p.isLate)         { status = '遲到';       color = 'var(--rt-warn)'; }
+    else if (p.isEarly)        { status = '早退';       color = 'var(--rt-warn)'; }
+    else if (p.inProgress)     { status = '在場中';     color = 'var(--rt-accent2)'; }
+    else                       { status = '正常';       color = 'var(--rt-ok)'; }
     const pct = Math.round(p.attendRatio * 100);
-    return `<tr style="border-bottom:1px solid #1e2535;">
-      <td style="padding:8px 10px;font-size:14px;color:#e0e0e0;font-weight:600;">${p.pid}${shiftBadgeHtml(p.shiftKey)}</td>
-      <td style="${cellStyle}color:#ccc;">${minToHHMM(p.firstTs)}</td>
-      <td style="${cellStyle}color:#ccc;">${minToHHMM(p.lastTs)}</td>
+    return `<tr style="border-bottom:1px solid var(--rt-row-border);">
+      <td style="padding:8px 10px;font-size:14px;color:var(--rt-text);font-weight:600;">${p.pid}${shiftBadgeHtml(p.shiftKey)}</td>
+      <td style="${cellStyle}color:var(--rt-text-dim);">${minToHHMM(p.firstTs)}</td>
+      <td style="${cellStyle}color:var(--rt-text-dim);">${minToHHMM(p.lastTs)}</td>
       <td style="${cellStyle}color:${color};font-weight:600;">${status}</td>
-      <td style="${cellStyle}color:${pct < 100 ? '#e67e22' : '#ccc'};font-weight:600;">${pct}%</td>
+      <td style="${cellStyle}color:${pct < 100 ? 'var(--rt-warn)' : 'var(--rt-text-dim)'};font-weight:600;">${pct}%</td>
     </tr>`;
   }).join('');
 
@@ -2528,32 +2571,32 @@ function renderRtOverall(total, totalTarget, bxTarget, mzTarget, bxActual, mzAct
   const totRate = totalTarget>0 ? Math.round(total/totalTarget*100) : null;
   const st = rtStatus(totRate);
 
-  const cardBase = 'flex:1;background:#131929;border-radius:16px;padding:0 1rem;text-align:center;display:flex;flex-direction:column;justify-content:center;align-items:center;height:200px;';
+  const cardBase = 'flex:1;background:var(--rt-panel);box-shadow:var(--rt-card-shadow);border-radius:16px;padding:0 1rem;text-align:center;display:flex;flex-direction:column;justify-content:center;align-items:center;height:200px;';
 
   const card = (label, val, unit='隻') => `
-    <div style="${cardBase}border:1px solid #1e2d50;">
-      <div style="font-size:14px;color:#8ab4f8;margin-bottom:6px;letter-spacing:1px;">${label}${tfDiscountEnabled && label==='累計實績' ? ' <span title="TF/PF 小件車型已依係數折算等效隻數（TF 0.3、PF 0.7）">ℹ️</span>' : ''}</div>
-      <div style="font-size:80px;font-weight:800;line-height:1;color:#ffffff;">${val}</div>
-      <div style="font-size:14px;color:#556;margin-top:6px;">${unit}</div>
+    <div style="${cardBase}border:1px solid var(--rt-panel-border);">
+      <div style="font-size:14px;color:var(--rt-accent2);margin-bottom:6px;letter-spacing:1px;">${label}${tfDiscountEnabled && label==='累計實績' ? ' <span title="TF/PF 小件車型已依係數折算等效隻數（TF 0.3、PF 0.7）">ℹ️</span>' : ''}</div>
+      <div style="font-size:80px;font-weight:800;line-height:1;color:var(--rt-text-strong);">${val}</div>
+      <div style="font-size:14px;color:var(--rt-muted2);margin-top:6px;">${unit}</div>
     </div>`;
 
   const rateCard = `
     <div style="${cardBase}border:2px solid ${st.color};">
-      <div style="font-size:14px;color:#8ab4f8;margin-bottom:6px;letter-spacing:1px;">累計達成率</div>
+      <div style="font-size:14px;color:var(--rt-accent2);margin-bottom:6px;letter-spacing:1px;">累計達成率</div>
       <div style="font-size:72px;font-weight:800;line-height:1;color:${st.color};">${totRate!=null?totRate+'%':'—'}</div>
       <div style="font-size:20px;color:${st.color};margin-top:10px;">${st.emoji} ${st.text}</div>
     </div>`;
 
   const breakdown = `
-    <div style="${cardBase.replace('text-align:center;','').replace('align-items:center;','')}border:1px solid #1e2d50;padding:0 1.6rem;align-items:stretch;">
-      <div style="font-size:14px;color:#8ab4f8;margin-bottom:16px;letter-spacing:1px;text-align:left;">今日明細${tfDiscountEnabled ? ' <span title="TF/PF 小件車型已依係數折算等效隻數（TF 0.3、PF 0.7）" style="font-size:12px;">ℹ️</span>' : ''}</div>
+    <div style="${cardBase.replace('text-align:center;','').replace('align-items:center;','')}border:1px solid var(--rt-panel-border);padding:0 1.6rem;align-items:stretch;">
+      <div style="font-size:14px;color:var(--rt-accent2);margin-bottom:16px;letter-spacing:1px;text-align:left;">今日明細${tfDiscountEnabled ? ' <span title="TF/PF 小件車型已依係數折算等效隻數（TF 0.3、PF 0.7）" style="font-size:12px;">ℹ️</span>' : ''}</div>
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:16px;">
-        <span style="color:#aaa;font-size:16px;">保險桿</span>
-        <span style="color:#e0e0e0;font-size:28px;font-weight:700;">${fmtQty(bxActual)} <span style="font-size:14px;color:#556;">/ ${bxTarget}</span></span>
+        <span style="color:var(--rt-text-sub);font-size:16px;">保險桿</span>
+        <span style="color:var(--rt-text);font-size:28px;font-weight:700;">${fmtQty(bxActual)} <span style="font-size:14px;color:var(--rt-muted2);">/ ${bxTarget}</span></span>
       </div>
       <div style="display:flex;justify-content:space-between;align-items:baseline;">
-        <span style="color:#aaa;font-size:16px;">馬自達</span>
-        <span style="color:#e0e0e0;font-size:28px;font-weight:700;">${fmtQty(mzActual)} <span style="font-size:14px;color:#556;">/ ${mzTarget}</span></span>
+        <span style="color:var(--rt-text-sub);font-size:16px;">馬自達</span>
+        <span style="color:var(--rt-text);font-size:28px;font-weight:700;">${fmtQty(mzActual)} <span style="font-size:14px;color:var(--rt-muted2);">/ ${mzTarget}</span></span>
       </div>
     </div>`;
 
@@ -2629,9 +2672,9 @@ function renderRtMonthly(bxTarget, mzTarget) {
 
   const [my, mm] = selectedRtMonth.split('-');
   const monthLabel = `${my}年${mm}月`;
-  const rateColor = monthlyRate === null ? '#888'
-    : monthlyRate >= 100 ? '#1D9E75'
-    : monthlyRate >= 80  ? '#e67e22' : '#e74c3c';
+  const rateColor = monthlyRate === null ? 'var(--rt-plan)'
+    : monthlyRate >= 100 ? 'var(--rt-ok)'
+    : monthlyRate >= 80  ? 'var(--rt-warn)' : 'var(--rt-crit)';
   const rateEmoji = monthlyRate === null ? ''
     : monthlyRate >= 100 ? '😀' : monthlyRate >= 80 ? '😐' : '😢';
 
@@ -2640,21 +2683,21 @@ function renderRtMonthly(bxTarget, mzTarget) {
     titleEl.textContent = `📅 ${heading}（${monthLabel}）`;
   }
 
-  const cb = 'flex:1;background:#131929;border-radius:16px;padding:0 1rem;text-align:center;display:flex;flex-direction:column;justify-content:center;align-items:center;height:180px;';
+  const cb = 'flex:1;background:var(--rt-panel);box-shadow:var(--rt-card-shadow);border-radius:16px;padding:0 1rem;text-align:center;display:flex;flex-direction:column;justify-content:center;align-items:center;height:180px;';
 
   cardsEl.innerHTML = `
-    <div style="${cb}border:1px solid #1e2d50;">
-      <div style="font-size:13px;color:#8ab4f8;margin-bottom:6px;letter-spacing:1px;">月累積目標</div>
-      <div style="font-size:64px;font-weight:800;line-height:1;color:#ffffff;">${monthlyTarget || '—'}</div>
-      <div style="font-size:13px;color:#556;margin-top:6px;">隻</div>
+    <div style="${cb}border:1px solid var(--rt-panel-border);">
+      <div style="font-size:13px;color:var(--rt-accent2);margin-bottom:6px;letter-spacing:1px;">月累積目標</div>
+      <div style="font-size:64px;font-weight:800;line-height:1;color:var(--rt-text-strong);">${monthlyTarget || '—'}</div>
+      <div style="font-size:13px;color:var(--rt-muted2);margin-top:6px;">隻</div>
     </div>
-    <div style="${cb}border:1px solid #1e2d50;">
-      <div style="font-size:13px;color:#8ab4f8;margin-bottom:6px;letter-spacing:1px;">月累積實績${tfDiscountEnabled ? ' <span title="TF/PF 小件車型已依係數折算等效隻數（TF 0.3、PF 0.7）">ℹ️</span>' : ''}</div>
-      <div style="font-size:64px;font-weight:800;line-height:1;color:#ffffff;">${monthlyActual ? fmtQty(monthlyActual) : '—'}</div>
-      <div style="font-size:13px;color:#556;margin-top:6px;">隻</div>
+    <div style="${cb}border:1px solid var(--rt-panel-border);">
+      <div style="font-size:13px;color:var(--rt-accent2);margin-bottom:6px;letter-spacing:1px;">月累積實績${tfDiscountEnabled ? ' <span title="TF/PF 小件車型已依係數折算等效隻數（TF 0.3、PF 0.7）">ℹ️</span>' : ''}</div>
+      <div style="font-size:64px;font-weight:800;line-height:1;color:var(--rt-text-strong);">${monthlyActual ? fmtQty(monthlyActual) : '—'}</div>
+      <div style="font-size:13px;color:var(--rt-muted2);margin-top:6px;">隻</div>
     </div>
     <div style="${cb}border:2px solid ${rateColor};">
-      <div style="font-size:13px;color:#8ab4f8;margin-bottom:6px;letter-spacing:1px;">月累積達成率</div>
+      <div style="font-size:13px;color:var(--rt-accent2);margin-bottom:6px;letter-spacing:1px;">月累積達成率</div>
       <div style="font-size:56px;font-weight:800;line-height:1;color:${rateColor};">${monthlyRate !== null ? monthlyRate + '%' : '—'}</div>
       <div style="font-size:20px;color:${rateColor};margin-top:10px;">${rateEmoji}</div>
     </div>`;
@@ -4223,6 +4266,19 @@ async function init() {
   const cfg = getConfig();
   fetchFromSheets(cfg.id, cfg.key, cfg.sheet);
 }
+
+// ── 即時看板主題切換（僅改顏色，不觸發任何重新計算或資料讀取）──
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  const btn = document.getElementById('themeToggleBtn');
+  if (btn) btn.textContent = theme === 'light' ? '🌙 深色' : '🌞 淺色';
+}
+function toggleTheme() {
+  const next = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+  try { localStorage.setItem('person_part_theme', next); } catch (e) {}
+  applyTheme(next);
+}
+applyTheme(document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark');
 
 init();
 </script>
