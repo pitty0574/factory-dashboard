@@ -102,6 +102,8 @@ body {
 .kpi .delta { font-size: 11px; color: var(--fg-mute); margin-top: 2px; }
 .kpi .delta.up { color: var(--ok); }
 .kpi .delta.down { color: var(--crit); }
+.kpi .delta.note { font-size: 10px; color: var(--fg-dim); margin-top: 0; }
+.kpi .delta.note:empty { display: none; }
 .kpi .stripe { position: absolute; left: 0; top: 0; bottom: 0; width: 3px; }
 
 .panel { background: var(--panel); border: 1px solid var(--border); }
@@ -130,6 +132,7 @@ body {
 .station-pct.ok { fill: var(--ok); }
 .station-pct.warn { fill: var(--warn); }
 .station-pct.crit { fill: var(--crit); }
+.station-net { fill: var(--fg-mute); font-size: 13px; font-family: var(--font-mono); font-weight: 600; }
 
 .worker-dot { fill: var(--info); }
 .worker-dot.off { fill: var(--fg-dim); }
@@ -176,6 +179,9 @@ html[data-theme="light"] .worker-name { color: #64748B; }
 .br-row .bar .fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--ok); }
 .br-row .bar .fill.warn { background: var(--warn); }
 .br-row .val { font-family: var(--font-mono); font-weight: 600; min-width: 36px; text-align: right; }
+.br-row .lbl.wide { min-width: 110px; }
+.expand-btn { margin-top: 8px; background: var(--panel-up); border: 1px solid var(--border-up); color: var(--fg-mute); padding: 4px 10px; font-size: 11px; cursor: pointer; font-family: inherit; }
+.expand-btn:hover { color: var(--fg); border-color: var(--fg-mute); }
 
 .toggle-note { padding: 12px 16px; border-top: 1px solid var(--border); color: var(--fg-mute); font-size: 11px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
 .theme-btn { background: var(--panel-up); border: 1px solid var(--border-up); color: var(--fg-mute); padding: 4px 10px; font-size: 11px; cursor: pointer; font-family: inherit; }
@@ -263,13 +269,14 @@ html[data-theme="light"] .worker-name { color: #64748B; }
       <div class="stripe" style="background: var(--info);"></div>
       <div class="lbl">直行率 FPY</div>
       <div class="val" id="kpi-fpy">—</div>
-      <div class="delta" id="kpi-fpy-delta">(終檢 − 補漆) ÷ 終檢</div>
+      <div class="delta" id="kpi-fpy-delta">(終檢 − 淨補漆) ÷ 終檢</div>
+      <div class="delta note" id="kpi-fpy-note"></div>
     </div>
     <div class="kpi">
       <div class="stripe" style="background: var(--warn);"></div>
       <div class="lbl">需補漆比例</div>
       <div class="val" id="kpi-repaint">—</div>
-      <div class="delta" id="kpi-repaint-delta">補漆 ÷ 終檢</div>
+      <div class="delta" id="kpi-repaint-delta">淨補漆 ÷ 終檢</div>
     </div>
     <div class="kpi">
       <div class="stripe" style="background: var(--purple);"></div>
@@ -414,6 +421,8 @@ html[data-theme="light"] .worker-name { color: #64748B; }
         <text class="station-sub" x="85" y="144" text-anchor="middle">PCS · 今日筆數</text>
         <text class="station-pct warn" id="st-paint-pct" x="85" y="162" text-anchor="middle"></text>
         <g id="st-paint-dots"></g>
+        <!-- RV/PU 必經 BL 扣除說明（卡片正下方，位於「直行」標籤上方） -->
+        <text class="station-net" id="st-paint-net" x="85" y="190" text-anchor="middle"></text>
       </g>
 
       <!-- Station: 終檢 -->
@@ -680,6 +689,7 @@ html[data-theme="light"] .worker-name { color: #64748B; }
     const now = Date.now();
     const byPid = {};
     const byModel = {};
+    const byModelColor = {}; // key: model + '|' + color
     let last = null;
     recs.forEach(r => {
       const p = byPid[r.pid] || (byPid[r.pid] = { pid: r.pid, count: 0, lastTs: null });
@@ -688,6 +698,8 @@ html[data-theme="light"] .worker-name { color: #64748B; }
       if (r.ts && (!last || r.ts > last)) last = r.ts;
       const m = r.model || '（未填）';
       byModel[m] = (byModel[m] || 0) + 1;
+      const mc = m + '|' + (r.color || '');
+      byModelColor[mc] = (byModelColor[mc] || 0) + 1;
     });
     const workers = Object.values(byPid).sort((a, b) => b.count - a.count);
     workers.forEach(w => { w.active = !!w.lastTs && (now - w.lastTs) / 1000 <= OFFLINE_SEC; });
@@ -696,12 +708,26 @@ html[data-theme="light"] .worker-name { color: #64748B; }
       workers,
       activeCount: workers.filter(w => w.active).length,
       byModel,
+      byModelColor,
       last,
       recs,
     };
   }
 
   function pct(n) { return n == null ? '—' : Math.round(n * 100) + '%'; }
+
+  // RV / PU 每隻必經 BL 補漆（製程工序，非品質問題）→ 以終檢 RV/PU 件數反推 BL 筆數，從補漆扣除
+  const RVPU_MODELS = ['RV', 'PU'];
+  function paintNet(paint, final) {
+    const paint_RVPU = RVPU_MODELS.reduce((sum, m) => sum + (paint.byModel[m] || 0), 0);
+    const final_RVPU = RVPU_MODELS.reduce((sum, m) => sum + (final.byModel[m] || 0), 0);
+    const RVPU_BL = Math.min(paint_RVPU, final_RVPU); // 安全閥：防止跨日資料不同步導致超扣
+    const paintNetCount = paint.count - RVPU_BL;
+    // 直行率 = (終檢 − 淨補漆) / 終檢；需補漆率 = 淨補漆 / 終檢（早班補漆可能先於終檢，結果夾在 0~100%）
+    const fpy     = final.count > 0 ? Math.max(0, Math.min(1, (final.count - paintNetCount) / final.count)) : null;
+    const repaint = final.count > 0 ? Math.max(0, Math.min(1, paintNetCount / final.count)) : null;
+    return { RVPU_BL, paintNetCount, fpy, repaint };
+  }
 
   function renderStation(key, s, subPrefix) {
     document.getElementById(`st-${key}-count`).textContent = s.count;
@@ -723,17 +749,17 @@ html[data-theme="light"] .worker-name { color: #64748B; }
     document.getElementById('st-rework-pct').textContent = rework.last ? '最後 ' + hhmm(rework.last) : '';
     document.getElementById('st-final-pct').textContent  = final.last  ? '最後 ' + hhmm(final.last)  : '';
 
-    // 直行率 = (終檢 − 補漆) / 終檢；需補漆率 = 補漆 / 終檢（早班補漆可能先於終檢，結果夾在 0~100%）
-    const fpy     = final.count > 0 ? Math.max(0, Math.min(1, (final.count - paint.count) / final.count)) : null;
-    const repaint = final.count > 0 ? Math.max(0, Math.min(1, paint.count / final.count)) : null;
+    const { RVPU_BL, paintNetCount, fpy, repaint } = paintNet(paint, final);
 
     document.getElementById('kpi-pass').textContent = final.count;
     document.getElementById('kpi-pass-delta').textContent = final.last ? `終檢階段 今日筆數 · 最後 ${hhmm(final.last)}` : '終檢階段 今日筆數';
     document.getElementById('kpi-fpy').textContent = pct(fpy);
-    document.getElementById('kpi-fpy-delta').textContent = `(終檢 ${final.count} − 補漆 ${paint.count}) ÷ 終檢`;
+    document.getElementById('kpi-fpy-delta').textContent = `(終檢 ${final.count} − 淨補漆 ${paintNetCount}) ÷ 終檢`;
+    document.getElementById('kpi-fpy-note').textContent = `淨補漆 = 補漆 ${paint.count} − RV/PU 必經 BL ${RVPU_BL}`;
     document.getElementById('kpi-repaint').textContent = pct(repaint);
-    document.getElementById('kpi-repaint-delta').textContent = `補漆 ${paint.count} ÷ 終檢 ${final.count}`;
+    document.getElementById('kpi-repaint-delta').textContent = `淨補漆 ${paintNetCount} ÷ 終檢 ${final.count}`;
     document.getElementById('st-paint-pct').textContent = repaint != null ? '需補漆 ' + pct(repaint) : '';
+    document.getElementById('st-paint-net').textContent = RVPU_BL > 0 ? `扣 BL ${RVPU_BL} · 淨 ${paintNetCount}` : '';
     document.getElementById('flow-repaint').textContent = '需補漆 ' + pct(repaint);
     document.getElementById('flow-fpy').textContent = '直行 ' + pct(fpy);
 
@@ -799,17 +825,18 @@ html[data-theme="light"] .worker-name { color: #64748B; }
       ['補漆', paint.count,  Math.round(paint.count  / max * 100), 'warn'],
       ['終檢', final.count,  Math.round(final.count  / max * 100), 'ok'],
     ]);
-    // 車型直行率 = (終檢_m − 補漆_m) / 終檢_m，取終檢筆數前 5 名車型
+    // 車型直行率 = (終檢_m − 淨補漆_m) / 終檢_m，RV/PU 先扣必經 BL；取終檢筆數前 5 名車型
     const models = Object.entries(final.byModel).sort((a, b) => b[1] - a[1]).slice(0, 5);
     const fpyRows = models.map(([m, n]) => {
-      const p = paint.byModel[m] || 0;
+      const pm = paint.byModel[m] || 0;
+      const p = RVPU_MODELS.includes(m) ? pm - Math.min(pm, n) : pm;
       const v = Math.max(0, Math.min(1, (n - p) / n));
       return [m, Math.round(v * 100) + '%', Math.round(v * 100), v >= 0.5 ? 'ok' : 'warn'];
     });
     document.getElementById('detail-content').innerHTML =
       section('工站狀態 · Station Status', left) +
       section('直行率拆解 · FPY by Model', fpyRows.length ? barRows(fpyRows) : empty('今日終檢尚無資料')) +
-      noteHtml('直行率以「(終檢 − 補漆) ÷ 終檢」計算；車型以終檢筆數前 5 名列出。');
+      noteHtml('直行率以「(終檢 − 淨補漆) ÷ 終檢」計算，淨補漆 = 補漆 − RV/PU 必經 BL（以終檢 RV/PU 件數反推）；車型以終檢筆數前 5 名列出。');
   }
 
   const STATION_META = {
@@ -842,10 +869,37 @@ html[data-theme="light"] .worker-name { color: #64748B; }
         ).join('') + '</div>'
       : empty('今日尚無實績');
     const rows = modelRows(s.byModel, id === 'paint' ? 'warn' : 'ok');
+    let note = `今日 ${s.count} 筆${s.last ? '，最後一筆 ' + hhmm(s.last) : ''}。`;
+    if (id === 'paint') {
+      const { RVPU_BL, paintNetCount } = paintNet(stats.paint, stats.final);
+      if (RVPU_BL > 0) note += `扣 RV/PU 必經 BL ${RVPU_BL} 筆，淨 ${paintNetCount} 筆（用於 FPY 計算）。`;
+    }
     content.innerHTML =
       section('今日作業員', workersHtml) +
       section(meta.right, rows.length ? barRows(rows) : empty('今日尚無資料')) +
-      noteHtml(`今日 ${s.count} 筆${s.last ? '，最後一筆 ' + hhmm(s.last) : ''}。`);
+      (id === 'paint' ? section('今日車型 × 顏色組合', comboHtml(s.byModelColor)) : '') +
+      noteHtml(note);
+    const btn = document.getElementById('combo-toggle');
+    if (btn) btn.addEventListener('click', () => { comboExpanded = !comboExpanded; renderDetail('paint'); });
+  }
+
+  // 補漆區「車型 × 顏色」：預設前 5 名，可展開全部（展開狀態跨 30 秒刷新保留）
+  const COMBO_TOP = 5;
+  let comboExpanded = false;
+  function comboHtml(byModelColor) {
+    const entries = Object.entries(byModelColor).sort((a, b) => b[1] - a[1]);
+    if (!entries.length) return empty('今日尚無資料');
+    const max = entries[0][1];
+    const shown = comboExpanded ? entries : entries.slice(0, COMBO_TOP);
+    const rowsHtml = '<div class="breakdown">' + shown.map(([k, n]) => {
+      const [model, color] = k.split('|');
+      return '<div class="br-row"><span class="lbl wide">'+esc(model)+' × '+esc(color || '—')+'</span><div class="bar"><div class="fill warn" style="width:'+Math.round(n / max * 100)+'%;"></div></div><span class="val">'+n+'</span></div>';
+    }).join('') + '</div>';
+    const rest = entries.length - COMBO_TOP;
+    const btn = rest > 0
+      ? '<button class="expand-btn" id="combo-toggle">' + (comboExpanded ? '收起 ▲' : `展開全部 (剩餘 ${rest} 項) ▼`) + '</button>'
+      : '';
+    return rowsHtml + btn;
   }
 
   // Click handlers

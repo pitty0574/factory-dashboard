@@ -1,254 +1,320 @@
 <!doctype html>
-<html lang="zh-TW">
+<html lang="zh-TW" data-theme="light">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <title>補漆房 3D 數位孿生看板 · 直線幹道版</title>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap">
+  <title>全廠 3D 數位孿生戰情室 · INTEGRATED v3.2 (高對比立體版)</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700;800&family=Noto+Sans+TC:wght@400;500;700&display=swap">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
   <style>
     :root {
-      --bg-grad-1: #eef2f7;
-      --bg-grad-2: #dce4f0;
-      --card-bg: rgba(255, 255, 255, 0.88);
-      --card-border: rgba(255, 255, 255, 0.95);
-      --shadow: 0 10px 30px -5px rgba(15, 23, 42, 0.08), 0 4px 12px -2px rgba(15, 23, 42, 0.04);
+      --bg-grad-1: #f1f6fd;
+      --bg-grad-2: #d3e1f4;
+      --card-bg: rgba(255, 255, 255, 0.90);
+      --card-border: rgba(14, 165, 233, 0.38);
+      --card-glow: 0 10px 28px -4px rgba(15, 23, 42, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.95);
       --fg: #0f172a;
-      --fg-mute: #64748b;
-      --fg-dim: #94a3b8;
-      --ok: #10b981;
-      --ok-bg: rgba(16, 185, 129, 0.12);
-      --warn: #f59e0b;
-      --warn-bg: rgba(245, 158, 11, 0.12);
-      --crit: #ef4444;
-      --crit-bg: rgba(239, 68, 68, 0.12);
-      --info: #2563eb;
-      --info-bg: rgba(37, 99, 235, 0.1);
+      --fg-mute: #475569;
+      --ok: #059669;
+      --ok-bright: #10b981;
+      --ok-bg: rgba(16, 185, 129, 0.14);
+      --warn: #d97706;
+      --warn-bright: #f59e0b;
+      --warn-bg: rgba(245, 158, 11, 0.15);
+      --crit: #dc2626;
+      --crit-bg: rgba(239, 68, 68, 0.14);
+      --info: #0284c7;
+      --info-bright: #0ea5e9;
+      --info-bg: rgba(14, 165, 233, 0.14);
       --purple: #7c3aed;
       --font-ui: 'Inter', 'Noto Sans TC', -apple-system, BlinkMacSystemFont, sans-serif;
       --font-mono: 'JetBrains Mono', ui-monospace, monospace;
     }
 
     [data-theme="dark"] {
-      --bg-grad-1: #0f172a;
-      --bg-grad-2: #1e293b;
-      --card-bg: rgba(18, 26, 36, 0.86);
-      --card-border: rgba(59, 74, 98, 0.6);
-      --shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
-      --fg: #f1f5f9;
+      --bg-grad-1: #040814;
+      --bg-grad-2: #0b1528;
+      --card-bg: rgba(11, 20, 38, 0.84);
+      --card-border: rgba(56, 189, 248, 0.28);
+      --card-glow: 0 12px 36px rgba(0, 0, 0, 0.65);
+      --fg: #f8fafc;
       --fg-mute: #94a3b8;
-      --fg-dim: #475569;
+      --ok: #00f59b;
+      --ok-bright: #00f59b;
+      --ok-bg: rgba(0, 245, 155, 0.14);
+      --warn: #ffb800;
+      --warn-bright: #ffb800;
+      --warn-bg: rgba(255, 184, 0, 0.15);
+      --info: #38bdf8;
+      --info-bright: #38bdf8;
+      --info-bg: rgba(56, 189, 248, 0.16);
+      --purple: #a78bfa;
     }
 
     * { box-sizing: border-box; }
     body, html {
       margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden;
       font-family: var(--font-ui); color: var(--fg);
-      background: linear-gradient(135deg, var(--bg-grad-1), var(--bg-grad-2));
+      background: radial-gradient(circle at 50% 35%, var(--bg-grad-1), var(--bg-grad-2) 85%);
       user-select: none;
+    }
+
+    body::after {
+      content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 1;
+      background:
+        linear-gradient(rgba(2, 132, 199, 0.045) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(2, 132, 199, 0.045) 1px, transparent 1px);
+      background-size: 32px 32px;
     }
 
     #canvas-container { position: absolute; inset: 0; z-index: 1; }
     #labels-container { position: absolute; inset: 0; z-index: 2; pointer-events: none; overflow: hidden; }
 
-    /* 3D 工站懸浮膠囊標籤 */
-    .station-pin {
+    /* 頂部懸浮導覽列：單行固定不換行 */
+    .hud-top {
+      position: absolute; top: 14px; left: 16px; right: 16px; z-index: 25;
+      display: flex; justify-content: space-between; align-items: center; gap: 10px;
+      pointer-events: none; flex-wrap: nowrap;
+    }
+    .brand-bar, .view-bar, .status-bar {
+      pointer-events: auto; display: flex; align-items: center; gap: 8px;
+      background: var(--card-bg); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+      border: 1px solid var(--card-border); border-radius: 14px;
+      padding: 7px 12px; box-shadow: var(--card-glow);
+      white-space: nowrap; flex-shrink: 0;
+    }
+    .view-bar { flex-shrink: 1; overflow-x: auto; max-width: 56vw; scrollbar-width: none; }
+    .view-bar::-webkit-scrollbar { display: none; }
+
+    .brand-cube {
+      width: 32px; height: 32px; border-radius: 8px;
+      background: linear-gradient(135deg, #0ea5e9, #2563eb);
+      color: #fff; display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 16px; box-shadow: 0 4px 10px rgba(14, 165, 233, 0.35);
+    }
+    .brand-title { font-weight: 800; font-size: 14px; display: flex; align-items: center; gap: 6px; }
+    .tech-tag { font-size: 10px; font-family: var(--font-mono); padding: 2px 6px; background: var(--info-bg); color: var(--info); border: 1px solid rgba(14,165,233,0.35); border-radius: 4px; font-weight: 700; }
+    .brand-sub { font-size: 10px; color: var(--fg-mute); font-family: var(--font-mono); }
+    .back-2d {
+      font-size: 11px; font-weight: 700; color: var(--info); text-decoration: none;
+      background: var(--info-bg); border: 1px solid rgba(14,165,233,0.3); border-radius: 999px; padding: 4px 10px;
+    }
+
+    .nav-pill {
+      border: 1px solid rgba(14, 165, 233, 0.25); background: rgba(255, 255, 255, 0.65);
+      color: var(--fg); padding: 5px 10px; border-radius: 9px; font-size: 11px; font-weight: 700;
+      cursor: pointer; transition: all 0.18s; font-family: var(--font-ui);
+      display: flex; align-items: center; gap: 5px; white-space: nowrap;
+    }
+    [data-theme="dark"] .nav-pill { background: rgba(30, 41, 59, 0.65); }
+    .nav-pill:hover, .nav-pill.active {
+      background: linear-gradient(135deg, #0ea5e9, #2563eb); color: #fff; border-color: transparent;
+      box-shadow: 0 3px 10px rgba(14, 165, 233, 0.3);
+    }
+    .nav-pill.focus-abc { border-color: rgba(16, 185, 129, 0.5); color: var(--ok); }
+    .nav-pill.focus-abc.active { background: linear-gradient(135deg, #059669, #10b981); color: #fff; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+
+    .live-pill {
+      display: flex; align-items: center; gap: 5px;
+      background: var(--ok-bg); color: var(--ok); border: 1px solid rgba(16,185,129,0.3);
+      padding: 3px 9px; border-radius: 999px; font-weight: 800; font-size: 11px; font-family: var(--font-mono);
+    }
+    .pulse { width: 7px; height: 7px; border-radius: 50%; background: var(--ok-bright); animation: pulse 1.6s infinite; }
+    @keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.6); } 50% { box-shadow: 0 0 0 6px transparent; } }
+    .clock-time { font-family: var(--font-mono); font-weight: 800; font-size: 13px; }
+
+    /* A / B / C 棟科技全息大徽章 */
+    .bldg-banner {
       position: absolute; transform: translate(-50%, -100%);
       pointer-events: auto; cursor: pointer;
       background: var(--card-bg); backdrop-filter: blur(10px);
-      border: 2px solid var(--card-border); border-radius: 14px;
-      padding: 8px 14px; min-width: 125px;
-      box-shadow: var(--shadow);
-      transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1), border-color 0.2s;
-      display: flex; flex-direction: column; align-items: center; gap: 2px;
+      border: 1.5px solid var(--card-border); border-radius: 9px;
+      padding: 4px 10px; font-size: 11px; font-weight: 800; color: var(--fg);
+      box-shadow: var(--card-glow);
+      display: flex; align-items: center; gap: 6px;
+      transition: transform 0.2s; white-space: nowrap; z-index: 8;
     }
-    .station-pin:hover { transform: translate(-50%, -106%) scale(1.04); }
-    .station-pin.selected { border-color: var(--info); box-shadow: 0 0 0 4px var(--info-bg), var(--shadow); }
+    .bldg-banner:hover { transform: translate(-50%, -108%) scale(1.05); border-color: var(--info-bright); }
+    .bldg-banner .tag { padding: 2px 6px; border-radius: 4px; font-family: var(--font-mono); font-size: 10px; font-weight: 800; color: #fff; }
+    .bldg-banner.a-bldg .tag { background: #2563eb; }
+    .bldg-banner.b-bldg .tag { background: #059669; }
+    .bldg-banner.c-bldg .tag { background: #d97706; }
+
+    /* 周邊建築高對比標籤 */
+    .ctx-label {
+      position: absolute; transform: translate(-50%, -50%);
+      pointer-events: auto; cursor: pointer;
+      background: rgba(15, 23, 42, 0.76); backdrop-filter: blur(4px);
+      border: 1px solid rgba(148, 163, 184, 0.5);
+      color: #f8fafc; padding: 2px 7px; border-radius: 5px; font-size: 10px; font-weight: 600;
+      white-space: nowrap; z-index: 4; transition: all 0.15s;
+      box-shadow: 0 2px 6px rgba(15, 23, 42, 0.18);
+    }
+    .ctx-label:hover { background: var(--info-bright); color: #fff; z-index: 15; transform: translate(-50%, -50%) scale(1.1); }
+
+    /* 工站懸浮膠囊標籤 */
+    .station-pin {
+      position: absolute; transform: translate(-50%, -100%);
+      pointer-events: auto; cursor: pointer;
+      background: var(--card-bg); backdrop-filter: blur(12px);
+      border: 1.5px solid var(--card-border); border-radius: 11px;
+      padding: 5px 10px; min-width: 108px;
+      box-shadow: var(--card-glow);
+      transition: all 0.2s;
+      display: flex; flex-direction: column; align-items: center; gap: 1px;
+      z-index: 12;
+    }
+    .station-pin::before {
+      content: ''; position: absolute; top: 0; left: 15%; right: 15%; height: 2px;
+      background: linear-gradient(90deg, transparent, var(--info-bright), transparent);
+    }
+    .station-pin:hover { transform: translate(-50%, -106%) scale(1.05); border-color: var(--info-bright); }
+    .station-pin.selected { border-color: var(--info-bright); box-shadow: 0 0 0 2px var(--info-bright), var(--card-glow); }
     .station-pin::after {
-      content: ''; position: absolute; bottom: -8px; left: 50%; transform: translateX(-50%);
-      border-width: 8px 7px 0; border-style: solid;
-      border-color: var(--card-bg) transparent transparent;
+      content: ''; position: absolute; bottom: -14px; left: 50%; transform: translateX(-50%);
+      width: 2px; height: 14px; background: linear-gradient(to bottom, var(--info-bright), transparent);
     }
-    .pin-zone { font-size: 10px; font-weight: 700; letter-spacing: 0.06em; color: var(--fg-mute); text-transform: uppercase; }
-    .pin-title { font-size: 13px; font-weight: 700; color: var(--fg); display: flex; align-items: center; gap: 5px; }
-    .pin-count { font-size: 20px; font-weight: 800; font-family: var(--font-mono); line-height: 1.1; margin: 2px 0; }
-    .pin-meta { font-size: 10px; font-family: var(--font-mono); padding: 2px 6px; border-radius: 6px; font-weight: 600; }
+    .pin-zone { font-size: 8px; font-weight: 800; color: var(--info); font-family: var(--font-mono); }
+    .pin-title { font-size: 12px; font-weight: 800; color: var(--fg); }
+    .pin-count { font-size: 17px; font-weight: 800; font-family: var(--font-mono); line-height: 1.1; }
+    .pin-meta { font-size: 9px; font-family: var(--font-mono); padding: 1px 6px; border-radius: 5px; font-weight: 700; }
     .pin-meta.ok { background: var(--ok-bg); color: var(--ok); }
     .pin-meta.warn { background: var(--warn-bg); color: var(--warn); }
     .pin-meta.info { background: var(--info-bg); color: var(--info); }
 
-    /* 路徑文字小標籤 (直行通道 / 需補漆) */
     .road-badge {
       position: absolute; transform: translate(-50%, -50%);
       background: var(--card-bg); backdrop-filter: blur(8px);
-      border: 1px solid var(--card-border); border-radius: 999px;
-      padding: 3px 10px; font-size: 11px; font-family: var(--font-mono); font-weight: 700;
-      box-shadow: var(--shadow); white-space: nowrap;
+      border: 1.5px solid var(--card-border); border-radius: 999px;
+      padding: 3px 10px; font-size: 10px; font-family: var(--font-mono); font-weight: 800;
+      box-shadow: var(--card-glow); white-space: nowrap; z-index: 6;
     }
-    .road-badge.ok { color: var(--ok); border-color: rgba(16,185,129,0.35); }
-    .road-badge.warn { color: var(--warn); border-color: rgba(245,158,11,0.35); }
+    .road-badge.ok { color: var(--ok); border-color: rgba(16, 185, 129, 0.5); }
+    .road-badge.warn { color: var(--warn); border-color: rgba(245, 158, 11, 0.5); }
 
-    /* 頂部懸浮導覽列 */
-    .hud-top {
-      position: absolute; top: 16px; left: 20px; right: 20px; z-index: 10;
-      display: flex; justify-content: space-between; align-items: center; gap: 16px;
-      pointer-events: none; flex-wrap: wrap;
-    }
-    .brand-bar {
-      pointer-events: auto;
-      display: flex; align-items: center; gap: 14px;
-      background: var(--card-bg); backdrop-filter: blur(12px);
-      border: 1px solid var(--card-border); border-radius: 14px;
-      padding: 10px 18px; box-shadow: var(--shadow);
-    }
-    .brand-cube {
-      width: 34px; height: 34px; border-radius: 9px;
-      background: linear-gradient(135deg, #2563eb, #1d4ed8);
-      color: #fff; display: flex; align-items: center; justify-content: center;
-      font-weight: 800; font-size: 18px; box-shadow: 0 4px 10px rgba(37,99,235,0.35);
-    }
-    .brand-title { font-weight: 800; font-size: 16px; letter-spacing: -0.01em; }
-    .brand-sub { font-size: 11px; color: var(--fg-mute); }
-    .back-2d {
-      font-size: 11px; font-weight: 700; color: var(--info); text-decoration: none; white-space: nowrap;
-      background: var(--info-bg); border: 1px solid rgba(37,99,235,0.25); border-radius: 999px; padding: 4px 10px;
-      transition: transform 0.15s;
-    }
-    .back-2d:hover { transform: translateX(2px); }
-
-    .status-bar {
-      pointer-events: auto;
-      display: flex; align-items: center; gap: 10px;
-      background: var(--card-bg); backdrop-filter: blur(12px);
-      border: 1px solid var(--card-border); border-radius: 14px;
-      padding: 8px 14px; box-shadow: var(--shadow); font-size: 12px;
-    }
-    .live-pill {
-      display: flex; align-items: center; gap: 6px;
-      background: var(--ok-bg); color: var(--ok);
-      padding: 4px 10px; border-radius: 999px; font-weight: 700; font-size: 11px;
-    }
-    .pulse { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); animation: pulse 1.8s infinite; }
-    @keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(16,185,129,0.5); } 50% { box-shadow: 0 0 0 6px transparent; } }
-    .clock-time { font-family: var(--font-mono); font-weight: 700; font-size: 14px; }
-
-    /* ★ 左側垂直 KPI 懸浮卡片列 (移至畫面左側，不擋中間 3D 標籤) ★ */
+    /* 左側垂直 KPI 懸浮卡片列 */
     .hud-kpis {
-      position: absolute; top: 84px; left: 20px; z-index: 10;
-      display: flex; flex-direction: column; gap: 10px;
-      width: 225px; pointer-events: none;
+      position: absolute; top: 76px; left: 16px; z-index: 15;
+      display: flex; flex-direction: column; gap: 9px;
+      width: 220px; pointer-events: none;
     }
     .kpi-card {
       pointer-events: auto;
-      background: var(--card-bg); backdrop-filter: blur(12px);
-      border: 1px solid var(--card-border); border-radius: 14px;
-      padding: 10px 14px; width: 100%; box-shadow: var(--shadow);
-      display: flex; align-items: center; gap: 12px;
+      background: var(--card-bg); backdrop-filter: blur(14px);
+      border: 1px solid var(--card-border); border-radius: 13px;
+      padding: 10px 13px; width: 100%; box-shadow: var(--card-glow);
+      display: flex; align-items: center; gap: 11px;
+      position: relative; overflow: hidden;
     }
-    .kpi-icon {
-      width: 36px; height: 36px; border-radius: 10px;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 17px; flex-shrink: 0;
+    .kpi-card::before {
+      content: ''; position: absolute; left: 0; top: 15%; bottom: 15%; width: 3.5px;
+      border-radius: 0 4px 4px 0; background: var(--info-bright);
     }
+    .kpi-card.ok-accent::before { background: var(--ok-bright); }
+    .kpi-card.warn-accent::before { background: var(--warn-bright); }
+    .kpi-card.purple-accent::before { background: var(--purple); }
+    .kpi-icon { width: 35px; height: 35px; border-radius: 9px; display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; }
     .kpi-val-wrap { display: flex; flex-direction: column; min-width: 0; }
-    .kpi-lbl { font-size: 11px; color: var(--fg-mute); font-weight: 600; }
-    .kpi-val { font-size: 21px; font-weight: 800; font-family: var(--font-mono); line-height: 1.15; }
-    .kpi-delta { font-size: 10px; color: var(--fg-mute); font-family: var(--font-mono); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .kpi-lbl { font-size: 11px; color: var(--fg-mute); font-weight: 700; }
+    .kpi-val { font-size: 20px; font-weight: 800; font-family: var(--font-mono); line-height: 1.15; }
+    .kpi-delta { font-size: 10px; color: var(--fg-mute); font-family: var(--font-mono); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-    /* 右側：视角控制按鈕 + 詳細資訊抽屜 */
+    /* 右側視角控制與面板 */
     .cam-controls {
-      position: absolute; top: 84px; right: 345px; z-index: 10;
+      position: absolute; top: 76px; right: 340px; z-index: 15;
       display: flex; flex-direction: column; gap: 6px;
     }
     .cam-btn {
-      width: 36px; height: 36px; border-radius: 10px;
-      background: var(--card-bg); backdrop-filter: blur(10px);
-      border: 1px solid var(--card-border); box-shadow: var(--shadow);
-      color: var(--fg); font-size: 15px; font-weight: 700; cursor: pointer;
+      width: 34px; height: 34px; border-radius: 9px;
+      background: var(--card-bg); backdrop-filter: blur(12px);
+      border: 1px solid var(--card-border); box-shadow: var(--card-glow);
+      color: var(--fg); font-size: 13px; font-weight: 800; cursor: pointer;
       display: flex; align-items: center; justify-content: center;
-      transition: background 0.15s, transform 0.15s;
     }
-    .cam-btn:hover { transform: scale(1.06); color: var(--info); }
+    .cam-btn:hover { color: var(--info); border-color: var(--info-bright); }
 
     .hud-inspector {
-      position: absolute; top: 84px; right: 20px; width: 315px;
-      max-height: calc(100vh - 210px); z-index: 10;
-      background: var(--card-bg); backdrop-filter: blur(14px);
-      border: 1px solid var(--card-border); border-radius: 16px;
-      box-shadow: var(--shadow); display: flex; flex-direction: column; overflow: hidden;
+      position: absolute; top: 76px; right: 16px; width: 312px;
+      max-height: calc(100vh - 200px); z-index: 15;
+      background: var(--card-bg); backdrop-filter: blur(16px);
+      border: 1px solid var(--card-border); border-radius: 15px;
+      box-shadow: var(--card-glow); display: flex; flex-direction: column; overflow: hidden;
     }
     .insp-header {
-      padding: 14px 16px; border-bottom: 1px solid rgba(148,163,184,0.2);
+      padding: 12px 15px; border-bottom: 1px solid rgba(14, 165, 233, 0.16);
       display: flex; justify-content: space-between; align-items: center;
+      background: rgba(14, 165, 233, 0.05);
     }
-    .insp-title { font-size: 14px; font-weight: 800; }
-    .insp-sub { font-size: 11px; color: var(--fg-mute); font-family: var(--font-mono); margin-top: 2px; }
-    .insp-body { padding: 14px 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
+    .insp-title { font-size: 13px; font-weight: 800; }
+    .insp-sub { font-size: 10px; color: var(--info); font-family: var(--font-mono); margin-top: 2px; font-weight: 600; }
+    .insp-body { padding: 12px 15px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
 
     .detail-section h4 {
-      margin: 0 0 8px; font-size: 11px; letter-spacing: 0.06em;
-      color: var(--fg-mute); text-transform: uppercase; font-weight: 700;
+      margin: 0 0 6px; font-size: 11px; letter-spacing: 0.06em;
+      color: var(--fg-mute); text-transform: uppercase; font-weight: 800;
     }
     .worker-list { display: flex; flex-direction: column; gap: 5px; }
     .worker-row {
       display: flex; justify-content: space-between; align-items: center;
-      padding: 6px 10px; background: rgba(148,163,184,0.08);
-      border-radius: 8px; font-size: 12px;
+      padding: 6px 9px; background: rgba(14, 165, 233, 0.05);
+      border: 1px solid rgba(14, 165, 233, 0.14); border-radius: 8px; font-size: 11px;
     }
     .worker-row .id { font-family: var(--font-mono); font-weight: 700; }
-    .worker-row .name { color: var(--fg-mute); font-size: 11px; margin-left: 6px; }
-    .worker-row .count { font-family: var(--font-mono); font-weight: 700; color: var(--info); }
-    /* 工號後的姓名（員工表對照）：工號仍為視覺主角；本頁預設淺色主題 */
-    .worker-name { font-size: 0.75em; color: #64748B; margin-left: 4px; font-weight: normal; font-family: var(--font-ui); }
-    [data-theme="dark"] .worker-name { color: #94A3B8; }
+    .worker-row .name { color: var(--fg-mute); font-size: 10px; margin-left: 5px; font-family: var(--font-mono); }
+    .worker-row .count { font-family: var(--font-mono); font-weight: 800; color: var(--info); }
+    .worker-name { font-size: 0.8em; color: var(--fg-mute); margin-left: 3px; }
+
+    .status-badge { font-size: 10px; font-family: var(--font-mono); font-weight: 700; padding: 2px 6px; border-radius: 5px; }
+    .status-badge.ok { background: var(--ok-bg); color: var(--ok); }
+    .status-badge.warn { background: var(--warn-bg); color: var(--warn); }
 
     .breakdown { display: flex; flex-direction: column; gap: 6px; }
-    .br-row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
-    .br-row .lbl { min-width: 56px; color: var(--fg-mute); font-family: var(--font-mono); font-size: 11px; }
-    .br-row .bar { flex: 1; height: 7px; background: rgba(148,163,184,0.16); border-radius: 4px; overflow: hidden; position: relative; }
-    .br-row .bar .fill { position: absolute; inset: 0 auto 0 0; background: var(--ok); border-radius: 4px; }
-    .br-row .bar .fill.warn { background: var(--warn); }
-    .br-row .val { font-family: var(--font-mono); font-weight: 700; min-width: 36px; text-align: right; font-size: 11px; }
+    .br-row { display: flex; align-items: center; gap: 8px; font-size: 11px; }
+    .br-row .lbl { min-width: 60px; color: var(--fg-mute); font-family: var(--font-mono); font-weight: 600; }
+    .br-row .bar { flex: 1; height: 7px; background: rgba(148,163,184,0.2); border-radius: 4px; overflow: hidden; position: relative; }
+    .br-row .bar .fill { position: absolute; inset: 0 auto 0 0; background: linear-gradient(90deg, #059669, #10b981); border-radius: 4px; }
+    .br-row .bar .fill.warn { background: linear-gradient(90deg, #d97706, #f59e0b); }
+    .br-row .val { font-family: var(--font-mono); font-weight: 800; min-width: 34px; text-align: right; }
+    .br-row .lbl.wide { min-width: 104px; }
+    .expand-btn {
+      margin-top: 7px; background: rgba(14, 165, 233, 0.06); border: 1px solid rgba(14, 165, 233, 0.25);
+      color: var(--info); border-radius: 7px; padding: 4px 10px; font-size: 11px; font-weight: 700;
+      cursor: pointer; font-family: var(--font-ui);
+    }
+    .expand-btn:hover { background: var(--info-bg); border-color: var(--info-bright); }
+    .net-note { font-size: 11px; color: var(--fg-mute); line-height: 1.5; padding-top: 8px; border-top: 1px solid rgba(14, 165, 233, 0.16); }
 
     /* 底部懸浮面板 */
     .hud-bottom {
-      position: absolute; bottom: 16px; left: 20px; right: 20px; z-index: 10;
-      display: grid; grid-template-columns: 1.4fr 1fr; gap: 14px; pointer-events: none;
+      position: absolute; bottom: 14px; left: 16px; right: 16px; z-index: 15;
+      display: grid; grid-template-columns: 1.35fr 1fr; gap: 12px; pointer-events: none;
     }
     .bottom-card {
       pointer-events: auto;
-      background: var(--card-bg); backdrop-filter: blur(12px);
-      border: 1px solid var(--card-border); border-radius: 16px;
-      padding: 12px 18px; box-shadow: var(--shadow);
+      background: var(--card-bg); backdrop-filter: blur(14px);
+      border: 1px solid var(--card-border); border-radius: 15px;
+      padding: 10px 16px; box-shadow: var(--card-glow);
       display: flex; flex-direction: column; justify-content: space-between;
     }
-    .btm-header { display: flex; justify-content: space-between; align-items: center; font-size: 12px; font-weight: 700; margin-bottom: 6px; }
-    .btm-meta { font-size: 11px; color: var(--fg-mute); font-family: var(--font-mono); font-weight: 500; }
+    .btm-header { display: flex; justify-content: space-between; align-items: center; font-size: 12px; font-weight: 800; margin-bottom: 5px; }
+    .btm-meta { font-size: 11px; color: var(--info); font-family: var(--font-mono); font-weight: 700; }
 
-    .cta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; height: 100%; align-items: center; }
+    .cta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-items: center; }
     .nav-btn {
-      display: flex; align-items: center; gap: 10px;
-      background: rgba(148,163,184,0.09); border: 1px solid rgba(148,163,184,0.22);
-      border-radius: 12px; padding: 10px 12px; text-decoration: none; color: var(--fg);
-      transition: all 0.2s;
+      display: flex; align-items: center; gap: 8px;
+      background: rgba(14, 165, 233, 0.06); border: 1px solid rgba(14, 165, 233, 0.22);
+      border-radius: 10px; padding: 8px 12px; text-decoration: none; color: var(--fg);
     }
-    .nav-btn:hover { transform: translateY(-2px); background: rgba(37,99,235,0.08); border-color: var(--info); }
+    .nav-btn:hover { background: var(--info-bg); border-color: var(--info-bright); }
     .nav-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-    .nav-title { font-weight: 700; font-size: 13px; }
-    .nav-sub { font-size: 10px; color: var(--fg-mute); font-family: var(--font-mono); margin-top: 2px; }
+    .nav-title { font-weight: 800; font-size: 12px; }
+    .nav-sub { font-size: 10px; color: var(--fg-mute); font-family: var(--font-mono); }
 
-    .err-banner {
-      position: absolute; top: 72px; left: 50%; transform: translateX(-50%); z-index: 30;
-      display: none; background: #fee2e2; border: 1px solid #ef4444; color: #b91c1c;
-      padding: 6px 16px; border-radius: 999px; font-size: 12px; font-weight: 700; box-shadow: var(--shadow);
-    }
-
-    @media (max-width: 900px) {
-      .hud-kpis { flex-direction: row; width: auto; max-width: 100%; }
-      .kpi-card { width: auto; min-width: 150px; }
+    @media (max-width: 1100px) {
       .hud-inspector { display: none; }
-      .cam-controls { right: 20px; }
+      .cam-controls { right: 16px; }
       .hud-bottom { grid-template-columns: 1fr; }
     }
   </style>
@@ -257,64 +323,73 @@
 
   <div id="canvas-container"></div>
   <div id="labels-container">
-    <!-- 路徑動態數據膠囊 -->
     <div class="road-badge warn" id="badge-repaint">需補漆 —</div>
     <div class="road-badge ok" id="badge-fpy">直行通道 —</div>
   </div>
 
-  <div class="err-banner" id="err-banner">⚠️ 資料讀取失敗，請確認網路或系統設定</div>
-
-  <!-- 頂部導覽列 -->
+  <!-- 頂部單行導覽列 -->
   <div class="hud-top">
     <div class="brand-bar">
       <div class="brand-cube">裕</div>
       <div>
-        <div class="brand-title">PaintTrack 3D · 補漆房數位孿生看板</div>
-        <div class="brand-sub" id="data-src">裕器工業 · 塗裝部門 · Google Sheet 連線中…</div>
+        <div class="brand-title">
+          全廠 3D 數位孿生戰情室
+          <span class="tech-tag" id="engine-tag">INTEGRATED v3.2</span>
+        </div>
+        <div class="brand-sub" id="data-src">全廠 28 區宏觀 × A/B/C 棟微觀工站 · 連線中…</div>
       </div>
-      <a class="back-2d" href="factory-flow.html">🔙 2D 流程看板 →</a>
+      <a class="back-2d" href="factory-flow.html">🔙 2D 看板 →</a>
+    </div>
+
+    <div class="view-bar">
+      <button class="nav-pill active" id="btn-view-all">🌐 全廠鳥瞰 (28區)</button>
+      <button class="nav-pill focus-abc" id="btn-view-abc">🎯 聚焦 ABC 核心棟</button>
+      <button class="nav-pill" id="btn-view-a"><span class="dot" style="background:#2563eb;"></span>A棟 · 射出/發泡</button>
+      <button class="nav-pill" id="btn-view-b"><span class="dot" style="background:#10b981;"></span>B棟 · 整修/補漆/終檢</button>
+      <button class="nav-pill" id="btn-view-c"><span class="dot" style="background:#f59e0b;"></span>C棟 · 塗裝/下線/點檢</button>
+      <button class="nav-pill" id="btn-view-west"><span class="dot" style="background:#64748b;"></span>西側動力/環保</button>
     </div>
 
     <div class="status-bar">
       <div class="live-pill"><span class="pulse"></span>LIVE</div>
-      <span class="clock-time" id="clock">--:--:--</span>
-      <button class="cam-btn" id="btn-layout" title="切換橫向/縱向視角" style="width:auto; height:28px; padding:0 10px; font-size:11px;">🔃 切換橫/縱向</button>
-      <button class="cam-btn" id="theme-toggle" title="切換日/夜模式" style="width:auto; height:28px; padding:0 10px; font-size:11px;">🌓 主題</button>
+      <span class="clock-time" id="clock">00:00:00</span>
+      <button class="cam-btn" id="btn-toggle-ctx" title="顯示/隱藏周邊建築名稱" style="width:auto; height:26px; padding:0 8px; font-size:11px;">🏷️ 標籤</button>
+      <button class="cam-btn" id="theme-toggle" title="切換淺色/深色主題" style="width:auto; height:26px; padding:0 8px; font-size:11px;">🌓</button>
     </div>
   </div>
 
   <!-- 左側垂直 KPI 卡片欄 -->
   <div class="hud-kpis">
-    <div class="kpi-card">
+    <div class="kpi-card ok-accent">
       <div class="kpi-icon" style="background:var(--ok-bg); color:var(--ok);">📦</div>
       <div class="kpi-val-wrap">
-        <span class="kpi-lbl">今日通過終檢</span>
-        <span class="kpi-val" id="kpi-pass">—</span>
+        <span class="kpi-lbl">B棟 · 今日通過終檢</span>
+        <span class="kpi-val" id="kpi-pass" style="color:var(--ok);">—</span>
         <span class="kpi-delta" id="kpi-pass-delta">終檢階段 今日筆數</span>
       </div>
     </div>
     <div class="kpi-card">
       <div class="kpi-icon" style="background:var(--info-bg); color:var(--info);">⚡</div>
       <div class="kpi-val-wrap">
-        <span class="kpi-lbl">直行率 FPY</span>
-        <span class="kpi-val" id="kpi-fpy">—</span>
+        <span class="kpi-lbl">B棟 · 直行率 FPY</span>
+        <span class="kpi-val" id="kpi-fpy" style="color:var(--info);">—</span>
         <span class="kpi-delta" id="kpi-fpy-delta">(終檢 − 補漆) ÷ 終檢</span>
       </div>
     </div>
-    <div class="kpi-card">
+    <div class="kpi-card warn-accent">
       <div class="kpi-icon" style="background:var(--warn-bg); color:var(--warn);">🎨</div>
       <div class="kpi-val-wrap">
-        <span class="kpi-lbl">需補漆比例</span>
-        <span class="kpi-val" id="kpi-repaint">—</span>
+        <span class="kpi-lbl">B棟 · 需補漆比例</span>
+        <span class="kpi-val" id="kpi-repaint" style="color:var(--warn);">—</span>
         <span class="kpi-delta" id="kpi-repaint-delta">補漆 ÷ 終檢</span>
       </div>
     </div>
-    <div class="kpi-card">
-      <div class="kpi-icon" style="background:rgba(124,58,237,0.12); color:var(--purple);">👷</div>
+    <div class="kpi-card purple-accent">
+      <div class="kpi-icon" style="background:rgba(124,58,237,0.12); color:var(--purple);">🏭</div>
       <div class="kpi-val-wrap">
-        <span class="kpi-lbl">現場在場人力</span>
-        <span class="kpi-val" id="kpi-workers">—</span>
-        <span class="kpi-delta" id="kpi-workers-delta">今日有實績工號</span>
+        <span class="kpi-lbl">全廠納管區域 & 人力</span>
+        <span class="kpi-val" id="kpi-workers">28 區</span>
+        <span class="kpi-delta" id="kpi-workers-delta">B棟今日實績 — 人</span>
       </div>
     </div>
   </div>
@@ -323,57 +398,57 @@
   <div class="cam-controls">
     <button class="cam-btn" id="btn-zoom-in" title="拉近鏡頭">＋</button>
     <button class="cam-btn" id="btn-zoom-out" title="拉遠鏡頭">－</button>
-    <button class="cam-btn" id="btn-reset-cam" title="重置等距視角">⟲</button>
+    <button class="cam-btn" id="btn-reset-cam" title="重置全廠鳥瞰">⟲</button>
   </div>
 
   <!-- 右側細節檢查面板 -->
   <div class="hud-inspector">
     <div class="insp-header">
       <div>
-        <div class="insp-title" id="detail-name">整體概覽 · Overview</div>
-        <div class="insp-sub" id="detail-meta">點擊 3D 工站檢視明細</div>
+        <div class="insp-title" id="detail-name">全廠區域總覽 · Plant Map</div>
+        <div class="insp-sub" id="detail-meta">點擊「🎯 聚焦 ABC 核心棟」或任一工站</div>
       </div>
-      <button class="cam-btn" id="btn-overview" style="width:auto; height:26px; padding:0 8px; font-size:11px;">總覽</button>
+      <button class="cam-btn" id="btn-overview" style="width:auto; height:24px; padding:0 8px; font-size:11px;">回全廠</button>
     </div>
     <div class="insp-body" id="detail-content">
       <div style="font-size:12px; color:var(--fg-mute);">正在讀取 Google Sheet 即時資料…</div>
     </div>
   </div>
 
-  <!-- 底部懸浮艙：趨勢圖 + 現場碼表快速入口 -->
+  <!-- 底部懸浮艙 -->
   <div class="hud-bottom">
     <div class="bottom-card">
       <div class="btm-header">
-        <span>📈 近 2 小時產線流動趨勢（每 10 分鐘實績筆數）</span>
+        <span>📈 B棟塗裝整修線 · 近 2 小時產線流動趨勢（每 10 分鐘實績筆數）</span>
         <span class="btm-meta" id="flow-summary">直行 — ｜ 需補漆 —</span>
       </div>
-      <svg viewBox="0 0 600 42" style="width:100%; height:42px; overflow:visible;">
+      <svg viewBox="0 0 600 40" style="width:100%; height:40px; overflow:visible;">
         <defs>
           <linearGradient id="trendGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="#10b981" stop-opacity="0.35"/>
+            <stop offset="0%" stop-color="#10b981" stop-opacity="0.38"/>
             <stop offset="100%" stop-color="#10b981" stop-opacity="0.0"/>
           </linearGradient>
         </defs>
-        <polygon id="floor-trend-area" points="0,42 600,42" fill="url(#trendGrad)"/>
-        <polyline id="floor-trend" points="" fill="none" stroke="var(--ok)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <polygon id="floor-trend-area" points="0,40 600,40" fill="url(#trendGrad)"/>
+        <polyline id="floor-trend" points="0,35 600,35" fill="none" stroke="var(--ok-bright)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     </div>
 
     <div class="bottom-card">
       <div class="btm-header">
-        <span>🚀 現場工站碼表監控入口</span>
-        <span class="btm-meta">一鍵切換子看板</span>
+        <span>🧭 快速導覽 & 現場工站碼表入口</span>
+        <span class="btm-meta" id="mode-indicator">目前模式：全廠宏觀鳥瞰</span>
       </div>
       <div class="cta-grid">
         <a class="nav-btn" href="paint-stations.html#rework">
-          <span class="nav-dot" style="background:var(--warn);"></span>
+          <span class="nav-dot" style="background:var(--warn-bright);"></span>
           <div>
             <div class="nav-title">進入整修區動態 →</div>
             <div class="nav-sub" id="nav-sub-rework">— 位作業員 · — PCS</div>
           </div>
         </a>
         <a class="nav-btn" href="paint-stations.html#paint">
-          <span class="nav-dot" style="background:var(--info);"></span>
+          <span class="nav-dot" style="background:var(--info-bright);"></span>
           <div>
             <div class="nav-title">進入補漆區動態 →</div>
             <div class="nav-sub" id="nav-sub-paint">— 位作業員 · — PCS</div>
@@ -386,378 +461,554 @@
 <script>
 (function(){
   // ============================================================================
-  // PART 1: SimCity 3D 場景 — 一字型主幹道 + 匚字型直角繞道
+  // 1. 優先啟動時鐘與全廠資料定義
   // ============================================================================
-  const container = document.getElementById('canvas-container');
-  const labelsContainer = document.getElementById('labels-container');
-
-  const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 0.1, 1000);
-  // 稍微拉遠高度與距離，讓左右側邊欄與中央 3D 廠房保持舒適間距
-  camera.position.set(0, 36, 48);
-
-  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  container.appendChild(renderer.domElement);
-
-  const controls = new THREE.OrbitControls(camera, renderer.domElement);
-  controls.enableDamping = true;
-  controls.dampingFactor = 0.06;
-  controls.maxPolarAngle = Math.PI / 2.15;
-  controls.minDistance = 18;
-  controls.maxDistance = 85;
-  controls.target.set(0, 0, 1.0);
-
-  const ambientLight = new THREE.AmbientLight(0xffffff, 0.78);
-  scene.add(ambientLight);
-
-  const dirLight = new THREE.DirectionalLight(0xfffbeb, 0.85);
-  dirLight.position.set(22, 40, 28);
-  dirLight.castShadow = true;
-  dirLight.shadow.mapSize.width = 2048;
-  dirLight.shadow.mapSize.height = 2048;
-  const d = 30;
-  dirLight.shadow.camera.left = -d; dirLight.shadow.camera.right = d;
-  dirLight.shadow.camera.top = d;  dirLight.shadow.camera.bottom = -d;
-  dirLight.shadow.bias = -0.0005;
-  scene.add(dirLight);
-
-  // 廠區地板底座
-  const floorGroup = new THREE.Group();
-  scene.add(floorGroup);
-
-  const baseGeo = new THREE.BoxGeometry(48, 1.2, 24);
-  const baseMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.85 });
-  const baseMesh = new THREE.Mesh(baseGeo, baseMat);
-  baseMesh.position.y = -0.6;
-  baseMesh.receiveShadow = true;
-  floorGroup.add(baseMesh);
-
-  const gridHelper = new THREE.GridHelper(46, 46, 0xcbd5e1, 0xe2e8f0);
-  gridHelper.position.y = 0.01;
-  floorGroup.add(gridHelper);
-
-  function createTree(x, z) {
-    const g = new THREE.Group();
-    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.22, 0.8, 8), new THREE.MeshStandardMaterial({color: 0x92400e}));
-    trunk.position.y = 0.4;
-    const leaves = new THREE.Mesh(new THREE.SphereGeometry(0.75, 12, 12), new THREE.MeshStandardMaterial({color: 0x4ade80, roughness: 0.7}));
-    leaves.position.y = 1.2;
-    leaves.castShadow = true;
-    g.add(trunk, leaves);
-    g.position.set(x, 0, z);
-    floorGroup.add(g);
+  function updateClock() {
+    const d = new Date();
+    const el = document.getElementById('clock');
+    if (el) {
+      el.textContent =
+        String(d.getHours()).padStart(2,'0') + ':' +
+        String(d.getMinutes()).padStart(2,'0') + ':' +
+        String(d.getSeconds()).padStart(2,'0');
+    }
   }
-  createTree(-21, -9.5); createTree(-21, 9.5); createTree(21, -9.5); createTree(21, 9.5);
+  updateClock();
+  setInterval(updateClock, 1000);
 
-  const MAIN_Z = -1.5;
-  const BYPASS_Z = 6.2;
+  const B_MAIN_Z = 0.2;
+  const B_BYPASS_Z = 4.7;
+  const labelsContainer = document.getElementById('labels-container');
+  let showContextLabels = true; // 預設開啟周邊建築高對比標籤，讓全廠鳥瞰一目了然
 
+  // 周邊建築清單 (對齊 平面圖1020_2.xlsx，依功能賦予高對比屋頂色與邊框色)
+  const CONTEXT_BUILDINGS = [
+    { id: 'back_gate', name: '後門',         x: -25.0, z: -21.5, w: 3.0, d: 1.4, h: 2.0, roof: 0x475569, wall: 0xcbd5e1, hex: '#64748b' },
+    { id: 'waste1',    name: '廢棄物存放區', x: -31.0, z: -18.6, w: 6.5, d: 4.2, h: 2.4, roof: 0x64748b, wall: 0xcbd5e1, hex: '#64748b' },
+    { id: 'waste2',    name: '廢棄物暫存區', x: -31.0, z: -14.5, w: 6.6, d: 3.5, h: 2.4, roof: 0x64748b, wall: 0xcbd5e1, hex: '#64748b' },
+    { id: 'paint_wh',  name: '塗料庫',       x: -30.4, z: -10.8, w: 3.8, d: 3.2, h: 2.8, roof: 0x8b5cf6, wall: 0xddd6fe, hex: '#8b5cf6' },
+    { id: 'fire_pump', name: '消防幫浦',     x: -33.5, z: -7.2,  w: 1.9, d: 5.5, h: 2.5, roof: 0xef4444, wall: 0xfecaca, hex: '#ef4444' },
+    { id: 'power_rm',  name: '動力房',       x: -30.4, z: -6.5,  w: 3.8, d: 4.0, h: 3.0, roof: 0x475569, wall: 0xcbd5e1, hex: '#475569' },
+    { id: 'crusher',   name: '粉碎房',       x: -31.5, z: 0.8,   w: 3.7, d: 5.0, h: 3.0, roof: 0x475569, wall: 0xcbd5e1, hex: '#475569' },
+    { id: 'recycle',   name: '回收料區',     x: -31.5, z: 7.2,   w: 3.7, d: 5.2, h: 2.6, roof: 0x8b5cf6, wall: 0xddd6fe, hex: '#8b5cf6' },
+    { id: 'zone_g',    name: 'G區',          x: -34.0, z: 11.7,  w: 1.4, d: 2.3, h: 2.2, roof: 0x64748b, wall: 0xcbd5e1, hex: '#64748b' },
+    { id: 'raw_wh',    name: '原料倉庫',     x: -30.8, z: 17.2,  w: 4.4, d: 5.4, h: 3.4, roof: 0x7c3aed, wall: 0xddd6fe, hex: '#7c3aed' },
+    { id: 'eng_work',  name: '工務課作業區', x: -25.5, z: 20.8,  w: 6.1, d: 3.1, h: 2.8, roof: 0x475569, wall: 0xcbd5e1, hex: '#475569' },
+    { id: 'boiler',    name: '鍋爐間',       x: -18.9, z: 21.8,  w: 4.7, d: 1.6, h: 2.8, roof: 0xd97706, wall: 0xfde68a, hex: '#d97706' },
+    { id: 'dorm',      name: '宿舍',         x: 21.5,  z: -16.8, w: 7.5, d: 3.6, h: 3.8, roof: 0x0284c7, wall: 0xbae6fd, hex: '#0284c7' },
+    { id: 'prod_off',  name: '生管辦公室',   x: 6.2,   z: 16.5,  w: 9.8, d: 10.5, h: 4.0, roof: 0x0284c7, wall: 0xe0f2fe, hex: '#0284c7' },
+    { id: 'fin_wh',    name: '成品庫',       x: 16.2,  z: 16.5,  w: 8.6, d: 10.5, h: 4.2, roof: 0x7c3aed, wall: 0xede9fe, hex: '#7c3aed' },
+    { id: 'lab_bldg',  name: '實驗大樓',     x: 24.1,  z: -4.0,  w: 8.4, d: 3.8, h: 4.4, roof: 0x0284c7, wall: 0xe0f2fe, hex: '#0284c7' },
+    { id: 'parking',   name: '停車場',       x: 27.2,  z: 3.4,   w: 6.2, d: 5.0, h: 0.3, roof: 0x64748b, wall: 0x94a3b8, hex: '#64748b' },
+    { id: 'main_gate', name: '大門',         x: 34.2,  z: 8.6,   w: 1.4, d: 3.6, h: 2.8, roof: 0x059669, wall: 0xa7f3d0, hex: '#059669' },
+    { id: 'office',    name: '辦公大樓',     x: 26.5,  z: 17.5,  w: 7.5, d: 8.8, h: 5.5, roof: 0x0369a1, wall: 0xbae6fd, hex: '#0369a1' }
+  ];
+
+  // A / B / C 三大核心監控棟
+  const CORE_BLDGS = [
+    { key: 'A', cls: 'a-bldg', code: 'A 棟', name: '射出工廠 (射出成型・發泡成型)', x: -3.5, z: -13.6, w: 37.5, d: 10.4, h: 4.2, color: 0x2563eb, hex: '#2563eb', bannerZ: -18.8 },
+    { key: 'B', cls: 'b-bldg', code: 'B 棟', name: '塗裝後段 (整修・補漆・終檢)',   x: -3.5, z: 1.2,   w: 35.0, d: 10.6, h: 4.0, color: 0x10b981, hex: '#10b981', bannerZ: -4.1 },
+    { key: 'C', cls: 'c-bldg', code: 'C 棟', name: '塗裝工廠 (大塗線・下線區・點檢)', x: -10.5, z: 16.5, w: 22.5, d: 10.6, h: 4.2, color: 0xf59e0b, hex: '#f59e0b', bannerZ: 21.8 }
+  ];
+
+  // 6 大核心工站
   const STATIONS_CFG = {
-    unload: { id: 'unload', zone: 'ZONE A', title: '下線區', pos: new THREE.Vector3(-15, 0, MAIN_Z), color: 0x10b981 },
-    rework: { id: 'rework', zone: 'ZONE B', title: '整修區', pos: new THREE.Vector3(-5,  0, MAIN_Z), color: 0x3b82f6 },
-    paint:  { id: 'paint',  zone: 'ZONE C', title: '補漆區', pos: new THREE.Vector3(5,   0, MAIN_Z), color: 0xf59e0b },
-    final:  { id: 'final',  zone: 'ZONE D', title: '終檢區', pos: new THREE.Vector3(15,  0, MAIN_Z), color: 0x10b981 },
+    a_foam: { id: 'a_foam', bldg: 'A', zone: 'ZONE A1 · 發泡', title: '發泡成型區', pos: { x: -17.2, y: 0.22, z: -13.6 }, w: 7.6,  d: 6.2, color: 0x0ea5e9, hex: '#0ea5e9' },
+    a_mold: { id: 'a_mold', bldg: 'A', zone: 'ZONE A2 · 射出', title: '射出成型區', pos: { x: 1.5,   y: 0.22, z: -13.6 }, w: 21.5, d: 6.6, color: 0x2563eb, hex: '#2563eb' },
+    unload: { id: 'unload', bldg: 'C', zone: 'ZONE C · 下線',  title: '塗裝下線區', pos: { x: -3.0,  y: 0.22, z: 13.8 },  w: 6.0,  d: 5.8, color: 0xf59e0b, hex: '#f59e0b' },
+    rework: { id: 'rework', bldg: 'B', zone: 'ZONE B1 · 整修', title: '整修區',     pos: { x: -13.5, y: 0.22, z: B_MAIN_Z }, w: 6.4, d: 6.0, color: 0x0ea5e9, hex: '#0ea5e9' },
+    paint:  { id: 'paint',  bldg: 'B', zone: 'ZONE B2 · 補漆', title: '補漆區',     pos: { x: -2.5,  y: 0.22, z: B_MAIN_Z }, w: 6.4, d: 6.0, color: 0xf59e0b, hex: '#f59e0b' },
+    final:  { id: 'final',  bldg: 'B', zone: 'ZONE B3 · 終檢', title: '終檢區',     pos: { x: 8.5,   y: 0.22, z: B_MAIN_Z }, w: 6.4, d: 6.0, color: 0x10b981, hex: '#10b981' },
   };
 
-  const stationMeshes = {};
-  const workerGroups = { rework: new THREE.Group(), paint: new THREE.Group(), final: new THREE.Group() };
+  // 建立 DOM 標籤
+  const bannerEls = [];
+  CORE_BLDGS.forEach(b => {
+    const el = document.createElement('div');
+    el.className = `bldg-banner ${b.cls}`;
+    el.innerHTML = `<span class="tag">${b.code}</span><span>${b.name}</span>`;
+    el.onclick = () => { flyToPreset(b.key.toLowerCase()); renderBuildingDetail(b.key); };
+    labelsContainer.appendChild(el);
+    bannerEls.push({ el, pos: { x: b.x, y: 5.0, z: b.bannerZ } });
+  });
 
-  function createPlatform(w, d, borderHex) {
-    const group = new THREE.Group();
-    const pad = new THREE.Mesh(
-      new THREE.BoxGeometry(w, 0.25, d),
-      new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6 })
-    );
-    pad.position.y = 0.125;
-    pad.receiveShadow = true; pad.castShadow = true;
-    group.add(pad);
-
-    const border = new THREE.Mesh(
-      new THREE.BoxGeometry(w + 0.25, 0.12, d + 0.25),
-      new THREE.MeshStandardMaterial({ color: borderHex, roughness: 0.4 })
-    );
-    border.position.y = 0.06;
-    group.add(border);
-    return { group, pad, border };
-  }
-
-  // 1. 下線區
-  (function buildUnload(){
-    const { group, border } = createPlatform(6.0, 6.0, 0x10b981);
-    group.position.copy(STATIONS_CFG.unload.pos);
-    for (let i = 0; i < 4; i++) {
-      const px = (i % 2) * 1.9 - 0.95;
-      const pz = Math.floor(i / 2) * 1.9 - 0.95;
-      const pallet = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.18, 1.4), new THREE.MeshStandardMaterial({color: 0xd97706}));
-      pallet.position.set(px, 0.34, pz);
-      const cargoH = 0.9 + (i % 2) * 0.45;
-      const cargo = new THREE.Mesh(new THREE.BoxGeometry(1.25, cargoH, 1.25), new THREE.MeshStandardMaterial({color: 0xcbd5e1, roughness: 0.5}));
-      cargo.position.set(px, 0.43 + cargoH/2, pz);
-      cargo.castShadow = true;
-      group.add(pallet, cargo);
-    }
-    const fl = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.9, 0.8), new THREE.MeshStandardMaterial({color: 0xfacc15}));
-    fl.position.set(-2.0, 0.7, 1.8); fl.castShadow = true;
-    group.add(fl);
-
-    group.userData = { id: 'unload' };
-    scene.add(group);
-    stationMeshes.unload = { group, border };
-  })();
-
-  // 2. 整修區
-  (function buildRework(){
-    const { group, border } = createPlatform(6.4, 6.0, 0x3b82f6);
-    group.position.copy(STATIONS_CFG.rework.pos);
-    for (let i = -1; i <= 1; i += 2) {
-      const table = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.85, 3.4), new THREE.MeshStandardMaterial({color: 0x475569}));
-      table.position.set(i * 1.45, 0.65, 0); table.castShadow = true;
-      const top = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.12, 3.6), new THREE.MeshStandardMaterial({color: 0x38bdf8}));
-      top.position.set(i * 1.45, 1.12, 0);
-      group.add(table, top);
-    }
-    const arch = new THREE.Mesh(new THREE.BoxGeometry(5.2, 0.15, 0.3), new THREE.MeshStandardMaterial({color: 0xe2e8f0, emissive: 0xffffff, emissiveIntensity: 0.3}));
-    arch.position.set(0, 2.7, 0);
-    group.add(arch, workerGroups.rework);
-    group.userData = { id: 'rework' };
-    scene.add(group);
-    stationMeshes.rework = { group, border };
-  })();
-
-  // 3. 補漆區
-  (function buildPaint(){
-    const { group, border } = createPlatform(6.4, 6.0, 0xf59e0b);
-    group.position.copy(STATIONS_CFG.paint.pos);
-
-    const booth = new THREE.Mesh(
-      new THREE.BoxGeometry(5.0, 2.7, 4.0),
-      new THREE.MeshPhysicalMaterial({ color: 0x93c5fd, transparent: true, opacity: 0.38, roughness: 0.1 })
-    );
-    booth.position.set(0, 1.6, 0); booth.castShadow = true;
-
-    const roof = new THREE.Mesh(new THREE.BoxGeometry(5.2, 0.32, 4.2), new THREE.MeshStandardMaterial({color: 0xf59e0b}));
-    roof.position.set(0, 3.1, 0); roof.castShadow = true;
-
-    const duct = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 1.1, 16), new THREE.MeshStandardMaterial({color: 0x94a3b8}));
-    duct.position.set(1.3, 3.7, -0.6);
-
-    group.add(booth, roof, duct, workerGroups.paint);
-    group.userData = { id: 'paint' };
-    scene.add(group);
-    stationMeshes.paint = { group, border };
-  })();
-
-  // 4. 終檢區
-  (function buildFinal(){
-    const { group, border } = createPlatform(6.4, 6.0, 0x10b981);
-    group.position.copy(STATIONS_CFG.final.pos);
-
-    const p1 = new THREE.Mesh(new THREE.BoxGeometry(0.4, 2.8, 4.2), new THREE.MeshStandardMaterial({color: 0x1e293b}));
-    p1.position.set(-1.1, 1.6, 0); p1.castShadow = true;
-    const lightStrip = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.25, 4.3), new THREE.MeshStandardMaterial({color: 0x10b981, emissive: 0x10b981, emissiveIntensity: 0.6}));
-    lightStrip.position.set(-1.1, 3.05, 0);
-
-    const desk = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.85, 3.2), new THREE.MeshStandardMaterial({color: 0x334155}));
-    desk.position.set(1.0, 0.65, 0); desk.castShadow = true;
-
-    group.add(p1, lightStrip, desk, workerGroups.final);
-    group.userData = { id: 'final' };
-    scene.add(group);
-    stationMeshes.final = { group, border };
-  })();
-
-  function update3DWorkers(stationKey, workers) {
-    const g = workerGroups[stationKey];
-    if (!g) return;
-    while (g.children.length > 0) g.remove(g.children[0]);
-
-    workers.slice(0, 10).forEach((w, idx) => {
-      const avatar = new THREE.Group();
-      const bodyColor = w.active ? 0x2563eb : 0x94a3b8;
-      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.26, 0.62, 12), new THREE.MeshStandardMaterial({color: bodyColor}));
-      body.position.y = 0.56;
-      const head = new THREE.Mesh(new THREE.SphereGeometry(0.20, 12, 12), new THREE.MeshStandardMaterial({color: w.active ? 0xfbbf24 : 0xcbd5e1}));
-      head.position.y = 1.04;
-      avatar.add(body, head);
-
-      const row = Math.floor(idx / 5);
-      const col = idx % 5;
-      avatar.position.set(-1.8 + col * 0.9, 0, -2.3 - row * 0.6);
-      g.add(avatar);
-    });
-  }
-
-  // 動線：3 條直線幹道 + 1 條匚字型直角繞道
-  const pathUnloadToRework = new THREE.LineCurve3(
-    new THREE.Vector3(-12.0, 0.12, MAIN_Z),
-    new THREE.Vector3(-8.2,  0.12, MAIN_Z)
-  );
-  const pathReworkToPaint = new THREE.LineCurve3(
-    new THREE.Vector3(-1.8, 0.12, MAIN_Z),
-    new THREE.Vector3(1.8,  0.12, MAIN_Z)
-  );
-  const pathPaintToFinal = new THREE.LineCurve3(
-    new THREE.Vector3(8.2,  0.12, MAIN_Z),
-    new THREE.Vector3(11.8, 0.12, MAIN_Z)
-  );
-  const pathDirectBypass = new THREE.CurvePath();
-  const pB1 = new THREE.Vector3(-5.0, 0.12, MAIN_Z + 3.0);
-  const pB2 = new THREE.Vector3(-5.0, 0.12, BYPASS_Z);
-  const pB3 = new THREE.Vector3(15.0, 0.12, BYPASS_Z);
-  const pB4 = new THREE.Vector3(15.0, 0.12, MAIN_Z + 3.0);
-  pathDirectBypass.add(new THREE.LineCurve3(pB1, pB2));
-  pathDirectBypass.add(new THREE.LineCurve3(pB2, pB3));
-  pathDirectBypass.add(new THREE.LineCurve3(pB3, pB4));
-
-  function drawFlatSegment(v1, v2, hex, width = 0.55) {
-    const len = v1.distanceTo(v2);
-    const geo = new THREE.BoxGeometry(len + width * 0.5, 0.05, width);
-    const mat = new THREE.MeshStandardMaterial({ color: hex, roughness: 0.4 });
-    const mesh = new THREE.Mesh(geo, mat);
-    const mid = v1.clone().add(v2).multiplyScalar(0.5);
-    mesh.position.copy(mid);
-    const angle = Math.atan2(v2.z - v1.z, v2.x - v1.x);
-    mesh.rotation.y = -angle;
-    scene.add(mesh);
-
-    const arrowGeo = new THREE.ConeGeometry(0.28, 0.6, 3);
-    arrowGeo.rotateZ(-Math.PI / 2);
-    const arrowMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-    const arrow = new THREE.Mesh(arrowGeo, arrowMat);
-    arrow.position.copy(mid).add(new THREE.Vector3(0, 0.04, 0));
-    arrow.scale.set(1, 0.15, 1);
-    arrow.rotation.y = -angle;
-    scene.add(arrow);
-  }
-
-  drawFlatSegment(new THREE.Vector3(-12.0, 0.05, MAIN_Z), new THREE.Vector3(-8.2, 0.05, MAIN_Z), 0x10b981);
-  drawFlatSegment(new THREE.Vector3(-1.8,  0.05, MAIN_Z), new THREE.Vector3(1.8,  0.05, MAIN_Z), 0xf59e0b);
-  drawFlatSegment(new THREE.Vector3(8.2,   0.05, MAIN_Z), new THREE.Vector3(11.8, 0.05, MAIN_Z), 0xf59e0b);
-
-  drawFlatSegment(new THREE.Vector3(-5.0, 0.05, MAIN_Z + 3.0), new THREE.Vector3(-5.0, 0.05, BYPASS_Z), 0x10b981);
-  drawFlatSegment(new THREE.Vector3(-5.0, 0.05, BYPASS_Z),     new THREE.Vector3(15.0, 0.05, BYPASS_Z), 0x10b981);
-  drawFlatSegment(new THREE.Vector3(15.0, 0.05, BYPASS_Z),     new THREE.Vector3(15.0, 0.05, MAIN_Z + 3.0), 0x10b981);
-
-  const movingCarts = [];
-  function spawnCart(curve, colorHex, speed, offset) {
-    const cart = new THREE.Group();
-    const base = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.22, 0.52), new THREE.MeshStandardMaterial({color: colorHex}));
-    base.position.y = 0.15;
-    const part = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.28, 0.38), new THREE.MeshStandardMaterial({color: 0xffffff}));
-    part.position.y = 0.38;
-    cart.add(base, part);
-    scene.add(cart);
-    movingCarts.push({ mesh: cart, curve, speed, t: offset });
-  }
-  spawnCart(pathUnloadToRework, 0x10b981, 0.38, 0.0);
-  spawnCart(pathUnloadToRework, 0x10b981, 0.38, 0.5);
-  spawnCart(pathReworkToPaint,  0xf59e0b, 0.35, 0.2);
-  spawnCart(pathPaintToFinal,   0xf59e0b, 0.35, 0.6);
-  spawnCart(pathDirectBypass,   0x10b981, 0.14, 0.0);
-  spawnCart(pathDirectBypass,   0x10b981, 0.14, 0.33);
-  spawnCart(pathDirectBypass,   0x10b981, 0.14, 0.66);
+  const ctxEls = [];
+  CONTEXT_BUILDINGS.forEach(c => {
+    const el = document.createElement('div');
+    el.className = 'ctx-label';
+    el.textContent = c.name;
+    el.onclick = () => {
+      document.getElementById('detail-name').textContent = c.name;
+      document.getElementById('detail-meta').textContent = '全廠周邊廠務/倉儲/行政區域';
+      document.getElementById('detail-content').innerHTML = `<div class="detail-section"><h4>區域說明</h4><div style="font-size:12px;color:var(--fg-mute);line-height:1.6;">此建築為《平面圖1020_2》之 <b>${c.name}</b>（跨距 ${c.w}m × ${c.d}m，樓高 ${c.h}m），目前已建立高對比立體結構，後續可依需求掛載點檢或庫存數據。</div></div>`;
+    };
+    labelsContainer.appendChild(el);
+    ctxEls.push({ el, pos: { x: c.x, y: c.h + 0.6, z: c.z } });
+  });
 
   const pinElements = {};
   Object.values(STATIONS_CFG).forEach(cfg => {
     const el = document.createElement('div');
     el.className = 'station-pin';
     el.dataset.id = cfg.id;
+    const isReady = ['unload', 'rework', 'paint', 'final'].includes(cfg.id);
     el.innerHTML = `
       <span class="pin-zone">${cfg.zone}</span>
       <span class="pin-title">${cfg.title}</span>
-      <span class="pin-count" id="pin-count-${cfg.id}">—</span>
-      <span class="pin-meta info" id="pin-meta-${cfg.id}">讀取中</span>
+      <span class="pin-count" id="pin-count-${cfg.id}">${isReady ? '—' : '待串接'}</span>
+      <span class="pin-meta info" id="pin-meta-${cfg.id}">${isReady ? '讀取中' : 'A棟產線模組'}</span>
     `;
-    el.addEventListener('click', () => selectStation(cfg.id));
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      selectStation(cfg.id);
+    });
     labelsContainer.appendChild(el);
     pinElements[cfg.id] = el;
   });
 
-  function projectToScreen(vec3, el) {
-    const v = vec3.clone().project(camera);
-    el.style.left = `${(v.x * 0.5 + 0.5) * window.innerWidth}px`;
-    el.style.top  = `${(-(v.y * 0.5) + 0.5) * window.innerHeight}px`;
-  }
-
-  function updatePinPositions() {
-    Object.values(STATIONS_CFG).forEach(cfg => {
-      projectToScreen(cfg.pos.clone().add(new THREE.Vector3(0, 4.2, 0)), pinElements[cfg.id]);
-    });
-    projectToScreen(new THREE.Vector3(0, 0.6, MAIN_Z), document.getElementById('badge-repaint'));
-    projectToScreen(new THREE.Vector3(5.0, 0.6, BYPASS_Z), document.getElementById('badge-fpy'));
-  }
-
-  const raycaster = new THREE.Raycaster();
-  const mouse = new THREE.Vector2();
-  renderer.domElement.addEventListener('pointerdown', (e) => {
-    mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
-    mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
-    raycaster.setFromCamera(mouse, camera);
-    const groups = Object.values(stationMeshes).map(m => m.group);
-    const intersects = raycaster.intersectObjects(groups, true);
-    if (intersects.length > 0) {
-      let obj = intersects[0].object;
-      while (obj && (!obj.userData || !obj.userData.id)) obj = obj.parent;
-      if (obj && obj.userData && obj.userData.id) selectStation(obj.userData.id);
-    }
-  });
-
-  let isVerticalView = false;
-  document.getElementById('btn-layout').onclick = () => {
-    isVerticalView = !isVerticalView;
-    if (isVerticalView) {
-      camera.position.set(-38, 38, 1.0);
-      controls.target.set(0, 0, 1.0);
-    } else {
-      camera.position.set(0, 36, 48);
-      controls.target.set(0, 0, 1.0);
-    }
+  document.getElementById('btn-toggle-ctx').onclick = () => {
+    showContextLabels = !showContextLabels;
+    ctxEls.forEach(item => { item.el.style.display = showContextLabels ? '' : 'none'; });
   };
 
-  document.getElementById('btn-zoom-in').onclick = () => { camera.position.multiplyScalar(0.85); };
-  document.getElementById('btn-zoom-out').onclick = () => { camera.position.multiplyScalar(1.15); };
-  document.getElementById('btn-reset-cam').onclick = () => {
-    isVerticalView = false;
-    camera.position.set(0, 36, 48);
-    controls.target.set(0, 0, 1.0);
-  };
-  document.getElementById('btn-overview').onclick = () => {
-    selectedStation = null;
-    Object.values(pinElements).forEach(el => el.classList.remove('selected'));
-    renderOverview();
-  };
-
-  const clock3D = new THREE.Clock();
-  function animate() {
-    requestAnimationFrame(animate);
-    const dt = clock3D.getDelta();
-    movingCarts.forEach(c => {
-      c.t = (c.t + dt * c.speed) % 1;
-      const pos = c.curve.getPointAt(c.t);
-      const tangent = c.curve.getTangentAt(c.t);
-      c.mesh.position.copy(pos);
-      c.mesh.lookAt(pos.clone().add(tangent));
-    });
-    controls.update();
-    updatePinPositions();
-    renderer.render(scene, camera);
-  }
-  animate();
-
-  window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-  });
+  let update3DWorkers = function() {};
+  let focus3DStation = function() {};
+  let flyToPreset = function() {};
+  let switch3DTheme = function() {};
+  let zoomCamera = function() {};
 
   // ============================================================================
-  // PART 2: Google Sheet API 資料串接與統計邏輯（與 factory-flow.html 相同）
+  // 2. 啟動高對比 3D WebGL 引擎
   // ============================================================================
-  // ── Google Sheet 連線（與 person_part_analysis.html 相同的 DEFAULT_CONFIG / localStorage key）──
+  const container = document.getElementById('canvas-container');
+  let webglSuccess = false;
+
+  if (typeof THREE !== 'undefined') {
+    try {
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(34, window.innerWidth / window.innerHeight, 0.1, 1000);
+
+      const CAM_PRESETS = {
+        all:  { pos: new THREE.Vector3(0, 66, 68),   tar: new THREE.Vector3(-2, 0, 1),    label: '全廠宏觀鳥瞰 (28區)' },
+        abc:  { pos: new THREE.Vector3(-5, 42, 44),  tar: new THREE.Vector3(-5, 0, 1.5),  label: '聚焦 A/B/C 三大核心棟' },
+        a:    { pos: new THREE.Vector3(-4, 28, 5),   tar: new THREE.Vector3(-4, 0, -13.6),label: 'A棟 · 射出與發泡工廠' },
+        b:    { pos: new THREE.Vector3(-2, 25, 25),  tar: new THREE.Vector3(-2, 0, 1.2),  label: 'B棟 · 整修/補漆/終檢線' },
+        c:    { pos: new THREE.Vector3(-6, 28, 40),  tar: new THREE.Vector3(-8, 0, 16.5), label: 'C棟 · 塗裝與下線區' },
+        west: { pos: new THREE.Vector3(-42, 34, 20), tar: new THREE.Vector3(-30, 0, 0),   label: '西側動力與環保設施群' }
+      };
+
+      camera.position.copy(CAM_PRESETS.all.pos);
+      const camTargetPos = CAM_PRESETS.all.pos.clone();
+      const ctrlTargetPos = CAM_PRESETS.all.tar.clone();
+      const currentLookAt = CAM_PRESETS.all.tar.clone();
+      let isCamFlying = false;
+
+      flyToPreset = function(key) {
+        const p = CAM_PRESETS[key];
+        if (!p) return;
+        camTargetPos.copy(p.pos);
+        ctrlTargetPos.copy(p.tar);
+        isCamFlying = true;
+        document.getElementById('mode-indicator').textContent = '目前模式：' + p.label;
+        document.querySelectorAll('.view-bar .nav-pill').forEach(btn => {
+          btn.classList.toggle('active', btn.id === 'btn-view-' + key);
+        });
+      };
+
+      focus3DStation = function(posObj) {
+        camTargetPos.set(posObj.x, posObj.y + 18, posObj.z + 22);
+        ctrlTargetPos.set(posObj.x, posObj.y, posObj.z);
+        isCamFlying = true;
+      };
+
+      zoomCamera = function(factor) {
+        isCamFlying = false;
+        camera.position.multiplyScalar(factor);
+      };
+
+      const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      container.appendChild(renderer.domElement);
+
+      let controls = null;
+      if (typeof THREE.OrbitControls === 'function') {
+        controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.06;
+        controls.maxPolarAngle = Math.PI / 2.15;
+        controls.minDistance = 12;
+        controls.maxDistance = 130;
+        controls.target.copy(CAM_PRESETS.all.tar);
+        controls.addEventListener('start', () => { isCamFlying = false; });
+      }
+
+      // 增強立體光影對比度：讓建築物的受光面與背光面有明顯立體層次
+      scene.add(new THREE.AmbientLight(0xe2e8f0, 0.72));
+      const dirLight = new THREE.DirectionalLight(0xffffff, 1.05);
+      dirLight.position.set(35, 62, 45);
+      dirLight.castShadow = true;
+      dirLight.shadow.mapSize.width = 2048;
+      dirLight.shadow.mapSize.height = 2048;
+      const d = 48;
+      dirLight.shadow.camera.left = -d; dirLight.shadow.camera.right = d;
+      dirLight.shadow.camera.top = d;  dirLight.shadow.camera.bottom = -d;
+      dirLight.shadow.bias = -0.0005;
+      scene.add(dirLight);
+
+      const floorGroup = new THREE.Group();
+      scene.add(floorGroup);
+
+      // 廠區大底板：改為帶點科技冷灰藍的實心底板，凸顯上方所有建築
+      const baseGeo = new THREE.BoxGeometry(78, 1.4, 52);
+      const baseMat = new THREE.MeshStandardMaterial({ color: 0xdbe6f5, roughness: 0.7 });
+      const baseMesh = new THREE.Mesh(baseGeo, baseMat);
+      baseMesh.position.set(-1, -0.7, 1);
+      baseMesh.receiveShadow = true;
+      floorGroup.add(baseMesh);
+
+      const baseEdgeLine = new THREE.LineSegments(
+        new THREE.EdgesGeometry(baseGeo),
+        new THREE.LineBasicMaterial({ color: 0x0284c7, transparent: true, opacity: 0.75 })
+      );
+      baseEdgeLine.position.set(-1, -0.7, 1);
+      floorGroup.add(baseEdgeLine);
+
+      const gridHelper = new THREE.GridHelper(76, 38, 0x64748b, 0x94a3b8);
+      gridHelper.position.set(-1, 0.02, 1);
+      if (Array.isArray(gridHelper.material)) {
+        gridHelper.material.forEach(m => { m.transparent = true; m.opacity = 0.28; });
+      } else if (gridHelper.material) {
+        gridHelper.material.transparent = true;
+        gridHelper.material.opacity = 0.28;
+      }
+      floorGroup.add(gridHelper);
+
+      // 廠區主要柏油道路網 (深灰藍路面，清晰分割各大廠區)
+      function addRoad(x, z, w, d) {
+        const r = new THREE.Mesh(
+          new THREE.BoxGeometry(w, 0.05, d),
+          new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.85 })
+        );
+        r.position.set(x, 0.025, z);
+        r.receiveShadow = true;
+        floorGroup.add(r);
+      }
+      addRoad(-26.5, 0, 3.2, 46); // 西側縱向通道
+      addRoad(-2, -6.2, 46, 2.8); // A棟與B棟間主幹道
+      addRoad(-2, 8.2, 46, 3.0);  // B棟與C棟間主幹道
+      addRoad(19.5, 4, 4.2, 38);  // 東側迎賓主幹道
+
+      // 東側園環地標
+      const rbOuter = new THREE.Mesh(
+        new THREE.CylinderGeometry(2.3, 2.5, 0.28, 24),
+        new THREE.MeshStandardMaterial({ color: 0x059669, roughness: 0.4 })
+      );
+      rbOuter.position.set(17.5, 0.14, 3.0);
+      const rbInner = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.7, 0.9, 1.3, 16),
+        new THREE.MeshStandardMaterial({ color: 0x0284c7, emissive: 0x0ea5e9, emissiveIntensity: 0.4 })
+      );
+      rbInner.position.set(17.5, 0.65, 3.0);
+      floorGroup.add(rbOuter, rbInner);
+
+      // ★ 周邊 19 座建築：改為不透明高對比立體廠房 + 深藍灰結構邊框 + 分色屋頂頂蓋 ★
+      const ctxMeshes = [];
+      const strongEdgeMat = new THREE.LineBasicMaterial({ color: 0x334155, transparent: true, opacity: 0.85 });
+
+      CONTEXT_BUILDINGS.forEach(b => {
+        const bGroup = new THREE.Group();
+        bGroup.position.set(b.x, 0, b.z);
+
+        // 建築主牆體 (不透明高對比實體)
+        const geo = new THREE.BoxGeometry(b.w, b.h, b.d);
+        const wallMat = new THREE.MeshStandardMaterial({
+          color: b.wall,
+          roughness: 0.55,
+          metalness: 0.15
+        });
+        const m = new THREE.Mesh(geo, wallMat);
+        m.position.y = b.h / 2;
+        m.castShadow = true;
+        m.receiveShadow = true;
+
+        // 清晰深色結構線框
+        const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geo), strongEdgeMat);
+        m.add(edges);
+
+        // 屋頂分區色塊頂蓋 (一眼看懂倉庫/動力房/辦公樓)
+        const roofGeo = new THREE.BoxGeometry(b.w * 0.92, 0.12, b.d * 0.92);
+        const roofMat = new THREE.MeshStandardMaterial({
+          color: b.roof,
+          roughness: 0.4,
+          metalness: 0.2
+        });
+        const roofMesh = new THREE.Mesh(roofGeo, roofMat);
+        roofMesh.position.y = b.h + 0.06;
+
+        bGroup.add(m, roofMesh);
+        floorGroup.add(bGroup);
+        ctxMeshes.push({ wallMat, lightWall: b.wall });
+      });
+
+      switch3DTheme = function(isDark) {
+        baseMat.color.setHex(isDark ? 0xdbe6f5 : 0x0b1325);
+        ctxMeshes.forEach(item => {
+          item.wallMat.color.setHex(isDark ? item.lightWall : 0x1e293b);
+        });
+      };
+
+      // A / B / C 三大核心棟外框 (鮮明發光底座 + 強化線框玻璃罩)
+      CORE_BLDGS.forEach(b => {
+        const group = new THREE.Group();
+        group.position.set(b.x, 0, b.z);
+        const pad = new THREE.Mesh(new THREE.BoxGeometry(b.w, 0.24, b.d), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 }));
+        pad.position.y = 0.12;
+        pad.receiveShadow = true;
+
+        const border = new THREE.Mesh(
+          new THREE.BoxGeometry(b.w + 0.45, 0.16, b.d + 0.45),
+          new THREE.MeshStandardMaterial({ color: b.color, emissive: b.color, emissiveIntensity: 0.4 })
+        );
+        border.position.y = 0.08;
+
+        const shellGeo = new THREE.BoxGeometry(b.w, b.h, b.d);
+        const shell = new THREE.Mesh(shellGeo, new THREE.MeshPhysicalMaterial({ color: b.color, transparent: true, opacity: 0.12 }));
+        shell.position.y = b.h / 2 + 0.2;
+        shell.add(new THREE.LineSegments(new THREE.EdgesGeometry(shellGeo), new THREE.LineBasicMaterial({ color: b.color })));
+        group.add(pad, border, shell);
+        scene.add(group);
+      });
+
+      // 工站平台與內部機台設備
+      const workerGroups = { rework: new THREE.Group(), paint: new THREE.Group(), final: new THREE.Group() };
+      Object.values(STATIONS_CFG).forEach(cfg => {
+        const g = new THREE.Group();
+        g.position.set(cfg.pos.x, cfg.pos.y, cfg.pos.z);
+        const pad = new THREE.Mesh(new THREE.BoxGeometry(cfg.w, 0.26, cfg.d), new THREE.MeshStandardMaterial({ color: 0xf8fafc }));
+        pad.position.y = 0.13;
+        const border = new THREE.Mesh(new THREE.BoxGeometry(cfg.w + 0.3, 0.14, cfg.d + 0.3), new THREE.MeshStandardMaterial({ color: cfg.color, emissive: cfg.color, emissiveIntensity: 0.5 }));
+        border.position.y = 0.07;
+        const equip = new THREE.Mesh(new THREE.BoxGeometry(cfg.w * 0.65, 1.5, cfg.d * 0.55), new THREE.MeshStandardMaterial({ color: cfg.color, transparent: true, opacity: 0.45 }));
+        equip.position.y = 1.0;
+        equip.castShadow = true;
+        g.add(pad, border, equip);
+        if (workerGroups[cfg.id]) g.add(workerGroups[cfg.id]);
+        scene.add(g);
+      });
+
+      update3DWorkers = function(stationKey, workers) {
+        const g = workerGroups[stationKey];
+        if (!g) return;
+        while (g.children.length > 0) g.remove(g.children[0]);
+        workers.slice(0, 10).forEach((w, idx) => {
+          const avatar = new THREE.Group();
+          const body = new THREE.Mesh(new THREE.CylinderGeometry(0.20, 0.25, 0.62, 10), new THREE.MeshStandardMaterial({ color: w.active ? 0x0284c7 : 0x64748b }));
+          body.position.y = 0.56;
+          const head = new THREE.Mesh(new THREE.SphereGeometry(0.19, 10, 10), new THREE.MeshStandardMaterial({ color: w.active ? 0x38bdf8 : 0x94a3b8 }));
+          head.position.y = 1.04;
+          avatar.add(body, head);
+          avatar.position.set(-1.8 + (idx % 5) * 0.9, 0, -2.2 - Math.floor(idx / 5) * 0.6);
+          g.add(avatar);
+        });
+      };
+
+      // 動線軌道
+      function drawTrack(v1, v2, hex) {
+        const len = v1.distanceTo(v2);
+        const m = new THREE.Mesh(new THREE.BoxGeometry(len, 0.08, 0.55), new THREE.MeshBasicMaterial({ color: hex }));
+        const mid = v1.clone().add(v2).multiplyScalar(0.5);
+        m.position.copy(mid);
+        m.rotation.y = -Math.atan2(v2.z - v1.z, v2.x - v1.x);
+        scene.add(m);
+      }
+      const pC1 = new THREE.Vector3(-3.0, 0.28, 10.8), pC2 = new THREE.Vector3(-3.0, 0.28, 8.2), pC3 = new THREE.Vector3(-13.5, 0.28, 8.2), pC4 = new THREE.Vector3(-13.5, 0.28, 3.2);
+      drawTrack(pC1, pC2, 0x10b981); drawTrack(pC2, pC3, 0x10b981); drawTrack(pC3, pC4, 0x10b981);
+      drawTrack(new THREE.Vector3(-10.2, 0.28, B_MAIN_Z), new THREE.Vector3(-5.8, 0.28, B_MAIN_Z), 0xf59e0b);
+      drawTrack(new THREE.Vector3(0.8, 0.28, B_MAIN_Z), new THREE.Vector3(5.2, 0.28, B_MAIN_Z), 0xf59e0b);
+      const bP1 = new THREE.Vector3(-13.5, 0.28, B_MAIN_Z + 3.0), bP2 = new THREE.Vector3(-13.5, 0.28, B_BYPASS_Z), bP3 = new THREE.Vector3(8.5, 0.28, B_BYPASS_Z), bP4 = new THREE.Vector3(8.5, 0.28, B_MAIN_Z + 3.0);
+      drawTrack(bP1, bP2, 0x10b981); drawTrack(bP2, bP3, 0x10b981); drawTrack(bP3, bP4, 0x10b981);
+
+      function projectToScreen(posObj, el) {
+        if (!el) return;
+        const v = new THREE.Vector3(posObj.x, posObj.y, posObj.z).project(camera);
+        if (v.z > 1) { el.style.display = 'none'; return; }
+        if (!el.classList.contains('ctx-label') || showContextLabels) el.style.display = '';
+        el.style.left = `${(v.x * 0.5 + 0.5) * window.innerWidth}px`;
+        el.style.top  = `${(-(v.y * 0.5) + 0.5) * window.innerHeight}px`;
+      }
+
+      function animate3D() {
+        requestAnimationFrame(animate3D);
+        if (isCamFlying) {
+          camera.position.lerp(camTargetPos, 0.08);
+          if (controls) controls.target.lerp(ctrlTargetPos, 0.08);
+          else { currentLookAt.lerp(ctrlTargetPos, 0.08); camera.lookAt(currentLookAt); }
+          if (camera.position.distanceTo(camTargetPos) < 0.15) isCamFlying = false;
+        }
+        if (controls) controls.update();
+        Object.values(STATIONS_CFG).forEach(cfg => projectToScreen({ x: cfg.pos.x, y: cfg.pos.y + 4.0, z: cfg.pos.z }, pinElements[cfg.id]));
+        bannerEls.forEach(b => projectToScreen(b.pos, b.el));
+        if (showContextLabels) ctxEls.forEach(c => projectToScreen(c.pos, c.el));
+        projectToScreen({ x: -8.0, y: 0.7, z: B_MAIN_Z }, document.getElementById('badge-repaint'));
+        projectToScreen({ x: -2.5, y: 0.7, z: B_BYPASS_Z }, document.getElementById('badge-fpy'));
+        renderer.render(scene, camera);
+      }
+      animate3D();
+      window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      });
+      webglSuccess = true;
+    } catch (e) {
+      console.warn('切換至內建高對比 2.5D 引擎:', e);
+    }
+  }
+
+  // ============================================================================
+  // 2B. 內建高對比 2.5D 立體引擎 (當無 WebGL 時自動接手，強化建築陰影與深色邊框)
+  // ============================================================================
+  if (!webglSuccess) {
+    document.getElementById('engine-tag').textContent = '2.5D HIGH-CONTRAST';
+    const canvas = document.createElement('canvas');
+    container.appendChild(canvas);
+    const ctx = canvas.getContext('2d');
+
+    let camX = -2, camZ = 1, scale = 14.5;
+    let targetCamX = -2, targetCamZ = 1, targetScale = 14.5;
+
+    const PRESETS_2D = {
+      all:  { x: -2,  z: 1,    s: 14.5, label: '全廠宏觀鳥瞰 (28區)' },
+      abc:  { x: -5,  z: 1.5,  s: 21.0, label: '聚焦 A/B/C 三大核心棟' },
+      a:    { x: -4,  z: -13.6,s: 26.0, label: 'A棟 · 射出與發泡工廠' },
+      b:    { x: -2,  z: 1.2,  s: 26.0, label: 'B棟 · 整修/補漆/終檢線' },
+      c:    { x: -8,  z: 16.5, s: 26.0, label: 'C棟 · 塗裝與下線區' },
+      west: { x: -28, z: 0,    s: 22.0, label: '西側動力與環保設施群' }
+    };
+
+    flyToPreset = function(key) {
+      const p = PRESETS_2D[key];
+      if (!p) return;
+      targetCamX = p.x; targetCamZ = p.z; targetScale = p.s;
+      document.getElementById('mode-indicator').textContent = '目前模式：' + p.label;
+      document.querySelectorAll('.view-bar .nav-pill').forEach(btn => {
+        btn.classList.toggle('active', btn.id === 'btn-view-' + key);
+      });
+    };
+
+    focus3DStation = function(posObj) {
+      targetCamX = posObj.x; targetCamZ = posObj.z; targetScale = 30.0;
+    };
+
+    zoomCamera = function(factor) {
+      targetScale = Math.max(8, Math.min(45, targetScale / factor));
+    };
+
+    let dragging = false, lastX = 0, lastY = 0;
+    canvas.addEventListener('pointerdown', e => { dragging = true; lastX = e.clientX; lastY = e.clientY; });
+    window.addEventListener('pointerup', () => { dragging = false; });
+    window.addEventListener('pointermove', e => {
+      if (!dragging) return;
+      targetCamX -= (e.clientX - lastX) / scale;
+      targetCamZ -= (e.clientY - lastY) / (scale * 0.72);
+      lastX = e.clientX; lastY = e.clientY;
+    });
+    canvas.addEventListener('wheel', e => {
+      targetScale = Math.max(8, Math.min(45, targetScale * (e.deltaY < 0 ? 1.1 : 0.9)));
+    });
+
+    function toScreen(wx, wy, wz) {
+      const sx = window.innerWidth / 2 + (wx - camX) * scale;
+      const sy = window.innerHeight / 2 + (wz - camZ) * scale * 0.72 - wy * scale * 0.45;
+      return { x: sx, y: sy };
+    }
+
+    function drawBox25D(x, z, w, d, h, wallColor, roofColor, strokeColor, lineWidth = 1.6) {
+      const p1 = toScreen(x - w/2, 0, z + d/2);
+      const p2 = toScreen(x + w/2, 0, z + d/2);
+      const t1 = toScreen(x - w/2, h, z - d/2);
+      const t2 = toScreen(x + w/2, h, z - d/2);
+      const t3 = toScreen(x + w/2, h, z + d/2);
+      const t4 = toScreen(x - w/2, h, z + d/2);
+
+      // 立體正面牆體
+      ctx.fillStyle = wallColor;
+      ctx.beginPath();
+      ctx.moveTo(t4.x, t4.y); ctx.lineTo(t3.x, t3.y); ctx.lineTo(p2.x, p2.y); ctx.lineTo(p1.x, p1.y);
+      ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = strokeColor; ctx.lineWidth = lineWidth; ctx.stroke();
+
+      // 立體屋頂
+      ctx.fillStyle = roofColor;
+      ctx.beginPath();
+      ctx.moveTo(t1.x, t1.y); ctx.lineTo(t2.x, t2.y); ctx.lineTo(t3.x, t3.y); ctx.lineTo(t4.x, t4.y);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+    }
+
+    function renderFallback() {
+      requestAnimationFrame(renderFallback);
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      camX += (targetCamX - camX) * 0.1;
+      camZ += (targetCamZ - camZ) * 0.1;
+      scale += (targetScale - scale) * 0.1;
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // 廠區大底座与道路
+      drawBox25D(-1, 1, 76, 50, 0.3, '#cbd5e1', '#dbe6f5', '#0284c7', 2.0);
+      drawBox25D(-26.5, 0, 3.2, 46, 0.05, '#94a3b8', '#94a3b8', '#64748b', 1);
+      drawBox25D(-2, -6.2, 46, 2.8, 0.05, '#94a3b8', '#94a3b8', '#64748b', 1);
+      drawBox25D(-2, 8.2, 46, 3.0, 0.05, '#94a3b8', '#94a3b8', '#64748b', 1);
+      drawBox25D(19.5, 4, 4.2, 38, 0.05, '#94a3b8', '#94a3b8', '#64748b', 1);
+
+      // 周邊 19 座建築 (高對比深色邊框 + 實體分色屋頂)
+      CONTEXT_BUILDINGS.forEach(b => {
+        drawBox25D(b.x, b.z, b.w, b.d, b.h * 0.55, '#94a3b8', b.hex + '44', '#334155', 1.8);
+      });
+
+      // A / B / C 核心棟
+      CORE_BLDGS.forEach(b => {
+        drawBox25D(b.x, b.z, b.w, b.d, b.h * 0.45, b.hex + '33', b.hex + '22', b.hex, 2.5);
+      });
+
+      // 6 大工站
+      Object.values(STATIONS_CFG).forEach(st => {
+        drawBox25D(st.pos.x, st.pos.z, st.w, st.d, 1.2, st.hex + '66', st.hex + '44', st.hex, 2.2);
+        const sp = toScreen(st.pos.x, 2.2, st.pos.z);
+        const el = pinElements[st.id];
+        if (el) { el.style.left = sp.x + 'px'; el.style.top = sp.y + 'px'; }
+      });
+
+      bannerEls.forEach(b => {
+        const sp = toScreen(b.pos.x, 3.0, b.pos.z);
+        b.el.style.left = sp.x + 'px'; b.el.style.top = sp.y + 'px';
+      });
+
+      if (showContextLabels) {
+        ctxEls.forEach(c => {
+          const sp = toScreen(c.pos.x, c.pos.y * 0.6, c.pos.z);
+          c.el.style.left = sp.x + 'px'; c.el.style.top = sp.y + 'px';
+        });
+      }
+
+      const rp = toScreen(-8.0, 0.5, B_MAIN_Z);
+      const rEl = document.getElementById('badge-repaint');
+      if (rEl) { rEl.style.left = rp.x + 'px'; rEl.style.top = rp.y + 'px'; }
+
+      const fp = toScreen(-2.5, 0.5, B_BYPASS_Z);
+      const fEl = document.getElementById('badge-fpy');
+      if (fEl) { fEl.style.left = fp.x + 'px'; fEl.style.top = fp.y + 'px'; }
+    }
+    renderFallback();
+  }
+
+  // ============================================================================
+  // 3. Google Sheet API 即時資料串接與面板互動邏輯
+  // ============================================================================
   const DEFAULT_CONFIG = {
     sheetsId: '1xQoIxoLlM4LkKjDrYZ_87uIahtebPgPcG6Hitck1T5c',
     apiKey:   'AIzaSyBMgXHsua64mciOFJwqH4NreGI11gMXR-s',
@@ -772,20 +1023,281 @@
   const WORKER_MAP_REFRESH_MS = 15 * 60 * 1000; // 員工表每 15 分鐘重讀一次（30 秒 refresh 不重讀，省 API 配額）
 
   function lsGet(k) { try { return localStorage.getItem(k); } catch(e) { return null; } }
-  function getConn() {
-    return {
-      id:  lsGet('gsId')  || DEFAULT_CONFIG.sheetsId,
-      key: lsGet('gsKey') || DEFAULT_CONFIG.apiKey,
-    };
+  function getConn() { return { id: lsGet('gsId') || DEFAULT_CONFIG.sheetsId, key: lsGet('gsKey') || DEFAULT_CONFIG.apiKey }; }
+  function esc(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+  function hhmm(d) { return d ? String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0') : '—'; }
+  function todaySlash() {
+    const d = new Date();
+    return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
   }
+
+  let WORKER_MAP = {};
+  async function loadWorkerMap() {
+    try {
+      const { id, key } = getConn();
+      const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${encodeURIComponent(WORKER_SHEET_RANGE)}?key=${key}`);
+      if (!res.ok) return;
+      const json = await res.json();
+      const map = {};
+      (json.values || []).forEach(r => {
+        const [wid, name, role, status] = r;
+        if (wid && String(wid).trim()) {
+          map[String(wid).trim()] = { name: (name||'').trim(), role: (role||'').trim(), active: (status||'').trim() !== '離職' };
+        }
+      });
+      WORKER_MAP = map;
+    } catch(e) {}
+  }
+
+  function formatWorkerId(id) {
+    const sid = String(id || '').trim();
+    const info = WORKER_MAP[sid];
+    return (!info || !info.name) ? esc(sid) : `${esc(sid)}<span class="worker-name">(${esc(info.name)})</span>`;
+  }
+  function isActiveWorker(id) {
+    const info = WORKER_MAP[String(id || '').trim()];
+    return info ? info.active : true;
+  }
+
+  let unloadCount = 385;
+  const unloadInitial = 430;
+  function renderUnloadPin() {
+    const cEl = document.getElementById('pin-count-unload');
+    const mEl = document.getElementById('pin-meta-unload');
+    if (cEl) cEl.textContent = unloadCount + ' PCS';
+    if (mEl) mEl.textContent = '已送B棟 ' + (unloadInitial - unloadCount);
+  }
+  renderUnloadPin();
+
+  let stats = null;
+  let selectedStation = null;
+
+  function selectStation(id) {
+    selectedStation = id;
+    Object.values(pinElements).forEach(el => el.classList.toggle('selected', el.dataset.id === id));
+    const cfg = STATIONS_CFG[id];
+    if (cfg) focus3DStation(cfg.pos);
+    renderDetail(id);
+  }
+
+  function barRows(rows) {
+    return '<div class="breakdown">' + rows.map(r =>
+      `<div class="br-row"><span class="lbl">${esc(r[0])}</span><div class="bar"><div class="fill ${r[3]==='warn'?'warn':''}" style="width:${r[2]}%;"></div></div><span class="val">${esc(r[1])}</span></div>`
+    ).join('') + '</div>';
+  }
+  function section(title, inner) {
+    return `<div class="detail-section"><h4>${esc(title)}</h4>${inner}</div>`;
+  }
+
+  function getCBuildingEquipHtml() {
+    return `
+      <div class="worker-list">
+        <div class="worker-row"><span>🌡️ 3塗3烤 烘烤爐溫控</span><span class="status-badge ok">正常 · 待串接</span></div>
+        <div class="worker-row"><span>❄️ 塗裝冰水機 / 水壓馬達</span><span class="status-badge ok">正常 · 待串接</span></div>
+        <div class="worker-row"><span>💧 循環水泵軸封點檢</span><span class="status-badge ok">正常 · 待串接</span></div>
+        <div class="worker-row"><span>⚡ 靜電噴塗設備點檢</span><span class="status-badge ok">正常 · 待串接</span></div>
+      </div>
+    `;
+  }
+
+  function renderBuildingDetail(bldgKey) {
+    selectedStation = null;
+    Object.values(pinElements).forEach(el => el.classList.remove('selected'));
+    const content = document.getElementById('detail-content');
+
+    if (bldgKey === 'A') {
+      document.getElementById('detail-name').textContent = 'A 棟 · 射出工廠';
+      document.getElementById('detail-meta').textContent = '射出成型區 · 發泡成型區';
+      content.innerHTML =
+        section('A 棟產線配置', `
+          <div class="worker-list">
+            <div class="worker-row" style="cursor:pointer" onclick="document.querySelector('[data-id=a_mold]').click()"><span>🟦 射出成型區 (大型射出機群)</span><span class="status-badge ok">待串接</span></div>
+            <div class="worker-row" style="cursor:pointer" onclick="document.querySelector('[data-id=a_foam]').click()"><span>🟦 發泡成型區 (PU 發泡作業線)</span><span class="status-badge ok">待串接</span></div>
+          </div>
+        `) +
+        section('後續擴充預留項目', '<div style="font-size:12px;color:var(--fg-mute);line-height:1.5;">可串接射出成型日報表、模具保養換模紀錄與發泡成型良率數據。</div>');
+    } else if (bldgKey === 'B') {
+      renderOverview();
+    } else if (bldgKey === 'C') {
+      document.getElementById('detail-name').textContent = 'C 棟 · 塗裝工廠';
+      document.getElementById('detail-meta').textContent = '大塗一線 · 塗裝下線區 · 設備點檢';
+      content.innerHTML =
+        section('C 棟 · 塗裝下線區進度', barRows([
+          ['待送B棟', unloadCount, Math.round(unloadCount / Math.max(1, unloadInitial) * 100), 'ok'],
+          ['已送B棟', unloadInitial - unloadCount, Math.round((unloadInitial - unloadCount) / Math.max(1, unloadInitial) * 100), 'ok'],
+        ])) +
+        section('C 棟 · 設備保養與日常點檢 (預留模組)', getCBuildingEquipHtml());
+    }
+  }
+
+  function renderOverview() {
+    document.getElementById('detail-name').textContent = '全廠區域總覽 · Plant Map';
+    document.getElementById('detail-meta').textContent = '點擊「🎯 聚焦 ABC 核心棟」或任一工站';
+    if (!stats) {
+      document.getElementById('detail-content').innerHTML =
+        section('C棟下線 → B棟各站實績', barRows([
+          ['C棟下線', unloadCount, 90, 'ok'],
+          ['B棟整修', '讀取中', 0, 'ok'],
+          ['B棟補漆', '讀取中', 0, 'warn'],
+          ['B棟終檢', '讀取中', 0, 'ok'],
+        ]));
+      return;
+    }
+    const { rework, paint, final } = stats;
+    const max = Math.max(1, rework.count, paint.count, final.count);
+    const left = barRows([
+      ['C棟下線', unloadCount, 100, 'ok'],
+      ['B棟整修', rework.count, Math.round(rework.count / max * 100), 'ok'],
+      ['B棟補漆', paint.count,  Math.round(paint.count  / max * 100), 'warn'],
+      ['B棟終檢', final.count,  Math.round(final.count  / max * 100), 'ok'],
+    ]);
+    document.getElementById('detail-content').innerHTML =
+      section('C棟下線 → B棟各站今日實績', left) +
+      section('C棟設備點檢狀態摘要', getCBuildingEquipHtml());
+  }
+
+  function renderDetail(id) {
+    const content = document.getElementById('detail-content');
+    if (id === 'a_foam' || id === 'a_mold') {
+      document.getElementById('detail-name').textContent = id === 'a_mold' ? 'A棟 · 射出成型區' : 'A棟 · 發泡成型區';
+      document.getElementById('detail-meta').textContent = 'A棟射出工廠 · 模組已就緒';
+      content.innerHTML = section('工站狀態', '<div style="font-size:12px;color:var(--fg-mute);line-height:1.6;">3D 機台模型已建置完成，待後續綁定 Google Sheet 射出/發泡生產日報分頁即可即時呈現稼動與產量。</div>');
+      return;
+    }
+    if (id === 'unload') {
+      document.getElementById('detail-name').textContent = 'C棟 · 塗裝下線區';
+      document.getElementById('detail-meta').textContent = 'C棟塗裝線下線估算 & 設備點檢';
+      content.innerHTML =
+        section('今日塗裝下線進度 (送往B棟)', barRows([
+          ['剩餘待處理', unloadCount, Math.round(unloadCount / Math.max(1, unloadInitial) * 100), 'ok'],
+          ['已送往B棟', unloadInitial - unloadCount, Math.round((unloadInitial - unloadCount) / Math.max(1, unloadInitial) * 100), 'ok'],
+        ])) +
+        section('C棟設備保養與日常點檢', getCBuildingEquipHtml());
+      return;
+    }
+    if (!stats) return;
+    const map = { rework: ['B棟 · 整修區', stats.rework], paint: ['B棟 · 補漆區', stats.paint], final: ['B棟 · 終檢區', stats.final] };
+    const [title, s] = map[id] || [];
+    if (!s) return;
+    document.getElementById('detail-name').textContent = title;
+    document.getElementById('detail-meta').textContent = `${s.workers.length} 位作業員 · ${s.activeCount} 位在線`;
+    const workersHtml = s.workers.length
+      ? '<div class="worker-list">' + s.workers.slice(0, 8).map(w =>
+          `<div class="worker-row"><span><span class="id">${formatWorkerId(w.pid)}</span><span class="name">最後 ${hhmm(w.lastTs)}</span></span><span class="count">${w.count} PCS</span></div>`
+        ).join('') + '</div>'
+      : '<div style="font-size:12px;color:var(--fg-mute);">今日尚無實績</div>';
+    if (id !== 'paint') { content.innerHTML = section('今日作業員實績', workersHtml); return; }
+    const net = paintNet(stats.paint, stats.final);
+    content.innerHTML =
+      section('今日作業員實績', workersHtml) +
+      section('今日車型 × 顏色組合', comboHtml(s.byModelColor)) +
+      `<div class="net-note">今日補漆 ${s.count} 筆。扣 RV/PU 必經 BL ${net.RVPU_BL} 筆，淨 ${net.paintNetCount} 筆（用於 FPY 計算）</div>`;
+    const btn = document.getElementById('combo-toggle');
+    if (btn) btn.addEventListener('click', () => { comboExpanded = !comboExpanded; renderDetail('paint'); });
+  }
+
+  // 補漆區「車型 × 顏色」：預設前 5 名，可展開全部（展開狀態跨 30 秒刷新保留）
+  const COMBO_TOP = 5;
+  let comboExpanded = false;
+  function comboHtml(byModelColor) {
+    const entries = Object.entries(byModelColor || {}).sort((a, b) => b[1] - a[1]);
+    if (!entries.length) return '<div style="font-size:12px;color:var(--fg-mute);">今日尚無資料</div>';
+    const max = entries[0][1];
+    const shown = comboExpanded ? entries : entries.slice(0, COMBO_TOP);
+    const rowsHtml = '<div class="breakdown">' + shown.map(([k, n]) => {
+      const [model, color] = k.split('|');
+      return `<div class="br-row"><span class="lbl wide">${esc(model)} × ${esc(color || '—')}</span><div class="bar"><div class="fill warn" style="width:${Math.round(n / max * 100)}%;"></div></div><span class="val">${n}</span></div>`;
+    }).join('') + '</div>';
+    const rest = entries.length - COMBO_TOP;
+    const btn = rest > 0
+      ? `<button class="expand-btn" id="combo-toggle">${comboExpanded ? '收起 ▲' : `展開全部 (剩餘 ${rest} 項) ▼`}</button>`
+      : '';
+    return rowsHtml + btn;
+  }
+
+  document.getElementById('btn-view-all').onclick  = () => { flyToPreset('all');  renderOverview(); };
+  document.getElementById('btn-view-abc').onclick  = () => { flyToPreset('abc');  renderOverview(); };
+  document.getElementById('btn-view-a').onclick    = () => { flyToPreset('a');    renderBuildingDetail('A'); };
+  document.getElementById('btn-view-b').onclick    = () => { flyToPreset('b');    renderBuildingDetail('B'); };
+  document.getElementById('btn-view-c').onclick    = () => { flyToPreset('c');    renderBuildingDetail('C'); };
+  document.getElementById('btn-view-west').onclick = () => { flyToPreset('west'); };
+  document.getElementById('btn-zoom-in').onclick   = () => zoomCamera(0.85);
+  document.getElementById('btn-zoom-out').onclick  = () => zoomCamera(1.15);
+  document.getElementById('btn-reset-cam').onclick = () => { flyToPreset('all');  renderOverview(); };
+  document.getElementById('btn-overview').onclick  = () => {
+    selectedStation = null;
+    Object.values(pinElements).forEach(el => el.classList.remove('selected'));
+    flyToPreset('all');
+    renderOverview();
+  };
+
+  renderOverview();
+
+  function normalizeDate(s) {
+    s = s.trim().replace(/\s*(上午|下午|AM|PM)[\s\d:：]*$/i, '').split('T')[0].split(' ')[0].replace(/-/g, '/');
+    const m1 = s.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
+    if (m1) return `${m1[1]}/${m1[2].padStart(2,'0')}/${m1[3].padStart(2,'0')}`;
+    const m2 = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (m2) return `${m2[3]}/${m2[1].padStart(2,'0')}/${m2[2].padStart(2,'0')}`;
+    return '';
+  }
+  function parseTimestamp(raw) {
+    const m = raw.match(/(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})\s*(上午|下午|AM|PM)?\s*(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?/i);
+    if (!m) return null;
+    let h = parseInt(m[5], 10);
+    const ap = (m[4] || m[8] || '').toUpperCase();
+    if ((ap === '下午' || ap === 'PM') && h < 12) h += 12;
+    if ((ap === '上午' || ap === 'AM') && h === 12) h = 0;
+    return new Date(+m[1], +m[2] - 1, +m[3], h, +m[6], +(m[7] || 0));
+  }
+  function parseRows(values) {
+    if (!values || !values.length) return [];
+    const out = [];
+    values.slice(1).forEach(row => {
+      const date = normalizeDate((row[1] || '').trim());
+      const pid = (row[2] || '').trim();
+      if (!date || !pid) return;
+      out.push({ date, pid, ts: parseTimestamp((row[0] || '').trim()), model: (row[3] || '').trim(), color: (row[5] || '').trim().toUpperCase() });
+    });
+    return out;
+  }
+  function summarize(recs) {
+    const now = Date.now(), byPid = {}, byModel = {}, byModelColor = {}; // byModelColor key: model + '|' + color
+    let last = null;
+    recs.forEach(r => {
+      const p = byPid[r.pid] || (byPid[r.pid] = { pid: r.pid, count: 0, lastTs: null });
+      p.count++;
+      if (r.ts && (!p.lastTs || r.ts > p.lastTs)) p.lastTs = r.ts;
+      if (r.ts && (!last || r.ts > last)) last = r.ts;
+      const m = r.model || '未填';
+      byModel[m] = (byModel[m] || 0) + 1;
+      const mc = m + '|' + (r.color || '');
+      byModelColor[mc] = (byModelColor[mc] || 0) + 1;
+    });
+    const workers = Object.values(byPid).sort((a, b) => b.count - a.count);
+    workers.forEach(w => { w.active = !!w.lastTs && (now - w.lastTs) / 1000 <= OFFLINE_SEC; });
+    return { count: recs.length, workers, activeCount: workers.filter(w => w.active).length, byModel, byModelColor, last, recs };
+  }
+
+  // RV / PU 每隻必經 BL 補漆（製程工序，非品質問題）→ 以終檢 RV/PU 件數反推 BL 筆數，從補漆扣除
+  const RVPU_MODELS = ['RV', 'PU'];
+  function paintNet(paint, final) {
+    const paint_RVPU = RVPU_MODELS.reduce((sum, m) => sum + (paint.byModel[m] || 0), 0);
+    const final_RVPU = RVPU_MODELS.reduce((sum, m) => sum + (final.byModel[m] || 0), 0);
+    const RVPU_BL = Math.min(paint_RVPU, final_RVPU); // 安全閥：防止跨日資料不同步導致超扣
+    const paintNetCount = paint.count - RVPU_BL;
+    const fpy     = final.count > 0 ? Math.max(0, Math.min(1, (final.count - paintNetCount) / final.count)) : null;
+    const repaint = final.count > 0 ? Math.max(0, Math.min(1, paintNetCount / final.count)) : null;
+    return { RVPU_BL, paintNetCount, fpy, repaint };
+  }
+  function pct(n) { return n == null ? '—' : Math.round(n * 100) + '%'; }
 
   async function fetchAllSheets(sheets) {
     const { id, key } = getConn();
     const ranges = [SYSTEM_SETTINGS_RANGE, sheets.paint + '!A:F', sheets.rework + '!A:F', sheets.final + '!A:F'];
     const qs = ranges.map(r => 'ranges=' + encodeURIComponent(r)).join('&');
-    const url = `https://sheets.googleapis.com/v4/spreadsheets/${id}/values:batchGet?key=${key}&${qs}`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${id}/values:batchGet?key=${key}&${qs}`);
+    if (!res.ok) throw new Error(res.status);
     const json = await res.json();
     const vr = json.valueRanges || [];
     const settingsRaw = {};
@@ -801,327 +1313,10 @@
     };
   }
 
-  function parseRows(values) {
-    if (!values.length) return [];
-    const col = { ts: 0, date: 1, pid: 2, model: 3, part: 4, color: 5 };
-    const header = values[0].map(h => (h || '').trim());
-    const isHeader = header[1] && !/^\d/.test(header[1]);
-    if (isHeader) {
-      header.forEach((h, i) => {
-        if (/時間戳記/.test(h))            col.ts = i;
-        else if (/記錄日期|日期/.test(h))  col.date = i;
-        else if (/工號|員工|人員/.test(h)) col.pid = i;
-        else if (/車型/.test(h))           col.model = i;
-        else if (/種類|部件/.test(h))      col.part = i;
-        else if (/顏色/.test(h))           col.color = i;
-      });
-    }
-    const out = [];
-    (isHeader ? values.slice(1) : values).forEach(row => {
-      const rawDate = (row[col.date] || '').trim();
-      const pid = (row[col.pid] || '').trim();
-      if (!rawDate || !pid) return;
-      const date = normalizeDate(rawDate);
-      if (!date) return;
-      out.push({
-        date, pid,
-        ts:    parseTimestamp((row[col.ts] || '').trim()),
-        model: (row[col.model] || '').trim(),
-        part:  (row[col.part]  || '').trim(),
-        color: (row[col.color] || '').trim().toUpperCase(),
-      });
-    });
-    return out;
-  }
-
-  function normalizeDate(s) {
-    s = s.trim().replace(/\s*(上午|下午|AM|PM)[\s\d:：]*$/i, '').trim();
-    s = s.split('T')[0].trim().split(' ')[0].replace(/-/g, '/');
-    const m1 = s.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
-    if (m1) return `${m1[1]}/${m1[2].padStart(2,'0')}/${m1[3].padStart(2,'0')}`;
-    const m2 = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-    if (m2) return `${m2[3]}/${m2[1].padStart(2,'0')}/${m2[2].padStart(2,'0')}`;
-    return '';
-  }
-
-  function parseTimestamp(raw) {
-    const m = raw.match(/(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})\s*(上午|下午|AM|PM)?\s*(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?/i);
-    if (!m) return null;
-    let h = parseInt(m[5], 10);
-    const ap = (m[4] || m[8] || '').toUpperCase();
-    if ((ap === '下午' || ap === 'PM') && h < 12) h += 12;
-    if ((ap === '上午' || ap === 'AM') && h === 12) h = 0;
-    return new Date(+m[1], +m[2] - 1, +m[3], h, +m[6], +(m[7] || 0));
-  }
-
-  function todaySlash() {
-    const d = new Date();
-    return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
-  }
-  function hhmm(d) {
-    return d ? String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0') : '—';
-  }
-  function esc(s) {
-    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  }
-
-  // ── 員工表（A 工號 / B 姓名 / C 崗位 / D 狀態）：工號顯示為「8631 (麥爾)」，離職者不顯示、不計入統計 ──
-  let WORKER_MAP = {}; // { '8631': { name:'麥爾', role:'補漆', active:true }, ... }
-
-  async function loadWorkerMap() {
-    try {
-      const { id, key } = getConn();
-      const url = `https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${encodeURIComponent(WORKER_SHEET_RANGE)}?key=${key}`;
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json();
-      const rows = json.values || [];
-      const map = {};
-      rows.forEach(r => {
-        const [id, name, role, status] = r;
-        if (!id || !String(id).trim()) return;
-        map[String(id).trim()] = {
-          name:   (name || '').trim(),
-          role:   (role || '').trim(),
-          active: (status || '').trim() !== '離職'
-        };
-      });
-      WORKER_MAP = map;
-    } catch(e) {
-      console.warn('員工表讀取失敗，使用純工號顯示', e);
-      WORKER_MAP = {}; // 讀失敗就退回純工號，看板不要壞
-    }
-  }
-
-  // 回傳 HTML（姓名包在 span 裡），寫入時需用 innerHTML
-  function formatWorkerId(id) {
-    if (id == null || id === '') return '';
-    const sid = String(id).trim();
-    const info = WORKER_MAP[sid];
-    if (!info || !info.name) return esc(sid);
-    return esc(sid) + '<span class="worker-name">(' + esc(info.name) + ')</span>';
-  }
-
-  function isActiveWorker(id) {
-    const info = WORKER_MAP[String(id == null ? '' : id).trim()];
-    // 查無員工 → 預設顯示（避免新員工還沒登錄時被隱藏）
-    if (!info) return true;
-    return info.active;
-  }
-
-  function tick() {
-    const d = new Date();
-    document.getElementById('clock').textContent =
-      String(d.getHours()).padStart(2,'0') + ':' +
-      String(d.getMinutes()).padStart(2,'0') + ':' +
-      String(d.getSeconds()).padStart(2,'0');
-  }
-  tick(); setInterval(tick, 1000);
-
-  // 下線數（與 factory-flow.html 相同：每天隨機 300~500，每 2:00~2:30 減 1，共用 localStorage key）
-  let unloadCount;
-  try {
-    const today = new Date().toDateString();
-    const storedDate = localStorage.getItem('unload_date');
-    if (storedDate !== today) {
-      unloadCount = 300 + Math.floor(Math.random() * 201);
-      localStorage.setItem('unload_date', today);
-      localStorage.setItem('unload_count', String(unloadCount));
-    } else {
-      unloadCount = parseInt(localStorage.getItem('unload_count') || '400', 10);
-    }
-  } catch(e) {
-    unloadCount = 300 + Math.floor(Math.random() * 201);
-  }
-  const unloadInitial = unloadCount;
-
-  function renderUnloadPin() {
-    document.getElementById('pin-count-unload').textContent = unloadCount + ' PCS';
-    document.getElementById('pin-meta-unload').textContent = '已處理 ' + (unloadInitial - unloadCount);
-  }
-  renderUnloadPin();
-  function scheduleUnloadDecrement() {
-    // Random interval between 2:00 and 2:30 (120000~150000 ms)
-    const nextDelay = 120000 + Math.random() * 30000;
-    setTimeout(() => {
-      if (unloadCount > 20) {
-        unloadCount -= 1;
-        try { localStorage.setItem('unload_count', String(unloadCount)); } catch(e) {}
-        renderUnloadPin();
-        if (selectedStation === 'unload') renderDetail('unload');
-        else if (!selectedStation) renderOverview();
-      }
-      scheduleUnloadDecrement();
-    }, nextDelay);
-  }
-  scheduleUnloadDecrement();
-
-  let stats = null;
-  let selectedStation = null;
-
-  function selectStation(id) {
-    selectedStation = id;
-    Object.values(pinElements).forEach(el => el.classList.toggle('selected', el.dataset.id === id));
-    renderDetail(id);
-  }
-
-  function summarize(recs) {
-    const now = Date.now();
-    const byPid = {}, byModel = {};
-    let last = null;
-    recs.forEach(r => {
-      const p = byPid[r.pid] || (byPid[r.pid] = { pid: r.pid, count: 0, lastTs: null });
-      p.count++;
-      if (r.ts && (!p.lastTs || r.ts > p.lastTs)) p.lastTs = r.ts;
-      if (r.ts && (!last || r.ts > last)) last = r.ts;
-      const m = r.model || '（未填）';
-      byModel[m] = (byModel[m] || 0) + 1;
-    });
-    const workers = Object.values(byPid).sort((a, b) => b.count - a.count);
-    workers.forEach(w => { w.active = !!w.lastTs && (now - w.lastTs) / 1000 <= OFFLINE_SEC; });
-    return { count: recs.length, workers, activeCount: workers.filter(w => w.active).length, byModel, last, recs };
-  }
-
-  function pct(n) { return n == null ? '—' : Math.round(n * 100) + '%'; }
-
-  function renderAll() {
-    if (!stats) return;
-    const { rework, paint, final } = stats;
-
-    document.getElementById('pin-count-rework').textContent = rework.count + ' PCS';
-    document.getElementById('pin-meta-rework').textContent = `${rework.workers.length} 人 (${rework.activeCount} 在線)`;
-    update3DWorkers('rework', rework.workers);
-
-    document.getElementById('pin-count-paint').textContent = paint.count + ' PCS';
-    document.getElementById('pin-meta-paint').textContent = `${paint.workers.length} 人 (${paint.activeCount} 在線)`;
-    document.getElementById('pin-meta-paint').className = 'pin-meta warn';
-    update3DWorkers('paint', paint.workers);
-
-    document.getElementById('pin-count-final').textContent = final.count + ' PCS';
-    document.getElementById('pin-meta-final').textContent = final.last ? `最後 ${hhmm(final.last)}` : `${final.workers.length} 人`;
-    document.getElementById('pin-meta-final').className = 'pin-meta ok';
-    update3DWorkers('final', final.workers);
-
-    const fpy     = final.count > 0 ? Math.max(0, Math.min(1, (final.count - paint.count) / final.count)) : null;
-    const repaint = final.count > 0 ? Math.max(0, Math.min(1, paint.count / final.count)) : null;
-
-    document.getElementById('kpi-pass').textContent = final.count;
-    document.getElementById('kpi-pass-delta').textContent = final.last ? `最後實績 ${hhmm(final.last)}` : '終檢階段 今日筆數';
-    document.getElementById('kpi-fpy').textContent = pct(fpy);
-    document.getElementById('kpi-fpy-delta').textContent = `(終檢 ${final.count} − 補漆 ${paint.count}) ÷ 終檢`;
-    document.getElementById('kpi-repaint').textContent = pct(repaint);
-    document.getElementById('kpi-repaint-delta').textContent = `補漆 ${paint.count} ÷ 終檢 ${final.count}`;
-    document.getElementById('flow-summary').textContent = `直行 ${pct(fpy)} ｜ 需補漆 ${pct(repaint)}`;
-
-    document.getElementById('badge-repaint').textContent = `需補漆 ${pct(repaint)}`;
-    document.getElementById('badge-fpy').textContent = `直行通道 ${pct(fpy)}`;
-
-    const allPids = new Set([...rework.workers, ...paint.workers, ...final.workers].map(w => w.pid));
-    document.getElementById('kpi-workers').textContent = allPids.size;
-    document.getElementById('kpi-workers-delta').textContent = `整修 ${rework.workers.length} · 補漆 ${paint.workers.length} · 終檢 ${final.workers.length}`;
-
-    document.getElementById('nav-sub-rework').textContent = `${rework.workers.length} 位作業員 · ${rework.count} PCS`;
-    document.getElementById('nav-sub-paint').textContent  = `${paint.workers.length} 位作業員 · ${paint.count} PCS`;
-
-    renderTrend([...rework.recs, ...paint.recs, ...final.recs]);
-    if (selectedStation) renderDetail(selectedStation); else renderOverview();
-  }
-
-  function renderTrend(recs) {
-    const BUCKETS = 12, SPAN = 10 * 60 * 1000;
-    const end = Date.now();
-    const trend = new Array(BUCKETS).fill(0);
-    recs.forEach(r => {
-      if (!r.ts) return;
-      const idx = BUCKETS - 1 - Math.floor((end - r.ts) / SPAN);
-      if (idx >= 0 && idx < BUCKETS) trend[idx]++;
-    });
-    const maxTrend = Math.max(1, Math.max.apply(null, trend));
-    const polyPts = trend.map((v, i) => {
-      const x = (i / (trend.length - 1)) * 600;
-      const y = 38 - (v / maxTrend) * 32;
-      return x + ',' + y;
-    }).join(' ');
-    document.getElementById('floor-trend').setAttribute('points', polyPts);
-    document.getElementById('floor-trend-area').setAttribute('points', '0,42 ' + polyPts + ' 600,42');
-  }
-
-  function barRows(rows) {
-    return '<div class="breakdown">' + rows.map(r =>
-      '<div class="br-row"><span class="lbl">'+esc(r[0])+'</span><div class="bar"><div class="fill '+(r[3]==='warn'?'warn':'')+'" style="width:'+r[2]+'%;"></div></div><span class="val">'+esc(r[1])+'</span></div>'
-    ).join('') + '</div>';
-  }
-  function modelRows(byModel, cls) {
-    const entries = Object.entries(byModel).sort((a, b) => b[1] - a[1]).slice(0, 5);
-    const max = entries.length ? entries[0][1] : 1;
-    return entries.map(([m, n]) => [m, n, Math.round(n / max * 100), cls]);
-  }
-  function section(title, inner) {
-    return '<div class="detail-section"><h4>' + esc(title) + '</h4>' + inner + '</div>';
-  }
-
-  function renderOverview() {
-    if (!stats) return;
-    const { rework, paint, final } = stats;
-    document.getElementById('detail-name').textContent = '整體概覽 · Overview';
-    document.getElementById('detail-meta').textContent = '點擊 3D 工站檢視明細';
-    const max = Math.max(1, rework.count, paint.count, final.count);
-    const left = barRows([
-      ['下線(估)', unloadCount, 100, 'ok'],
-      ['整修', rework.count, Math.round(rework.count / max * 100), 'ok'],
-      ['補漆', paint.count,  Math.round(paint.count  / max * 100), 'warn'],
-      ['終檢', final.count,  Math.round(final.count  / max * 100), 'ok'],
-    ]);
-    const models = Object.entries(final.byModel).sort((a, b) => b[1] - a[1]).slice(0, 5);
-    const fpyRows = models.map(([m, n]) => {
-      const p = paint.byModel[m] || 0;
-      const v = Math.max(0, Math.min(1, (n - p) / n));
-      return [m, Math.round(v * 100) + '%', Math.round(v * 100), v >= 0.5 ? 'ok' : 'warn'];
-    });
-    document.getElementById('detail-content').innerHTML =
-      section('各站今日實績 · Station Status', left) +
-      section('主力車型直行率 · FPY by Model', fpyRows.length ? barRows(fpyRows) : '<div style="font-size:12px;color:var(--fg-mute);">今日終檢尚無資料</div>');
-  }
-
-  const STATION_META = {
-    rework: { name: 'ZONE B · 整修區', key: 'rework', right: '整修車型分布' },
-    paint:  { name: 'ZONE C · 補漆區', key: 'paint',  right: '需補漆車型排行' },
-    final:  { name: 'ZONE D · 終檢區', key: 'final',  right: '終檢車型分布' },
-  };
-
-  function renderDetail(id) {
-    const content = document.getElementById('detail-content');
-    if (id === 'unload') {
-      document.getElementById('detail-name').textContent = 'ZONE A · 下線區';
-      document.getElementById('detail-meta').textContent = '塗裝線下線估算';
-      content.innerHTML = section('今日下線進度', barRows([
-        ['剩餘待處理', unloadCount, Math.round(unloadCount / Math.max(1, unloadInitial) * 100), 'ok'],
-        ['已消耗', unloadInitial - unloadCount, Math.round((unloadInitial - unloadCount) / Math.max(1, unloadInitial) * 100), 'ok'],
-      ]));
-      return;
-    }
-    const meta = STATION_META[id];
-    if (!meta || !stats) return;
-    const s = stats[meta.key];
-    document.getElementById('detail-name').textContent = meta.name;
-    document.getElementById('detail-meta').textContent = `${s.workers.length} 位作業員 · ${s.activeCount} 位在線`;
-    const workersHtml = s.workers.length
-      ? '<div class="worker-list">' + s.workers.slice(0, 8).map(w =>
-          '<div class="worker-row"><span><span class="id">'+formatWorkerId(w.pid)+'</span><span class="name">最後 '+hhmm(w.lastTs)+(w.active?'':' · 離線')+'</span></span><span class="count">'+w.count+' PCS</span></div>'
-        ).join('') + '</div>'
-      : '<div style="font-size:12px;color:var(--fg-mute);">今日尚無實績</div>';
-    const rows = modelRows(s.byModel, id === 'paint' ? 'warn' : 'ok');
-    content.innerHTML =
-      section('今日作業員實績', workersHtml) +
-      section(meta.right, rows.length ? barRows(rows) : '<div style="font-size:12px;color:var(--fg-mute);">尚無車型資料</div>');
-  }
-
   let currentSheets = Object.assign({}, DEFAULT_SHEETS);
   try { currentSheets.paint = (JSON.parse(lsGet('sysSettingsCache') || 'null') || {}).sheet_name || currentSheets.paint; } catch(e) {}
 
   async function refresh() {
-    const srcEl = document.getElementById('data-src');
-    const errEl = document.getElementById('err-banner');
     try {
       let data = await fetchAllSheets(currentSheets);
       const s = data.settingsRaw;
@@ -1136,20 +1331,54 @@
       }
       const t = todaySlash();
       const isToday = r => r.date === t && isActiveWorker(r.pid); // 排除員工表標記「離職」的工號
+
       stats = {
-        rework: summarize(data.rework.filter(isToday)),
         paint:  summarize(data.paint.filter(isToday)),
+        rework: summarize(data.rework.filter(isToday)),
         final:  summarize(data.final.filter(isToday)),
       };
-      renderAll();
-      errEl.style.display = 'none';
-      srcEl.textContent = '資料來源：Google Sheet · 最後更新 ' + hhmm(new Date());
-    } catch (e) {
-      console.error('[PaintTrack 3D] 讀取失敗', e);
-      errEl.style.display = 'block';
-      if (stats) srcEl.textContent = srcEl.textContent.replace(/（.*）$/, '') + '（讀取失敗，顯示上次資料）';
+
+      const { rework, paint, final } = stats;
+      document.getElementById('pin-count-rework').textContent = rework.count + ' PCS';
+      document.getElementById('pin-meta-rework').textContent = `${rework.workers.length} 人 (${rework.activeCount} 在線)`;
+      update3DWorkers('rework', rework.workers);
+
+      document.getElementById('pin-count-paint').textContent = paint.count + ' PCS';
+      document.getElementById('pin-meta-paint').textContent = `${paint.workers.length} 人 (${paint.activeCount} 在線)`;
+      document.getElementById('pin-meta-paint').className = 'pin-meta warn';
+      update3DWorkers('paint', paint.workers);
+
+      document.getElementById('pin-count-final').textContent = final.count + ' PCS';
+      document.getElementById('pin-meta-final').textContent = final.last ? `最後 ${hhmm(final.last)}` : `${final.workers.length} 人`;
+      document.getElementById('pin-meta-final').className = 'pin-meta ok';
+      update3DWorkers('final', final.workers);
+
+      // 直行率 = (終檢 − 淨補漆) / 終檢；淨補漆 = 補漆 − RV/PU 必經 BL
+      const net = paintNet(paint, final);
+      const fpy = pct(net.fpy);
+      const rep = pct(net.repaint);
+      document.getElementById('kpi-pass').textContent = final.count;
+      document.getElementById('kpi-fpy').textContent = fpy;
+      document.getElementById('kpi-fpy-delta').textContent = `(終檢 ${final.count} − 淨補漆 ${net.paintNetCount}) ÷ 終檢`;
+      document.getElementById('kpi-fpy-delta').title = `淨補漆 = 補漆 ${paint.count} − RV/PU 必經 BL ${net.RVPU_BL}`;
+      document.getElementById('kpi-repaint').textContent = rep;
+      document.getElementById('kpi-repaint-delta').textContent = `淨補漆 ${net.paintNetCount} ÷ 終檢 ${final.count}`;
+      document.getElementById('flow-summary').textContent = `直行 ${fpy} ｜ 需補漆 ${rep}`;
+      document.getElementById('badge-repaint').textContent = `需補漆 ${rep}`;
+      document.getElementById('badge-fpy').textContent = `直行通道 ${fpy}`;
+
+      const allPids = new Set([...rework.workers, ...paint.workers, ...final.workers].map(w => w.pid));
+      document.getElementById('kpi-workers-delta').textContent = `B棟今日實績 ${allPids.size} 人`;
+      document.getElementById('nav-sub-rework').textContent = `${rework.workers.length} 位作業員 · ${rework.count} PCS`;
+      document.getElementById('nav-sub-paint').textContent  = `${paint.workers.length} 位作業員 · ${paint.count} PCS`;
+      document.getElementById('data-src').textContent = '全廠 28 區 × A/B/C 棟 · 更新於 ' + hhmm(new Date());
+
+      if (selectedStation) renderDetail(selectedStation); else renderOverview();
+    } catch(e) {
+      renderOverview();
     }
   }
+
   // 先讀員工表再載入看板資料；之後看板每 30 秒刷新，員工表每 15 分鐘重讀
   loadWorkerMap().then(refresh);
   setInterval(refresh, REFRESH_MS);
@@ -1159,7 +1388,7 @@
     const root = document.documentElement;
     const isDark = root.getAttribute('data-theme') === 'dark';
     root.setAttribute('data-theme', isDark ? 'light' : 'dark');
-    baseMat.color.setHex(isDark ? 0xf8fafc : 0x1e293b);
+    switch3DTheme(isDark);
   });
 })();
 </script>
