@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <title>全廠 3D 數位孿生戰情室 · INTEGRATED v3.2 (高對比立體版)</title>
+  <title>全廠 3D 數位孿生戰情室 · INTEGRATED v3.4 (360°建構展演版)</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700;800&family=Noto+Sans+TC:wght@400;500;700&display=swap">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
@@ -69,7 +69,7 @@
     }
 
     #canvas-container { position: absolute; inset: 0; z-index: 1; }
-    #labels-container { position: absolute; inset: 0; z-index: 2; pointer-events: none; overflow: hidden; }
+    #labels-container { position: absolute; inset: 0; z-index: 2; pointer-events: none; overflow: hidden; transition: opacity 0.35s; }
 
     /* 頂部懸浮導覽列：單行固定不換行 */
     .hud-top {
@@ -112,8 +112,16 @@
       background: linear-gradient(135deg, #0ea5e9, #2563eb); color: #fff; border-color: transparent;
       box-shadow: 0 3px 10px rgba(14, 165, 233, 0.3);
     }
-    .nav-pill.focus-abc { border-color: rgba(16, 185, 129, 0.5); color: var(--ok); }
-    .nav-pill.focus-abc.active { background: linear-gradient(135deg, #059669, #10b981); color: #fff; }
+    .nav-pill.showcase-btn {
+      border-color: rgba(124, 58, 237, 0.5);
+      background: linear-gradient(135deg, rgba(124, 58, 237, 0.12), rgba(14, 165, 233, 0.12));
+      color: var(--purple);
+    }
+    .nav-pill.showcase-btn:hover, .nav-pill.showcase-btn.active {
+      background: linear-gradient(135deg, #7c3aed, #0ea5e9);
+      color: #fff; border-color: transparent;
+      box-shadow: 0 4px 14px rgba(124, 58, 237, 0.4);
+    }
     .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
 
     .live-pill {
@@ -124,6 +132,17 @@
     .pulse { width: 7px; height: 7px; border-radius: 50%; background: var(--ok-bright); animation: pulse 1.6s infinite; }
     @keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.6); } 50% { box-shadow: 0 0 0 6px transparent; } }
     .clock-time { font-family: var(--font-mono); font-weight: 800; font-size: 13px; }
+
+    /* 功能展示進度橫幅 */
+    .showcase-toast {
+      position: absolute; top: 68px; left: 50%; transform: translateX(-50%); z-index: 30;
+      background: linear-gradient(135deg, rgba(15, 23, 42, 0.92), rgba(30, 41, 59, 0.92));
+      border: 1.5px solid #38bdf8; color: #f8fafc;
+      padding: 8px 20px; border-radius: 999px; font-size: 12px; font-weight: 800;
+      box-shadow: 0 10px 25px rgba(14, 165, 233, 0.35);
+      display: none; align-items: center; gap: 10px; pointer-events: none;
+      letter-spacing: 0.04em;
+    }
 
     /* A / B / C 棟科技全息大徽章 */
     .bldg-banner {
@@ -327,6 +346,11 @@
     <div class="road-badge ok" id="badge-fpy">直行通道 —</div>
   </div>
 
+  <!-- 360度建構展演狀態提示橫幅 -->
+  <div class="showcase-toast" id="showcase-toast">
+    <span>🎬 數位孿生全廠建構展演中：360° 環場掃描與廠房模組落位…</span>
+  </div>
+
   <!-- 頂部單行導覽列 -->
   <div class="hud-top">
     <div class="brand-bar">
@@ -334,7 +358,7 @@
       <div>
         <div class="brand-title">
           全廠 3D 數位孿生戰情室
-          <span class="tech-tag" id="engine-tag">INTEGRATED v3.2</span>
+          <span class="tech-tag" id="engine-tag">INTEGRATED v3.4</span>
         </div>
         <div class="brand-sub" id="data-src">全廠 28 區宏觀 × A/B/C 棟微觀工站 · 連線中…</div>
       </div>
@@ -343,7 +367,7 @@
 
     <div class="view-bar">
       <button class="nav-pill active" id="btn-view-all">🌐 全廠鳥瞰 (28區)</button>
-      <button class="nav-pill focus-abc" id="btn-view-abc">🎯 聚焦 ABC 核心棟</button>
+      <button class="nav-pill showcase-btn" id="btn-showcase">🎬 功能展示 (360° 建構)</button>
       <button class="nav-pill" id="btn-view-a"><span class="dot" style="background:#2563eb;"></span>A棟 · 射出/發泡</button>
       <button class="nav-pill" id="btn-view-b"><span class="dot" style="background:#10b981;"></span>B棟 · 整修/補漆/終檢</button>
       <button class="nav-pill" id="btn-view-c"><span class="dot" style="background:#f59e0b;"></span>C棟 · 塗裝/下線/點檢</button>
@@ -373,7 +397,7 @@
       <div class="kpi-val-wrap">
         <span class="kpi-lbl">B棟 · 直行率 FPY</span>
         <span class="kpi-val" id="kpi-fpy" style="color:var(--info);">—</span>
-        <span class="kpi-delta" id="kpi-fpy-delta">(終檢 − 補漆) ÷ 終檢</span>
+        <span class="kpi-delta" id="kpi-fpy-delta">(終檢 − 淨補漆) ÷ 終檢</span>
       </div>
     </div>
     <div class="kpi-card warn-accent">
@@ -381,7 +405,7 @@
       <div class="kpi-val-wrap">
         <span class="kpi-lbl">B棟 · 需補漆比例</span>
         <span class="kpi-val" id="kpi-repaint" style="color:var(--warn);">—</span>
-        <span class="kpi-delta" id="kpi-repaint-delta">補漆 ÷ 終檢</span>
+        <span class="kpi-delta" id="kpi-repaint-delta">淨補漆 ÷ 終檢</span>
       </div>
     </div>
     <div class="kpi-card purple-accent">
@@ -406,7 +430,7 @@
     <div class="insp-header">
       <div>
         <div class="insp-title" id="detail-name">全廠區域總覽 · Plant Map</div>
-        <div class="insp-sub" id="detail-meta">點擊「🎯 聚焦 ABC 核心棟」或任一工站</div>
+        <div class="insp-sub" id="detail-meta">點擊「🎬 功能展示」或任一廠棟檢視</div>
       </div>
       <button class="cam-btn" id="btn-overview" style="width:auto; height:24px; padding:0 8px; font-size:11px;">回全廠</button>
     </div>
@@ -479,9 +503,9 @@
   const B_MAIN_Z = 0.2;
   const B_BYPASS_Z = 4.7;
   const labelsContainer = document.getElementById('labels-container');
-  let showContextLabels = true; // 預設開啟周邊建築高對比標籤，讓全廠鳥瞰一目了然
+  let showContextLabels = true;
 
-  // 周邊建築清單 (對齊 平面圖1020_2.xlsx，依功能賦予高對比屋頂色與邊框色)
+  // 周邊建築清單 (對齊 平面圖1020_2.xlsx)
   const CONTEXT_BUILDINGS = [
     { id: 'back_gate', name: '後門',         x: -25.0, z: -21.5, w: 3.0, d: 1.4, h: 2.0, roof: 0x475569, wall: 0xcbd5e1, hex: '#64748b' },
     { id: 'waste1',    name: '廢棄物存放區', x: -31.0, z: -18.6, w: 6.5, d: 4.2, h: 2.4, roof: 0x64748b, wall: 0xcbd5e1, hex: '#64748b' },
@@ -521,6 +545,62 @@
     final:  { id: 'final',  bldg: 'B', zone: 'ZONE B3 · 終檢', title: '終檢區',     pos: { x: 8.5,   y: 0.22, z: B_MAIN_Z }, w: 6.4, d: 6.0, color: 0x10b981, hex: '#10b981' },
   };
 
+  // 共用多段路徑取樣器
+  const FLOW_PATHS = {
+    unloadToRework: [
+      { x: -3.0,  y: 0.28, z: 10.8 },
+      { x: -3.0,  y: 0.28, z: 8.2 },
+      { x: -13.5, y: 0.28, z: 8.2 },
+      { x: -13.5, y: 0.28, z: 3.2 }
+    ],
+    reworkToPaint: [
+      { x: -10.2, y: 0.28, z: B_MAIN_Z },
+      { x: -5.8,  y: 0.28, z: B_MAIN_Z }
+    ],
+    paintToFinal: [
+      { x: 0.8,   y: 0.28, z: B_MAIN_Z },
+      { x: 5.2,   y: 0.28, z: B_MAIN_Z }
+    ],
+    directBypass: [
+      { x: -13.5, y: 0.28, z: B_MAIN_Z + 3.0 },
+      { x: -13.5, y: 0.28, z: B_BYPASS_Z },
+      { x: 8.5,   y: 0.28, z: B_BYPASS_Z },
+      { x: 8.5,   y: 0.28, z: B_MAIN_Z + 3.0 }
+    ]
+  };
+
+  function samplePolyline(pts, t) {
+    let totalLen = 0;
+    const lens = [];
+    for (let i = 0; i < pts.length - 1; i++) {
+      const dx = pts[i+1].x - pts[i].x;
+      const dz = pts[i+1].z - pts[i].z;
+      const l = Math.hypot(dx, dz);
+      lens.push(l);
+      totalLen += l;
+    }
+    let target = ((t % 1) + 1) % 1 * totalLen;
+    for (let i = 0; i < lens.length; i++) {
+      if (target <= lens[i] || i === lens.length - 1) {
+        const localT = lens[i] > 0 ? target / lens[i] : 0;
+        const x = pts[i].x + (pts[i+1].x - pts[i].x) * localT;
+        const y = pts[i].y + (pts[i+1].y - pts[i].y) * localT;
+        const z = pts[i].z + (pts[i+1].z - pts[i].z) * localT;
+        const angle = Math.atan2(pts[i+1].z - pts[i].z, pts[i+1].x - pts[i].x);
+        return { x, y, z, angle };
+      }
+      target -= lens[i];
+    }
+    return { x: pts[0].x, y: pts[0].y, z: pts[0].z, angle: 0 };
+  }
+
+  // 彈跳落地緩動函數 (Back-Out Easing，讓建築方塊落下時有科技組裝感)
+  function easeOutBack(x) {
+    const c1 = 1.45;
+    const c3 = c1 + 1;
+    return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2);
+  }
+
   // 建立 DOM 標籤
   const bannerEls = [];
   CORE_BLDGS.forEach(b => {
@@ -552,11 +632,13 @@
     el.className = 'station-pin';
     el.dataset.id = cfg.id;
     const isReady = ['unload', 'rework', 'paint', 'final'].includes(cfg.id);
+    const defaultVal = cfg.id === 'a_mold' ? '3 台運轉中' : (isReady ? '—' : '待串接');
+    const defaultMeta = cfg.id === 'a_mold' ? 'IMM #1~#3 自動成型' : (isReady ? '讀取中' : 'A棟產線模組');
     el.innerHTML = `
       <span class="pin-zone">${cfg.zone}</span>
       <span class="pin-title">${cfg.title}</span>
-      <span class="pin-count" id="pin-count-${cfg.id}">${isReady ? '—' : '待串接'}</span>
-      <span class="pin-meta info" id="pin-meta-${cfg.id}">${isReady ? '讀取中' : 'A棟產線模組'}</span>
+      <span class="pin-count" id="pin-count-${cfg.id}">${defaultVal}</span>
+      <span class="pin-meta info" id="pin-meta-${cfg.id}">${defaultMeta}</span>
     `;
     el.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -574,11 +656,12 @@
   let update3DWorkers = function() {};
   let focus3DStation = function() {};
   let flyToPreset = function() {};
+  let startShowcase = function() {};
   let switch3DTheme = function() {};
   let zoomCamera = function() {};
 
   // ============================================================================
-  // 2. 啟動高對比 3D WebGL 引擎
+  // 2. 啟動高對比 3D WebGL 引擎 (含 360° 建築落下展演 + A棟 3台動態射出機 + 精算台車速度)
   // ============================================================================
   const container = document.getElementById('canvas-container');
   let webglSuccess = false;
@@ -590,8 +673,7 @@
 
       const CAM_PRESETS = {
         all:  { pos: new THREE.Vector3(0, 66, 68),   tar: new THREE.Vector3(-2, 0, 1),    label: '全廠宏觀鳥瞰 (28區)' },
-        abc:  { pos: new THREE.Vector3(-5, 42, 44),  tar: new THREE.Vector3(-5, 0, 1.5),  label: '聚焦 A/B/C 三大核心棟' },
-        a:    { pos: new THREE.Vector3(-4, 28, 5),   tar: new THREE.Vector3(-4, 0, -13.6),label: 'A棟 · 射出與發泡工廠' },
+        a:    { pos: new THREE.Vector3(-4, 28, 5),   tar: new THREE.Vector3(-4, 0, -13.6),label: 'A棟 · 射出與發泡工廠 (3台射出機運轉中)' },
         b:    { pos: new THREE.Vector3(-2, 25, 25),  tar: new THREE.Vector3(-2, 0, 1.2),  label: 'B棟 · 整修/補漆/終檢線' },
         c:    { pos: new THREE.Vector3(-6, 28, 40),  tar: new THREE.Vector3(-8, 0, 16.5), label: 'C棟 · 塗裝與下線區' },
         west: { pos: new THREE.Vector3(-42, 34, 20), tar: new THREE.Vector3(-30, 0, 0),   label: '西側動力與環保設施群' }
@@ -603,9 +685,20 @@
       const currentLookAt = CAM_PRESETS.all.tar.clone();
       let isCamFlying = false;
 
+      // 360° 功能展示狀態機
+      let isShowcasing = false;
+      let showcaseStartTime = 0;
+      const SHOWCASE_DURATION = 8.2; // 8.2秒完成全廠組裝與 360 度環繞運鏡
+      const dropItems = []; // { mesh, baseY, delay, duration }
+
       flyToPreset = function(key) {
         const p = CAM_PRESETS[key];
         if (!p) return;
+        isShowcasing = false;
+        document.getElementById('showcase-toast').style.display = 'none';
+        labelsContainer.style.opacity = '1';
+        dropItems.forEach(item => { item.mesh.position.y = item.baseY; item.mesh.scale.set(1, 1, 1); });
+
         camTargetPos.copy(p.pos);
         ctrlTargetPos.copy(p.tar);
         isCamFlying = true;
@@ -615,7 +708,27 @@
         });
       };
 
+      startShowcase = function() {
+        isCamFlying = false;
+        isShowcasing = true;
+        showcaseStartTime = performance.now() / 1000;
+        document.getElementById('showcase-toast').style.display = 'flex';
+        document.getElementById('mode-indicator').textContent = '目前模式：🎬 360° 數位孿生建構展演中…';
+        document.querySelectorAll('.view-bar .nav-pill').forEach(btn => {
+          btn.classList.toggle('active', btn.id === 'btn-showcase');
+        });
+        // 將所有建築抬升至高空準備依序落下
+        dropItems.forEach(item => {
+          item.mesh.position.y = item.baseY + 42;
+          item.mesh.scale.set(0.01, 0.01, 0.01);
+        });
+      };
+
       focus3DStation = function(posObj) {
+        isShowcasing = false;
+        document.getElementById('showcase-toast').style.display = 'none';
+        labelsContainer.style.opacity = '1';
+        dropItems.forEach(item => { item.mesh.position.y = item.baseY; item.mesh.scale.set(1, 1, 1); });
         camTargetPos.set(posObj.x, posObj.y + 18, posObj.z + 22);
         ctrlTargetPos.set(posObj.x, posObj.y, posObj.z);
         isCamFlying = true;
@@ -623,6 +736,7 @@
 
       zoomCamera = function(factor) {
         isCamFlying = false;
+        isShowcasing = false;
         camera.position.multiplyScalar(factor);
       };
 
@@ -645,8 +759,7 @@
         controls.addEventListener('start', () => { isCamFlying = false; });
       }
 
-      // 增強立體光影對比度：讓建築物的受光面與背光面有明顯立體層次
-      scene.add(new THREE.AmbientLight(0xe2e8f0, 0.72));
+      scene.add(new THREE.AmbientLight(0xe2e8f0, 0.75));
       const dirLight = new THREE.DirectionalLight(0xffffff, 1.05);
       dirLight.position.set(35, 62, 45);
       dirLight.castShadow = true;
@@ -661,7 +774,6 @@
       const floorGroup = new THREE.Group();
       scene.add(floorGroup);
 
-      // 廠區大底板：改為帶點科技冷灰藍的實心底板，凸顯上方所有建築
       const baseGeo = new THREE.BoxGeometry(78, 1.4, 52);
       const baseMat = new THREE.MeshStandardMaterial({ color: 0xdbe6f5, roughness: 0.7 });
       const baseMesh = new THREE.Mesh(baseGeo, baseMat);
@@ -686,7 +798,6 @@
       }
       floorGroup.add(gridHelper);
 
-      // 廠區主要柏油道路網 (深灰藍路面，清晰分割各大廠區)
       function addRoad(x, z, w, d) {
         const r = new THREE.Mesh(
           new THREE.BoxGeometry(w, 0.05, d),
@@ -696,12 +807,11 @@
         r.receiveShadow = true;
         floorGroup.add(r);
       }
-      addRoad(-26.5, 0, 3.2, 46); // 西側縱向通道
-      addRoad(-2, -6.2, 46, 2.8); // A棟與B棟間主幹道
-      addRoad(-2, 8.2, 46, 3.0);  // B棟與C棟間主幹道
-      addRoad(19.5, 4, 4.2, 38);  // 東側迎賓主幹道
+      addRoad(-26.5, 0, 3.2, 46);
+      addRoad(-2, -6.2, 46, 2.8);
+      addRoad(-2, 8.2, 46, 3.0);
+      addRoad(19.5, 4, 4.2, 38);
 
-      // 東側園環地標
       const rbOuter = new THREE.Mesh(
         new THREE.CylinderGeometry(2.3, 2.5, 0.28, 24),
         new THREE.MeshStandardMaterial({ color: 0x059669, roughness: 0.4 })
@@ -714,43 +824,29 @@
       rbInner.position.set(17.5, 0.65, 3.0);
       floorGroup.add(rbOuter, rbInner);
 
-      // ★ 周邊 19 座建築：改為不透明高對比立體廠房 + 深藍灰結構邊框 + 分色屋頂頂蓋 ★
+      // 周邊 19 座高對比實體建築 (加入展演分批落下佇列：0.2s ~ 2.4s)
       const ctxMeshes = [];
       const strongEdgeMat = new THREE.LineBasicMaterial({ color: 0x334155, transparent: true, opacity: 0.85 });
 
-      CONTEXT_BUILDINGS.forEach(b => {
+      CONTEXT_BUILDINGS.forEach((b, idx) => {
         const bGroup = new THREE.Group();
         bGroup.position.set(b.x, 0, b.z);
-
-        // 建築主牆體 (不透明高對比實體)
         const geo = new THREE.BoxGeometry(b.w, b.h, b.d);
-        const wallMat = new THREE.MeshStandardMaterial({
-          color: b.wall,
-          roughness: 0.55,
-          metalness: 0.15
-        });
+        const wallMat = new THREE.MeshStandardMaterial({ color: b.wall, roughness: 0.55, metalness: 0.15 });
         const m = new THREE.Mesh(geo, wallMat);
         m.position.y = b.h / 2;
-        m.castShadow = true;
-        m.receiveShadow = true;
+        m.castShadow = true; m.receiveShadow = true;
+        m.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo), strongEdgeMat));
 
-        // 清晰深色結構線框
-        const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geo), strongEdgeMat);
-        m.add(edges);
-
-        // 屋頂分區色塊頂蓋 (一眼看懂倉庫/動力房/辦公樓)
         const roofGeo = new THREE.BoxGeometry(b.w * 0.92, 0.12, b.d * 0.92);
-        const roofMat = new THREE.MeshStandardMaterial({
-          color: b.roof,
-          roughness: 0.4,
-          metalness: 0.2
-        });
+        const roofMat = new THREE.MeshStandardMaterial({ color: b.roof, roughness: 0.4, metalness: 0.2 });
         const roofMesh = new THREE.Mesh(roofGeo, roofMat);
         roofMesh.position.y = b.h + 0.06;
 
         bGroup.add(m, roofMesh);
-        floorGroup.add(bGroup);
+        scene.add(bGroup);
         ctxMeshes.push({ wallMat, lightWall: b.wall });
+        dropItems.push({ mesh: bGroup, baseY: 0, delay: 0.2 + idx * 0.11, duration: 0.75 });
       });
 
       switch3DTheme = function(isDark) {
@@ -760,8 +856,9 @@
         });
       };
 
-      // A / B / C 三大核心棟外框 (鮮明發光底座 + 強化線框玻璃罩)
-      CORE_BLDGS.forEach(b => {
+      // A / B / C 三大核心棟外框 (加入展演落下佇列：2.4s ~ 3.3s)
+      const bldgMeshes = [];
+      CORE_BLDGS.forEach((b, idx) => {
         const group = new THREE.Group();
         group.position.set(b.x, 0, b.z);
         const pad = new THREE.Mesh(new THREE.BoxGeometry(b.w, 0.24, b.d), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 }));
@@ -775,29 +872,274 @@
         border.position.y = 0.08;
 
         const shellGeo = new THREE.BoxGeometry(b.w, b.h, b.d);
-        const shell = new THREE.Mesh(shellGeo, new THREE.MeshPhysicalMaterial({ color: b.color, transparent: true, opacity: 0.12 }));
+        const shell = new THREE.Mesh(shellGeo, new THREE.MeshPhysicalMaterial({ color: b.color, transparent: true, opacity: 0.10 }));
         shell.position.y = b.h / 2 + 0.2;
         shell.add(new THREE.LineSegments(new THREE.EdgesGeometry(shellGeo), new THREE.LineBasicMaterial({ color: b.color })));
         group.add(pad, border, shell);
+        group.userData = { bldgKey: b.key };
         scene.add(group);
+        bldgMeshes.push(group);
+        dropItems.push({ mesh: group, baseY: 0, delay: 2.4 + idx * 0.35, duration: 0.85 });
       });
 
-      // 工站平台與內部機台設備
+      // ============================================================================
+      // 工站與設備模型 (含 A棟 3台動態運作射出機 IMM #1 ~ #3)
+      // ============================================================================
+      const animatedProps = { fan: null, laser: null, agv: null, borders: [], imms: [] };
+      const stationMeshes = {};
       const workerGroups = { rework: new THREE.Group(), paint: new THREE.Group(), final: new THREE.Group() };
-      Object.values(STATIONS_CFG).forEach(cfg => {
-        const g = new THREE.Group();
-        g.position.set(cfg.pos.x, cfg.pos.y, cfg.pos.z);
-        const pad = new THREE.Mesh(new THREE.BoxGeometry(cfg.w, 0.26, cfg.d), new THREE.MeshStandardMaterial({ color: 0xf8fafc }));
-        pad.position.y = 0.13;
-        const border = new THREE.Mesh(new THREE.BoxGeometry(cfg.w + 0.3, 0.14, cfg.d + 0.3), new THREE.MeshStandardMaterial({ color: cfg.color, emissive: cfg.color, emissiveIntensity: 0.5 }));
+
+      function createTechPlatform(w, d, borderHex) {
+        const group = new THREE.Group();
+        const pad = new THREE.Mesh(
+          new THREE.BoxGeometry(w, 0.25, d),
+          new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.35, metalness: 0.2 })
+        );
+        pad.position.y = 0.125;
+        pad.receiveShadow = true; pad.castShadow = true;
+        group.add(pad);
+
+        const borderMat = new THREE.MeshStandardMaterial({
+          color: borderHex,
+          emissive: borderHex,
+          emissiveIntensity: 0.5,
+          roughness: 0.2
+        });
+        const border = new THREE.Mesh(new THREE.BoxGeometry(w + 0.28, 0.14, d + 0.28), borderMat);
         border.position.y = 0.07;
-        const equip = new THREE.Mesh(new THREE.BoxGeometry(cfg.w * 0.65, 1.5, cfg.d * 0.55), new THREE.MeshStandardMaterial({ color: cfg.color, transparent: true, opacity: 0.45 }));
-        equip.position.y = 1.0;
-        equip.castShadow = true;
-        g.add(pad, border, equip);
-        if (workerGroups[cfg.id]) g.add(workerGroups[cfg.id]);
-        scene.add(g);
-      });
+        group.add(border);
+        animatedProps.borders.push(borderMat);
+        return group;
+      }
+
+      // ★ 1. A棟：發泡成型區 + 射出成型區 (3台大型動態運作射出成型機) ★
+      (function buildAStations(){
+        const gFoam = createTechPlatform(7.6, 6.2, STATIONS_CFG.a_foam.color);
+        gFoam.position.set(STATIONS_CFG.a_foam.pos.x, STATIONS_CFG.a_foam.pos.y, STATIONS_CFG.a_foam.pos.z);
+        for (let i = -1; i <= 1; i += 2) {
+          const cell = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.3, 3.4), new THREE.MeshStandardMaterial({color: 0x0284c7, metalness: 0.5, roughness: 0.3}));
+          cell.position.set(i * 1.8, 0.85, 0); cell.castShadow = true;
+          const top = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.14, 3.6), new THREE.MeshStandardMaterial({color: 0x38bdf8, emissive: 0x38bdf8, emissiveIntensity: 0.35}));
+          top.position.set(i * 1.8, 1.55, 0);
+          gFoam.add(cell, top);
+        }
+        gFoam.userData = { id: 'a_foam' };
+        scene.add(gFoam);
+        stationMeshes.a_foam = gFoam;
+        dropItems.push({ mesh: gFoam, baseY: STATIONS_CFG.a_foam.pos.y, delay: 3.5, duration: 0.75 });
+
+        // 射出成型區：放入 3 台大型射出成型機 (含動態開合模、射出呼吸燈與龍門機械手臂取件)
+        const gMold = createTechPlatform(21.5, 6.6, STATIONS_CFG.a_mold.color);
+        gMold.position.set(STATIONS_CFG.a_mold.pos.x, STATIONS_CFG.a_mold.pos.y, STATIONS_CFG.a_mold.pos.z);
+
+        for (let i = 0; i < 3; i++) {
+          const mx = -6.4 + i * 6.4;
+          const immGroup = new THREE.Group();
+          immGroup.position.set(mx, 0, -0.3);
+
+          // 機台重型底座
+          const bed = new THREE.Mesh(
+            new THREE.BoxGeometry(4.6, 0.45, 2.5),
+            new THREE.MeshStandardMaterial({ color: 0x1e3a8a, metalness: 0.6, roughness: 0.35 })
+          );
+          bed.position.y = 0.45;
+          bed.castShadow = true;
+
+          // 右側：固定模板與射出料管單元 (Stationary Platen & Injection Unit)
+          const fixedPlaten = new THREE.Mesh(
+            new THREE.BoxGeometry(0.55, 1.45, 2.3),
+            new THREE.MeshStandardMaterial({ color: 0x2563eb, metalness: 0.5, roughness: 0.3 })
+          );
+          fixedPlaten.position.set(0.5, 1.2, 0);
+          fixedPlaten.castShadow = true;
+
+          const barrelMat = new THREE.MeshStandardMaterial({
+            color: 0x38bdf8,
+            emissive: 0x0ea5e9,
+            emissiveIntensity: 0.3
+          });
+          const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 1.4, 12), barrelMat);
+          barrel.rotation.z = Math.PI / 2;
+          barrel.position.set(1.4, 1.2, 0);
+
+          // 4根哥林柱導桿 (Tie Bars)
+          for (let tz of [-0.85, 0.85]) {
+            const bar = new THREE.Mesh(
+              new THREE.CylinderGeometry(0.08, 0.08, 2.5, 8),
+              new THREE.MeshStandardMaterial({ color: 0xe2e8f0, metalness: 0.85, roughness: 0.15 })
+            );
+            bar.rotation.z = Math.PI / 2;
+            bar.position.set(-0.65, 1.35, tz);
+            immGroup.add(bar);
+          }
+
+          // 左側：可動模板與曲手鎖模機構 (Moving Platen - 會動態往返開合模)
+          const movingPlaten = new THREE.Mesh(
+            new THREE.BoxGeometry(0.75, 1.45, 2.3),
+            new THREE.MeshStandardMaterial({ color: 0x0ea5e9, metalness: 0.4, roughness: 0.25 })
+          );
+          movingPlaten.position.set(-0.8, 1.2, 0);
+          movingPlaten.castShadow = true;
+
+          // 模具內成型的白色保桿部品 (開模時顯現並由機械手臂取出)
+          const moldedPart = new THREE.Mesh(
+            new THREE.BoxGeometry(0.25, 0.55, 1.2),
+            new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x38bdf8, emissiveIntensity: 0.3 })
+          );
+          moldedPart.position.set(0.0, 1.2, 0);
+
+          // 頂部龍門機械取出手臂 (Gantry Take-out Robot)
+          const gantryPillar = new THREE.Mesh(
+            new THREE.BoxGeometry(0.28, 2.6, 0.28),
+            new THREE.MeshStandardMaterial({ color: 0x475569, metalness: 0.6 })
+          );
+          gantryPillar.position.set(0.0, 1.8, -1.25);
+
+          const gantryBeam = new THREE.Mesh(
+            new THREE.BoxGeometry(0.24, 0.22, 3.2),
+            new THREE.MeshStandardMaterial({ color: 0xf59e0b })
+          );
+          gantryBeam.position.set(0.0, 3.0, 0.15);
+
+          // 機械手臂垂直升降臂與吸盤夾具
+          const robotArm = new THREE.Group();
+          const armRod = new THREE.Mesh(
+            new THREE.BoxGeometry(0.14, 1.3, 0.14),
+            new THREE.MeshStandardMaterial({ color: 0x10b981, emissive: 0x10b981, emissiveIntensity: 0.45 })
+          );
+          const gripper = new THREE.Mesh(
+            new THREE.BoxGeometry(0.32, 0.18, 0.65),
+            new THREE.MeshStandardMaterial({ color: 0xffffff })
+          );
+          gripper.position.y = -0.65;
+          robotArm.add(armRod, gripper);
+          robotArm.position.set(0.0, 2.6, 0.0);
+
+          // 機台頂部稼動狀態綠燈塔
+          const statusTower = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.12, 0.12, 0.35, 12),
+            new THREE.MeshStandardMaterial({ color: 0x10b981, emissive: 0x10b981, emissiveIntensity: 0.9 })
+          );
+          statusTower.position.set(0.5, 2.1, 0.8);
+
+          immGroup.add(bed, fixedPlaten, barrel, movingPlaten, moldedPart, gantryPillar, gantryBeam, robotArm, statusTower);
+          gMold.add(immGroup);
+
+          animatedProps.imms.push({
+            movingPlaten,
+            moldedPart,
+            robotArm,
+            barrelMat,
+            phase: i * 2.1 // 3台射出機錯開成型週期相位
+          });
+        }
+
+        gMold.userData = { id: 'a_mold' };
+        scene.add(gMold);
+        stationMeshes.a_mold = gMold;
+        dropItems.push({ mesh: gMold, baseY: STATIONS_CFG.a_mold.pos.y, delay: 3.65, duration: 0.75 });
+      })();
+
+      // 2. C棟：大塗一線 + 塗裝下線區
+      (function buildCStations(){
+        const cLine = new THREE.Group();
+        cLine.position.set(-15.0, 0.22, 16.5);
+        const oven = new THREE.Mesh(new THREE.BoxGeometry(10.0, 2.2, 2.6), new THREE.MeshStandardMaterial({color: 0xd97706, metalness: 0.5, roughness: 0.3}));
+        oven.position.set(0, 1.2, -2.5); oven.castShadow = true;
+        const sprayGeo = new THREE.BoxGeometry(10.0, 2.2, 2.6);
+        const sprayBooth = new THREE.Mesh(sprayGeo, new THREE.MeshPhysicalMaterial({color: 0x38bdf8, transparent: true, opacity: 0.32, roughness: 0.08}));
+        sprayBooth.position.set(0, 1.2, 2.5);
+        sprayBooth.add(new THREE.LineSegments(new THREE.EdgesGeometry(sprayGeo), new THREE.LineBasicMaterial({color: 0x0ea5e9})));
+        cLine.add(oven, sprayBooth);
+        scene.add(cLine);
+        dropItems.push({ mesh: cLine, baseY: 0.22, delay: 3.8, duration: 0.75 });
+
+        const gUnload = createTechPlatform(6.0, 5.8, STATIONS_CFG.unload.color);
+        gUnload.position.set(STATIONS_CFG.unload.pos.x, STATIONS_CFG.unload.pos.y, STATIONS_CFG.unload.pos.z);
+        for (let i = 0; i < 4; i++) {
+          const px = (i % 2) * 1.9 - 0.95;
+          const pz = Math.floor(i / 2) * 1.8 - 0.9;
+          const pallet = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.18, 1.4), new THREE.MeshStandardMaterial({color: 0xd97706}));
+          pallet.position.set(px, 0.34, pz);
+          const cargoH = 0.9 + (i % 2) * 0.45;
+          const cargoGeo = new THREE.BoxGeometry(1.25, cargoH, 1.25);
+          const cargo = new THREE.Mesh(cargoGeo, new THREE.MeshStandardMaterial({color: 0x64748b, roughness: 0.3}));
+          cargo.position.set(px, 0.43 + cargoH/2, pz);
+          cargo.castShadow = true;
+          cargo.add(new THREE.LineSegments(new THREE.EdgesGeometry(cargoGeo), new THREE.LineBasicMaterial({color: 0x38bdf8})));
+          gUnload.add(pallet, cargo);
+        }
+        const agv = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.45, 0.85), new THREE.MeshStandardMaterial({color: 0xfacc15, emissive: 0xf59e0b, emissiveIntensity: 0.35}));
+        agv.position.set(-2.0, 0.48, 1.7); agv.castShadow = true;
+        animatedProps.agv = agv;
+        gUnload.add(agv);
+
+        gUnload.userData = { id: 'unload' };
+        scene.add(gUnload);
+        stationMeshes.unload = gUnload;
+        dropItems.push({ mesh: gUnload, baseY: STATIONS_CFG.unload.pos.y, delay: 3.95, duration: 0.75 });
+      })();
+
+      // 3. B棟：整修區 + 補漆區 + 終檢區
+      (function buildBStations(){
+        const gRework = createTechPlatform(6.4, 6.0, STATIONS_CFG.rework.color);
+        gRework.position.set(STATIONS_CFG.rework.pos.x, STATIONS_CFG.rework.pos.y, STATIONS_CFG.rework.pos.z);
+        for (let i = -1; i <= 1; i += 2) {
+          const table = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.85, 3.4), new THREE.MeshStandardMaterial({color: 0x334155}));
+          table.position.set(i * 1.45, 0.65, 0); table.castShadow = true;
+          const top = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.12, 3.6), new THREE.MeshStandardMaterial({color: 0x0284c7, emissive: 0x0ea5e9, emissiveIntensity: 0.4}));
+          top.position.set(i * 1.45, 1.12, 0);
+          gRework.add(table, top);
+        }
+        const arch = new THREE.Mesh(new THREE.BoxGeometry(5.4, 0.16, 0.4), new THREE.MeshStandardMaterial({color: 0xffffff, emissive: 0x38bdf8, emissiveIntensity: 0.85}));
+        arch.position.set(0, 2.8, 0);
+        gRework.add(arch, workerGroups.rework);
+        gRework.userData = { id: 'rework' };
+        scene.add(gRework);
+        stationMeshes.rework = gRework;
+        dropItems.push({ mesh: gRework, baseY: STATIONS_CFG.rework.pos.y, delay: 4.1, duration: 0.75 });
+
+        const gPaint = createTechPlatform(6.4, 6.0, STATIONS_CFG.paint.color);
+        gPaint.position.set(STATIONS_CFG.paint.pos.x, STATIONS_CFG.paint.pos.y, STATIONS_CFG.paint.pos.z);
+        const boothGeo = new THREE.BoxGeometry(5.0, 2.7, 4.0);
+        const booth = new THREE.Mesh(boothGeo, new THREE.MeshPhysicalMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.28, roughness: 0.05 }));
+        booth.position.set(0, 1.6, 0);
+        booth.add(new THREE.LineSegments(new THREE.EdgesGeometry(boothGeo), new THREE.LineBasicMaterial({color: 0xf59e0b})));
+        const roof = new THREE.Mesh(new THREE.BoxGeometry(5.2, 0.28, 4.2), new THREE.MeshStandardMaterial({color: 0x334155}));
+        roof.position.set(0, 3.1, 0); roof.castShadow = true;
+        const duct = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.6, 16), new THREE.MeshStandardMaterial({color: 0x64748b}));
+        duct.position.set(1.3, 3.5, -0.6);
+        const fanGroup = new THREE.Group();
+        const blade1 = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.06, 0.2), new THREE.MeshStandardMaterial({color: 0xf59e0b, emissive: 0xf59e0b, emissiveIntensity: 0.7}));
+        const blade2 = blade1.clone(); blade2.rotation.y = Math.PI / 2;
+        fanGroup.add(blade1, blade2);
+        fanGroup.position.set(1.3, 3.82, -0.6);
+        animatedProps.fan = fanGroup;
+
+        gPaint.add(booth, roof, duct, fanGroup, workerGroups.paint);
+        gPaint.userData = { id: 'paint' };
+        scene.add(gPaint);
+        stationMeshes.paint = gPaint;
+        dropItems.push({ mesh: gPaint, baseY: STATIONS_CFG.paint.pos.y, delay: 4.25, duration: 0.75 });
+
+        const gFinal = createTechPlatform(6.4, 6.0, STATIONS_CFG.final.color);
+        gFinal.position.set(STATIONS_CFG.final.pos.x, STATIONS_CFG.final.pos.y, STATIONS_CFG.final.pos.z);
+        const p1 = new THREE.Mesh(new THREE.BoxGeometry(0.4, 2.8, 4.2), new THREE.MeshStandardMaterial({color: 0x1e293b}));
+        p1.position.set(-1.1, 1.6, 0); p1.castShadow = true;
+        const lightStrip = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.22, 4.3), new THREE.MeshStandardMaterial({color: 0x10b981, emissive: 0x10b981, emissiveIntensity: 0.9}));
+        lightStrip.position.set(-1.1, 3.05, 0);
+        const laserBeam = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.07, 0.16), new THREE.MeshBasicMaterial({ color: 0x10b981, transparent: true, opacity: 0.9 }));
+        laserBeam.position.set(0.2, 1.5, 0);
+        animatedProps.laser = laserBeam;
+        const desk = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.85, 3.2), new THREE.MeshStandardMaterial({color: 0x334155}));
+        desk.position.set(1.0, 0.65, 0); desk.castShadow = true;
+
+        gFinal.add(p1, lightStrip, laserBeam, desk, workerGroups.final);
+        gFinal.userData = { id: 'final' };
+        scene.add(gFinal);
+        stationMeshes.final = gFinal;
+        dropItems.push({ mesh: gFinal, baseY: STATIONS_CFG.final.pos.y, delay: 4.4, duration: 0.75 });
+      })();
 
       update3DWorkers = function(stationKey, workers) {
         const g = workerGroups[stationKey];
@@ -809,27 +1151,125 @@
           body.position.y = 0.56;
           const head = new THREE.Mesh(new THREE.SphereGeometry(0.19, 10, 10), new THREE.MeshStandardMaterial({ color: w.active ? 0x38bdf8 : 0x94a3b8 }));
           head.position.y = 1.04;
-          avatar.add(body, head);
+          const ring = new THREE.Mesh(new THREE.RingGeometry(0.24, 0.32, 16), new THREE.MeshBasicMaterial({ color: w.active ? 0x10b981 : 0x94a3b8, side: THREE.DoubleSide }));
+          ring.rotation.x = Math.PI / 2;
+          ring.position.y = 0.28;
+          avatar.add(body, head, ring);
           avatar.position.set(-1.8 + (idx % 5) * 0.9, 0, -2.2 - Math.floor(idx / 5) * 0.6);
           g.add(avatar);
         });
       };
 
-      // 動線軌道
-      function drawTrack(v1, v2, hex) {
+      // ============================================================================
+      // 軌道與部品搬運台車 (恢復原版精算過的物理移動速度)
+      // ============================================================================
+      function drawCyberTrack(p1Obj, p2Obj, hex, width = 0.62) {
+        const v1 = new THREE.Vector3(p1Obj.x, p1Obj.y, p1Obj.z);
+        const v2 = new THREE.Vector3(p2Obj.x, p2Obj.y, p2Obj.z);
         const len = v1.distanceTo(v2);
-        const m = new THREE.Mesh(new THREE.BoxGeometry(len, 0.08, 0.55), new THREE.MeshBasicMaterial({ color: hex }));
+        const geo = new THREE.BoxGeometry(len + width * 0.4, 0.05, width);
+        const mat = new THREE.MeshStandardMaterial({ color: 0x1e293b, emissive: hex, emissiveIntensity: 0.4, roughness: 0.3 });
+        const mesh = new THREE.Mesh(geo, mat);
         const mid = v1.clone().add(v2).multiplyScalar(0.5);
-        m.position.copy(mid);
-        m.rotation.y = -Math.atan2(v2.z - v1.z, v2.x - v1.x);
-        scene.add(m);
+        mesh.position.copy(mid);
+        const angle = Math.atan2(v2.z - v1.z, v2.x - v1.x);
+        mesh.rotation.y = -angle;
+        scene.add(mesh);
+
+        const core = new THREE.Mesh(new THREE.BoxGeometry(len, 0.07, 0.14), new THREE.MeshBasicMaterial({ color: hex }));
+        core.position.copy(mid);
+        core.rotation.y = -angle;
+        scene.add(core);
+
+        const arrowGeo = new THREE.ConeGeometry(0.26, 0.55, 3);
+        arrowGeo.rotateZ(-Math.PI / 2);
+        const arrow = new THREE.Mesh(arrowGeo, new THREE.MeshBasicMaterial({ color: 0xffffff }));
+        arrow.position.copy(mid).add(new THREE.Vector3(0, 0.06, 0));
+        arrow.scale.set(1, 0.2, 1);
+        arrow.rotation.y = -angle;
+        scene.add(arrow);
       }
-      const pC1 = new THREE.Vector3(-3.0, 0.28, 10.8), pC2 = new THREE.Vector3(-3.0, 0.28, 8.2), pC3 = new THREE.Vector3(-13.5, 0.28, 8.2), pC4 = new THREE.Vector3(-13.5, 0.28, 3.2);
-      drawTrack(pC1, pC2, 0x10b981); drawTrack(pC2, pC3, 0x10b981); drawTrack(pC3, pC4, 0x10b981);
-      drawTrack(new THREE.Vector3(-10.2, 0.28, B_MAIN_Z), new THREE.Vector3(-5.8, 0.28, B_MAIN_Z), 0xf59e0b);
-      drawTrack(new THREE.Vector3(0.8, 0.28, B_MAIN_Z), new THREE.Vector3(5.2, 0.28, B_MAIN_Z), 0xf59e0b);
-      const bP1 = new THREE.Vector3(-13.5, 0.28, B_MAIN_Z + 3.0), bP2 = new THREE.Vector3(-13.5, 0.28, B_BYPASS_Z), bP3 = new THREE.Vector3(8.5, 0.28, B_BYPASS_Z), bP4 = new THREE.Vector3(8.5, 0.28, B_MAIN_Z + 3.0);
-      drawTrack(bP1, bP2, 0x10b981); drawTrack(bP2, bP3, 0x10b981); drawTrack(bP3, bP4, 0x10b981);
+
+      for (let i = 0; i < FLOW_PATHS.unloadToRework.length - 1; i++) {
+        drawCyberTrack(FLOW_PATHS.unloadToRework[i], FLOW_PATHS.unloadToRework[i+1], 0x10b981);
+      }
+      drawCyberTrack(FLOW_PATHS.reworkToPaint[0], FLOW_PATHS.reworkToPaint[1], 0xf59e0b);
+      drawCyberTrack(FLOW_PATHS.paintToFinal[0],  FLOW_PATHS.paintToFinal[1],  0xf59e0b);
+      for (let i = 0; i < FLOW_PATHS.directBypass.length - 1; i++) {
+        drawCyberTrack(FLOW_PATHS.directBypass[i], FLOW_PATHS.directBypass[i+1], 0x10b981);
+      }
+
+      const movingCarts3D = [];
+      function spawnCart3D(pathPts, colorHex, speed, offset, isPulse = false) {
+        const cart = new THREE.Group();
+        if (isPulse) {
+          const pulse = new THREE.Mesh(
+            new THREE.BoxGeometry(0.85, 0.10, 0.22),
+            new THREE.MeshBasicMaterial({ color: 0xffffff })
+          );
+          pulse.position.y = 0.08;
+          cart.add(pulse);
+        } else {
+          const base = new THREE.Mesh(
+            new THREE.BoxGeometry(0.95, 0.26, 0.65),
+            new THREE.MeshStandardMaterial({ color: colorHex, emissive: colorHex, emissiveIntensity: 0.55 })
+          );
+          base.position.y = 0.16;
+          const part = new THREE.Mesh(
+            new THREE.BoxGeometry(0.70, 0.32, 0.48),
+            new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.2 })
+          );
+          part.position.y = 0.42;
+          part.castShadow = true;
+          cart.add(base, part);
+        }
+        scene.add(cart);
+        movingCarts3D.push({ mesh: cart, pts: pathPts, speed, t: offset });
+      }
+
+      // ★ 依軌道實際距離換算的原版精算速度 (平穩一致，不急促) ★
+      // C棟下線 -> B棟整修 (長距離跨棟 L 型：0.09)
+      spawnCart3D(FLOW_PATHS.unloadToRework, 0x10b981, 0.09, 0.0);
+      spawnCart3D(FLOW_PATHS.unloadToRework, 0x10b981, 0.09, 0.5);
+      spawnCart3D(FLOW_PATHS.unloadToRework, 0x10b981, 0.18, 0.25, true);
+
+      // B棟整修 -> 補漆 -> 終檢 (短距離工站間：原版 0.35)
+      spawnCart3D(FLOW_PATHS.reworkToPaint,  0xf59e0b, 0.35, 0.2);
+      spawnCart3D(FLOW_PATHS.reworkToPaint,  0xf59e0b, 0.50, 0.7,  true);
+      spawnCart3D(FLOW_PATHS.paintToFinal,   0xf59e0b, 0.35, 0.6);
+      spawnCart3D(FLOW_PATHS.paintToFinal,   0xf59e0b, 0.50, 0.1,  true);
+
+      // B棟整修 -> 終檢 直行通道 Bypass (長距離匚字繞道：原版 0.14)
+      spawnCart3D(FLOW_PATHS.directBypass,   0x10b981, 0.14, 0.0);
+      spawnCart3D(FLOW_PATHS.directBypass,   0x10b981, 0.14, 0.33);
+      spawnCart3D(FLOW_PATHS.directBypass,   0x10b981, 0.14, 0.66);
+      spawnCart3D(FLOW_PATHS.directBypass,   0x10b981, 0.24, 0.15, true);
+      spawnCart3D(FLOW_PATHS.directBypass,   0x10b981, 0.24, 0.65, true);
+
+      const raycaster = new THREE.Raycaster();
+      const mouse = new THREE.Vector2();
+      renderer.domElement.addEventListener('pointerdown', (e) => {
+        mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+        mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+        raycaster.setFromCamera(mouse, camera);
+
+        const stHits = raycaster.intersectObjects(Object.values(stationMeshes), true);
+        if (stHits.length > 0) {
+          let o = stHits[0].object;
+          while (o && (!o.userData || !o.userData.id)) o = o.parent;
+          if (o && o.userData && o.userData.id) { selectStation(o.userData.id); return; }
+        }
+
+        const bHits = raycaster.intersectObjects(bldgMeshes, true);
+        if (bHits.length > 0) {
+          let o = bHits[0].object;
+          while (o && (!o.userData || !o.userData.bldgKey)) o = o.parent;
+          if (o && o.userData && o.userData.bldgKey) {
+            flyToPreset(o.userData.bldgKey.toLowerCase());
+            renderBuildingDetail(o.userData.bldgKey);
+          }
+        }
+      });
 
       function projectToScreen(posObj, el) {
         if (!el) return;
@@ -840,9 +1280,100 @@
         el.style.top  = `${(-(v.y * 0.5) + 0.5) * window.innerHeight}px`;
       }
 
+      const clock3D = new THREE.Clock();
       function animate3D() {
         requestAnimationFrame(animate3D);
-        if (isCamFlying) {
+        const dt = clock3D.getDelta();
+        const elapsed = clock3D.getElapsedTime();
+
+        // 1. 處理 360° 全廠建構展示動畫 (建築方塊依序落下 + 鏡頭 360 度環繞)
+        if (isShowcasing) {
+          const tShow = (performance.now() / 1000) - showcaseStartTime;
+          const progress = Math.min(1, tShow / SHOWCASE_DURATION);
+
+          // 360度環場鏡頭旋轉 (平滑加減速)
+          const easeOrbit = progress < 0.5
+            ? 2 * progress * progress
+            : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+          const angle = easeOrbit * Math.PI * 2;
+          const radius = 68;
+          camera.position.set(
+            -2 + Math.sin(angle) * radius,
+            58 + Math.sin(progress * Math.PI) * 10,
+            1 + Math.cos(angle) * radius
+          );
+          if (controls) {
+            controls.target.set(-2, 0, 1);
+          } else {
+            camera.lookAt(-2, 0, 1);
+          }
+
+          // 各建築與工站方塊依序從高空彈跳落下
+          dropItems.forEach(item => {
+            const localP = (tShow - item.delay) / item.duration;
+            if (localP <= 0) {
+              item.mesh.position.y = item.baseY + 42;
+              item.mesh.scale.set(0.01, 0.01, 0.01);
+            } else if (localP >= 1) {
+              item.mesh.position.y = item.baseY;
+              item.mesh.scale.set(1, 1, 1);
+            } else {
+              const e = easeOutBack(localP);
+              item.mesh.position.y = item.baseY + (1 - e) * 42;
+              const s = Math.min(1, localP * 1.5);
+              item.mesh.scale.set(s, s, s);
+            }
+          });
+
+          // 前半段組裝時先淡出 2D 標籤，組裝完成後浮現
+          labelsContainer.style.opacity = tShow > 4.6 ? '1' : '0.15';
+
+          if (tShow >= SHOWCASE_DURATION) {
+            isShowcasing = false;
+            document.getElementById('showcase-toast').style.display = 'none';
+            labelsContainer.style.opacity = '1';
+            flyToPreset('all');
+          }
+        }
+
+        // 2. 更新所有部品台車與流光脈衝位置
+        movingCarts3D.forEach(c => {
+          c.t = (c.t + dt * c.speed) % 1;
+          const pt = samplePolyline(c.pts, c.t);
+          c.mesh.position.set(pt.x, pt.y, pt.z);
+          c.mesh.rotation.y = -pt.angle;
+        });
+
+        // 3. 更新 A棟 3台射出成型機 (IMM #1~#3) 動態開合模與機械手臂取件循環
+        animatedProps.imms.forEach(imm => {
+          const cyc = (elapsed * 1.15 + imm.phase) % (Math.PI * 2);
+          const norm = (Math.sin(cyc) + 1) * 0.5; // 0 (閉模射出) -> 1 (開模取件)
+          // 可動模板開合行程 (-0.45 閉模 ~ -1.35 開模)
+          imm.movingPlaten.position.x = -0.45 - norm * 0.90;
+          // 射出料管在閉模時發亮
+          imm.barrelMat.emissiveIntensity = norm < 0.35 ? 0.95 : 0.25;
+          // 開模時機械手臂下降取出保桿並橫移至後方輸送帶
+          if (norm > 0.55) {
+            const pickP = (norm - 0.55) / 0.45;
+            imm.robotArm.position.y = 2.6 - Math.sin(pickP * Math.PI) * 0.95;
+            imm.robotArm.position.z = pickP * 1.1;
+            imm.moldedPart.visible = true;
+            imm.moldedPart.position.set(-0.1, imm.robotArm.position.y - 0.75, imm.robotArm.position.z);
+          } else {
+            imm.robotArm.position.y = 2.6;
+            imm.robotArm.position.z = 0.0;
+            imm.moldedPart.visible = false;
+          }
+        });
+
+        // 4. 補漆房排氣扇旋轉 + 終檢 AOI 雷射掃描 + 下線區 AGV 巡航 + 底座呼吸燈
+        if (animatedProps.fan) animatedProps.fan.rotation.y += dt * 5.0;
+        if (animatedProps.laser) animatedProps.laser.position.z = Math.sin(elapsed * 2.6) * 1.65;
+        if (animatedProps.agv) animatedProps.agv.position.x = -1.6 + Math.sin(elapsed * 1.6) * 0.6;
+        const pulseVal = 0.42 + Math.sin(elapsed * 2.2) * 0.20;
+        animatedProps.borders.forEach(mat => { mat.emissiveIntensity = pulseVal; });
+
+        if (isCamFlying && !isShowcasing) {
           camera.position.lerp(camTargetPos, 0.08);
           if (controls) controls.target.lerp(ctrlTargetPos, 0.08);
           else { currentLookAt.lerp(ctrlTargetPos, 0.08); camera.lookAt(currentLookAt); }
@@ -869,21 +1400,21 @@
   }
 
   // ============================================================================
-  // 2B. 內建高對比 2.5D 立體引擎 (當無 WebGL 時自動接手，強化建築陰影與深色邊框)
+  // 2B. 內建高對比 2.5D 備援引擎 (同步支援 360° 旋轉落下展演 + A棟 3台動態射出機 + 精算速度)
   // ============================================================================
   if (!webglSuccess) {
-    document.getElementById('engine-tag').textContent = '2.5D HIGH-CONTRAST';
+    document.getElementById('engine-tag').textContent = '2.5D DYNAMIC ENGINE';
     const canvas = document.createElement('canvas');
     container.appendChild(canvas);
     const ctx = canvas.getContext('2d');
 
-    let camX = -2, camZ = 1, scale = 14.5;
+    let camX = -2, camZ = 1, scale = 14.5, rotAngle = 0;
     let targetCamX = -2, targetCamZ = 1, targetScale = 14.5;
+    let isShowcasing2D = false, showcaseStart2D = 0;
 
     const PRESETS_2D = {
       all:  { x: -2,  z: 1,    s: 14.5, label: '全廠宏觀鳥瞰 (28區)' },
-      abc:  { x: -5,  z: 1.5,  s: 21.0, label: '聚焦 A/B/C 三大核心棟' },
-      a:    { x: -4,  z: -13.6,s: 26.0, label: 'A棟 · 射出與發泡工廠' },
+      a:    { x: -4,  z: -13.6,s: 26.0, label: 'A棟 · 射出與發泡工廠 (3台射出機運轉中)' },
       b:    { x: -2,  z: 1.2,  s: 26.0, label: 'B棟 · 整修/補漆/終檢線' },
       c:    { x: -8,  z: 16.5, s: 26.0, label: 'C棟 · 塗裝與下線區' },
       west: { x: -28, z: 0,    s: 22.0, label: '西側動力與環保設施群' }
@@ -892,6 +1423,8 @@
     flyToPreset = function(key) {
       const p = PRESETS_2D[key];
       if (!p) return;
+      isShowcasing2D = false; rotAngle = 0;
+      document.getElementById('showcase-toast').style.display = 'none';
       targetCamX = p.x; targetCamZ = p.z; targetScale = p.s;
       document.getElementById('mode-indicator').textContent = '目前模式：' + p.label;
       document.querySelectorAll('.view-bar .nav-pill').forEach(btn => {
@@ -899,7 +1432,19 @@
       });
     };
 
+    startShowcase = function() {
+      isShowcasing2D = true;
+      showcaseStart2D = performance.now() / 1000;
+      targetCamX = -2; targetCamZ = 1; targetScale = 14.2;
+      document.getElementById('showcase-toast').style.display = 'flex';
+      document.getElementById('mode-indicator').textContent = '目前模式：🎬 360° 數位孿生建構展演中…';
+      document.querySelectorAll('.view-bar .nav-pill').forEach(btn => {
+        btn.classList.toggle('active', btn.id === 'btn-showcase');
+      });
+    };
+
     focus3DStation = function(posObj) {
+      isShowcasing2D = false; rotAngle = 0;
       targetCamX = posObj.x; targetCamZ = posObj.z; targetScale = 30.0;
     };
 
@@ -921,35 +1466,79 @@
     });
 
     function toScreen(wx, wy, wz) {
-      const sx = window.innerWidth / 2 + (wx - camX) * scale;
-      const sy = window.innerHeight / 2 + (wz - camZ) * scale * 0.72 - wy * scale * 0.45;
+      const dx = wx - camX, dz = wz - camZ;
+      const rx = dx * Math.cos(rotAngle) - dz * Math.sin(rotAngle);
+      const rz = dx * Math.sin(rotAngle) + dz * Math.cos(rotAngle);
+      const sx = window.innerWidth / 2 + rx * scale;
+      const sy = window.innerHeight / 2 + rz * scale * 0.72 - wy * scale * 0.45;
       return { x: sx, y: sy };
     }
 
-    function drawBox25D(x, z, w, d, h, wallColor, roofColor, strokeColor, lineWidth = 1.6) {
-      const p1 = toScreen(x - w/2, 0, z + d/2);
-      const p2 = toScreen(x + w/2, 0, z + d/2);
-      const t1 = toScreen(x - w/2, h, z - d/2);
-      const t2 = toScreen(x + w/2, h, z - d/2);
-      const t3 = toScreen(x + w/2, h, z + d/2);
-      const t4 = toScreen(x - w/2, h, z + d/2);
+    function drawBox25D(x, z, w, d, h, wallColor, roofColor, strokeColor, lineWidth = 1.6, liftY = 0) {
+      const p1 = toScreen(x - w/2, liftY, z + d/2);
+      const p2 = toScreen(x + w/2, liftY, z + d/2);
+      const t1 = toScreen(x - w/2, liftY + h, z - d/2);
+      const t2 = toScreen(x + w/2, liftY + h, z - d/2);
+      const t3 = toScreen(x + w/2, liftY + h, z + d/2);
+      const t4 = toScreen(x - w/2, liftY + h, z + d/2);
 
-      // 立體正面牆體
       ctx.fillStyle = wallColor;
       ctx.beginPath();
       ctx.moveTo(t4.x, t4.y); ctx.lineTo(t3.x, t3.y); ctx.lineTo(p2.x, p2.y); ctx.lineTo(p1.x, p1.y);
       ctx.closePath(); ctx.fill();
       ctx.strokeStyle = strokeColor; ctx.lineWidth = lineWidth; ctx.stroke();
 
-      // 立體屋頂
       ctx.fillStyle = roofColor;
       ctx.beginPath();
       ctx.moveTo(t1.x, t1.y); ctx.lineTo(t2.x, t2.y); ctx.lineTo(t3.x, t3.y); ctx.lineTo(t4.x, t4.y);
       ctx.closePath(); ctx.fill(); ctx.stroke();
     }
 
-    function renderFallback() {
+    function drawPath25D(pts, colorHex) {
+      ctx.strokeStyle = colorHex;
+      ctx.lineWidth = Math.max(3, scale * 0.28);
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      pts.forEach((p, idx) => {
+        const sp = toScreen(p.x, p.y, p.z);
+        if (idx === 0) ctx.moveTo(sp.x, sp.y);
+        else ctx.lineTo(sp.x, sp.y);
+      });
+      ctx.stroke();
+    }
+
+    // 原版精算移動速度
+    const carts2D = [
+      { pts: FLOW_PATHS.unloadToRework, color: '#10b981', speed: 0.09, t: 0.0 },
+      { pts: FLOW_PATHS.unloadToRework, color: '#10b981', speed: 0.09, t: 0.5 },
+      { pts: FLOW_PATHS.reworkToPaint,  color: '#f59e0b', speed: 0.35, t: 0.2 },
+      { pts: FLOW_PATHS.paintToFinal,   color: '#f59e0b', speed: 0.35, t: 0.6 },
+      { pts: FLOW_PATHS.directBypass,   color: '#10b981', speed: 0.14, t: 0.0 },
+      { pts: FLOW_PATHS.directBypass,   color: '#10b981', speed: 0.14, t: 0.33 },
+      { pts: FLOW_PATHS.directBypass,   color: '#10b981', speed: 0.14, t: 0.66 }
+    ];
+
+    let lastTime2D = performance.now();
+    function renderFallback(now) {
       requestAnimationFrame(renderFallback);
+      const dt = Math.min(0.1, (now - lastTime2D) / 1000);
+      lastTime2D = now;
+      const elapsed = now / 1000;
+
+      let tShow = 999;
+      if (isShowcasing2D) {
+        tShow = elapsed - showcaseStart2D;
+        const p = Math.min(1, tShow / 8.0);
+        rotAngle = p * Math.PI * 2;
+        if (tShow >= 8.0) {
+          isShowcasing2D = false;
+          rotAngle = 0;
+          document.getElementById('showcase-toast').style.display = 'none';
+          flyToPreset('all');
+        }
+      }
+
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
       camX += (targetCamX - camX) * 0.1;
@@ -958,29 +1547,51 @@
 
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // 廠區大底座与道路
       drawBox25D(-1, 1, 76, 50, 0.3, '#cbd5e1', '#dbe6f5', '#0284c7', 2.0);
       drawBox25D(-26.5, 0, 3.2, 46, 0.05, '#94a3b8', '#94a3b8', '#64748b', 1);
       drawBox25D(-2, -6.2, 46, 2.8, 0.05, '#94a3b8', '#94a3b8', '#64748b', 1);
       drawBox25D(-2, 8.2, 46, 3.0, 0.05, '#94a3b8', '#94a3b8', '#64748b', 1);
       drawBox25D(19.5, 4, 4.2, 38, 0.05, '#94a3b8', '#94a3b8', '#64748b', 1);
 
-      // 周邊 19 座建築 (高對比深色邊框 + 實體分色屋頂)
-      CONTEXT_BUILDINGS.forEach(b => {
-        drawBox25D(b.x, b.z, b.w, b.d, b.h * 0.55, '#94a3b8', b.hex + '44', '#334155', 1.8);
+      CONTEXT_BUILDINGS.forEach((b, idx) => {
+        const lp = Math.max(0, Math.min(1, (tShow - (0.2 + idx * 0.11)) / 0.75));
+        const lift = (1 - lp) * 35;
+        if (lp > 0) drawBox25D(b.x, b.z, b.w, b.d, b.h * 0.55, '#94a3b8', b.hex + '44', '#334155', 1.8, lift);
       });
 
-      // A / B / C 核心棟
-      CORE_BLDGS.forEach(b => {
-        drawBox25D(b.x, b.z, b.w, b.d, b.h * 0.45, b.hex + '33', b.hex + '22', b.hex, 2.5);
+      CORE_BLDGS.forEach((b, idx) => {
+        const lp = Math.max(0, Math.min(1, (tShow - (2.4 + idx * 0.35)) / 0.85));
+        const lift = (1 - lp) * 35;
+        if (lp > 0) drawBox25D(b.x, b.z, b.w, b.d, b.h * 0.45, b.hex + '33', b.hex + '22', b.hex, 2.5, lift);
       });
 
-      // 6 大工站
-      Object.values(STATIONS_CFG).forEach(st => {
-        drawBox25D(st.pos.x, st.pos.z, st.w, st.d, 1.2, st.hex + '66', st.hex + '44', st.hex, 2.2);
-        const sp = toScreen(st.pos.x, 2.2, st.pos.z);
+      drawPath25D(FLOW_PATHS.unloadToRework, '#10b981');
+      drawPath25D(FLOW_PATHS.reworkToPaint,  '#f59e0b');
+      drawPath25D(FLOW_PATHS.paintToFinal,   '#f59e0b');
+      drawPath25D(FLOW_PATHS.directBypass,   '#10b981');
+
+      Object.values(STATIONS_CFG).forEach((st, idx) => {
+        const lp = Math.max(0, Math.min(1, (tShow - (3.5 + idx * 0.15)) / 0.75));
+        const lift = (1 - lp) * 35;
+        if (lp > 0) drawBox25D(st.pos.x, st.pos.z, st.w, st.d, 1.2, st.hex + '66', st.hex + '44', st.hex, 2.2, lift);
+        const sp = toScreen(st.pos.x, 2.2 + lift, st.pos.z);
         const el = pinElements[st.id];
         if (el) { el.style.left = sp.x + 'px'; el.style.top = sp.y + 'px'; }
+      });
+
+      // 繪製 A 棟 3 台動態開合模射出成型機
+      for (let i = 0; i < 3; i++) {
+        const mx = 1.5 - 6.4 + i * 6.4;
+        const mz = -13.6;
+        const norm = (Math.sin(elapsed * 1.15 + i * 2.1) + 1) * 0.5;
+        drawBox25D(mx + 0.8, mz, 1.6, 2.2, 1.5, '#1e3a8a', '#2563eb', '#ffffff', 1.4);
+        drawBox25D(mx - 0.5 - norm * 0.8, mz, 1.1, 2.2, 1.5, '#0284c7', '#38bdf8', '#ffffff', 1.4);
+      }
+
+      carts2D.forEach(c => {
+        c.t = (c.t + dt * c.speed) % 1;
+        const pt = samplePolyline(c.pts, c.t);
+        drawBox25D(pt.x, pt.z, 0.95, 0.75, 0.55, c.color, '#ffffff', '#0f172a', 1.5);
       });
 
       bannerEls.forEach(b => {
@@ -1003,7 +1614,7 @@
       const fEl = document.getElementById('badge-fpy');
       if (fEl) { fEl.style.left = fp.x + 'px'; fEl.style.top = fp.y + 'px'; }
     }
-    renderFallback();
+    requestAnimationFrame(renderFallback);
   }
 
   // ============================================================================
@@ -1014,7 +1625,6 @@
     apiKey:   'AIzaSyBMgXHsua64mciOFJwqH4NreGI11gMXR-s',
     sheetName: '整修日報'
   };
-  // 分頁名稱預設值；系統設定有 sheet_name / rework_sheet_name / final_sheet_name 時以系統設定為準
   const DEFAULT_SHEETS = { paint: DEFAULT_CONFIG.sheetName, rework: '整修階段', final: '終檢階段' };
   const SYSTEM_SETTINGS_RANGE = '系統設定!A2:B20';
   const REFRESH_MS = 30000;
@@ -1100,6 +1710,16 @@
     `;
   }
 
+  function getABuildingImmHtml() {
+    return `
+      <div class="worker-list">
+        <div class="worker-row"><span>🤖 1號 大型保桿射出機 (IMM #1)</span><span class="status-badge ok">自動成型中</span></div>
+        <div class="worker-row"><span>🤖 2號 大型保桿射出機 (IMM #2)</span><span class="status-badge ok">自動成型中</span></div>
+        <div class="worker-row"><span>🤖 3號 大型保桿射出機 (IMM #3)</span><span class="status-badge ok">自動成型中</span></div>
+      </div>
+    `;
+  }
+
   function renderBuildingDetail(bldgKey) {
     selectedStation = null;
     Object.values(pinElements).forEach(el => el.classList.remove('selected'));
@@ -1107,15 +1727,15 @@
 
     if (bldgKey === 'A') {
       document.getElementById('detail-name').textContent = 'A 棟 · 射出工廠';
-      document.getElementById('detail-meta').textContent = '射出成型區 · 發泡成型區';
+      document.getElementById('detail-meta').textContent = '3台射出機動態運轉中 · 發泡成型區';
       content.innerHTML =
-        section('A 棟產線配置', `
+        section('A 棟 · 射出成型機群動態 (3台)', getABuildingImmHtml()) +
+        section('A 棟產線分區', `
           <div class="worker-list">
-            <div class="worker-row" style="cursor:pointer" onclick="document.querySelector('[data-id=a_mold]').click()"><span>🟦 射出成型區 (大型射出機群)</span><span class="status-badge ok">待串接</span></div>
+            <div class="worker-row" style="cursor:pointer" onclick="document.querySelector('[data-id=a_mold]').click()"><span>🟦 射出成型區 (3座大型射出機)</span><span class="status-badge ok">運轉中</span></div>
             <div class="worker-row" style="cursor:pointer" onclick="document.querySelector('[data-id=a_foam]').click()"><span>🟦 發泡成型區 (PU 發泡作業線)</span><span class="status-badge ok">待串接</span></div>
           </div>
-        `) +
-        section('後續擴充預留項目', '<div style="font-size:12px;color:var(--fg-mute);line-height:1.5;">可串接射出成型日報表、模具保養換模紀錄與發泡成型良率數據。</div>');
+        `);
     } else if (bldgKey === 'B') {
       renderOverview();
     } else if (bldgKey === 'C') {
@@ -1132,7 +1752,7 @@
 
   function renderOverview() {
     document.getElementById('detail-name').textContent = '全廠區域總覽 · Plant Map';
-    document.getElementById('detail-meta').textContent = '點擊「🎯 聚焦 ABC 核心棟」或任一工站';
+    document.getElementById('detail-meta').textContent = '點擊「🎬 功能展示」或任一工站';
     if (!stats) {
       document.getElementById('detail-content').innerHTML =
         section('C棟下線 → B棟各站實績', barRows([
@@ -1140,7 +1760,8 @@
           ['B棟整修', '讀取中', 0, 'ok'],
           ['B棟補漆', '讀取中', 0, 'warn'],
           ['B棟終檢', '讀取中', 0, 'ok'],
-        ]));
+        ])) +
+        section('A棟 · 射出成型機群動態', getABuildingImmHtml());
       return;
     }
     const { rework, paint, final } = stats;
@@ -1153,15 +1774,23 @@
     ]);
     document.getElementById('detail-content').innerHTML =
       section('C棟下線 → B棟各站今日實績', left) +
-      section('C棟設備點檢狀態摘要', getCBuildingEquipHtml());
+      section('A棟 · 射出成型機群狀態', getABuildingImmHtml());
   }
 
   function renderDetail(id) {
     const content = document.getElementById('detail-content');
-    if (id === 'a_foam' || id === 'a_mold') {
-      document.getElementById('detail-name').textContent = id === 'a_mold' ? 'A棟 · 射出成型區' : 'A棟 · 發泡成型區';
+    if (id === 'a_mold') {
+      document.getElementById('detail-name').textContent = 'A棟 · 射出成型區';
+      document.getElementById('detail-meta').textContent = '3台大型射出機動態開合模與取件運作中';
+      content.innerHTML =
+        section('射出機台即時動作狀態', getABuildingImmHtml()) +
+        section('設備說明', '<div style="font-size:12px;color:var(--fg-mute);line-height:1.6;">3 座射出機台正進行「閉模高壓射出 → 開模 → 龍門機械手臂下降取出保桿」循環動畫，後續可綁定 Google Sheet 射出日報分頁。</div>');
+      return;
+    }
+    if (id === 'a_foam') {
+      document.getElementById('detail-name').textContent = 'A棟 · 發泡成型區';
       document.getElementById('detail-meta').textContent = 'A棟射出工廠 · 模組已就緒';
-      content.innerHTML = section('工站狀態', '<div style="font-size:12px;color:var(--fg-mute);line-height:1.6;">3D 機台模型已建置完成，待後續綁定 Google Sheet 射出/發泡生產日報分頁即可即時呈現稼動與產量。</div>');
+      content.innerHTML = section('工站狀態', '<div style="font-size:12px;color:var(--fg-mute);line-height:1.6;">3D 發泡機台模型已建置完成，待後續綁定發泡生產日報分頁。</div>');
       return;
     }
     if (id === 'unload') {
@@ -1216,7 +1845,7 @@
   }
 
   document.getElementById('btn-view-all').onclick  = () => { flyToPreset('all');  renderOverview(); };
-  document.getElementById('btn-view-abc').onclick  = () => { flyToPreset('abc');  renderOverview(); };
+  document.getElementById('btn-showcase').onclick  = () => { startShowcase(); };
   document.getElementById('btn-view-a').onclick    = () => { flyToPreset('a');    renderBuildingDetail('A'); };
   document.getElementById('btn-view-b').onclick    = () => { flyToPreset('b');    renderBuildingDetail('B'); };
   document.getElementById('btn-view-c').onclick    = () => { flyToPreset('c');    renderBuildingDetail('C'); };
@@ -1252,12 +1881,31 @@
   }
   function parseRows(values) {
     if (!values || !values.length) return [];
+    const col = { ts: 0, date: 1, pid: 2, model: 3, part: 4, color: 5 };
+    const header = values[0].map(h => (h || '').trim());
+    const isHeader = header[1] && !/^\d/.test(header[1]);
+    if (isHeader) {
+      header.forEach((h, i) => {
+        if (/時間戳記/.test(h))            col.ts = i;
+        else if (/記錄日期|日期/.test(h))  col.date = i;
+        else if (/工號|員工|人員/.test(h)) col.pid = i;
+        else if (/車型/.test(h))           col.model = i;
+        else if (/種類|部件/.test(h))      col.part = i;
+        else if (/顏色/.test(h))           col.color = i;
+      });
+    }
     const out = [];
-    values.slice(1).forEach(row => {
-      const date = normalizeDate((row[1] || '').trim());
-      const pid = (row[2] || '').trim();
+    (isHeader ? values.slice(1) : values).forEach(row => {
+      const date = normalizeDate((row[col.date] || '').trim());
+      const pid = (row[col.pid] || '').trim();
       if (!date || !pid) return;
-      out.push({ date, pid, ts: parseTimestamp((row[0] || '').trim()), model: (row[3] || '').trim(), color: (row[5] || '').trim().toUpperCase() });
+      out.push({
+        date, pid,
+        ts:    parseTimestamp((row[col.ts] || '').trim()),
+        model: (row[col.model] || '').trim(),
+        part:  (row[col.part]  || '').trim(),
+        color: (row[col.color] || '').trim().toUpperCase(),
+      });
     });
     return out;
   }
