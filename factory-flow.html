@@ -241,6 +241,15 @@ html[data-theme="light"] .worker-name { color: #64748B; }
   transition: border-color 0.2s, transform 0.2s;
 }
 .link-3d:hover { border-color: var(--info); transform: translateX(2px); }
+.trend-link-row { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); text-align: center; }
+.trend-link-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 16px; background: var(--panel-up);
+  border: 1px solid var(--border-up); border-radius: 6px;
+  color: var(--info); text-decoration: none; font-size: 13px;
+  transition: background 0.15s;
+}
+.trend-link-btn:hover { background: var(--info); color: #fff; }
 </style>
 
 <div class="shell">
@@ -877,7 +886,7 @@ html[data-theme="light"] .worker-name { color: #64748B; }
     content.innerHTML =
       section('今日作業員', workersHtml) +
       section(meta.right, rows.length ? barRows(rows) : empty('今日尚無資料')) +
-      (id === 'paint' ? section('今日車型 × 顏色組合', comboHtml(s.byModelColor)) : '') +
+      (id === 'paint' ? section('今日車型 × 顏色組合', comboHtml(s.byModelColor) + trendLinkHtml()) : '') +
       noteHtml(note);
     const btn = document.getElementById('combo-toggle');
     if (btn) btn.addEventListener('click', () => { comboExpanded = !comboExpanded; renderDetail('paint'); });
@@ -900,6 +909,10 @@ html[data-theme="light"] .worker-name { color: #64748B; }
       ? '<button class="expand-btn" id="combo-toggle">' + (comboExpanded ? '收起 ▲' : `展開全部 (剩餘 ${rest} 項) ▼`) + '</button>'
       : '';
     return rowsHtml + btn;
+  }
+  // 連到動態看板品質情報分頁的直行率推移圖（person_part_analysis.html 讀 #view-quality 自動切分頁、套近 14 天並捲動）
+  function trendLinkHtml() {
+    return '<div class="trend-link-row"><a href="person_part_analysis.html#view-quality" class="trend-link-btn">📈 查看 14 天直行率推移 →</a></div>';
   }
 
   // Click handlers

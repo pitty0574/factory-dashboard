@@ -175,9 +175,9 @@
     margin-top: 24px; padding: 16px; background: var(--panel-up); border: 1px solid var(--border); border-radius: 8px; color: var(--fg); }
   .trend-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px; }
   .trend-header h3 { font-size: 18px; font-weight: 700; }
-  .trend-filter { display: flex; gap: 6px; flex-wrap: wrap; }
-  .trend-filter button { padding: 4px 12px; background: var(--panel); border: 1px solid var(--border); border-radius: 999px; font-size: 12px; cursor: pointer; color: var(--fg-mute); }
-  .trend-filter button.active { background: var(--info); color: #fff; border-color: var(--info); }
+  .trend-filter { display: flex; gap: 6px; align-items: center; font-size: 12px; color: var(--fg-mute); }
+  .trend-filter select { padding: 4px 28px 4px 12px; background: var(--panel); border: 1px solid var(--border); border-radius: 999px; font-size: 12px; cursor: pointer; color: var(--fg); min-width: 140px; }
+  .trend-filter select:focus { outline: none; border-color: var(--info); box-shadow: 0 0 0 2px rgba(24,95,165,0.15); }
   .trend-chart-wrap { position: relative; }
   .trend-chart-wrap svg { display: block; width: 100%; height: auto; }
   .trend-dot { transition: r 0.12s; cursor: pointer; }
@@ -726,15 +726,12 @@
     </div><!-- /qSub-color -->
 
     <!-- 直行率推移（全廠，不受保險桿/馬自達切換影響）-->
-    <section class="trend-section">
+    <section class="trend-section" id="fpy-trend-section">
       <div class="trend-header">
         <h3>直行率推移 · FPY Trend</h3>
-        <div class="trend-filter" id="fpy-trend-filter">
-          <button data-model="all" class="active">全部</button>
-          <button data-model="JJ">JJ</button>
-          <button data-model="TF">TF</button>
-          <button data-model="RVPU">RV+PU</button>
-          <button data-model="OTHER">其他</button>
+        <div class="trend-filter">
+          <label for="fpy-trend-model">車型</label>
+          <select id="fpy-trend-model"><option value="all">全部</option></select>
         </div>
       </div>
       <div class="trend-chart-wrap" id="fpy-trend-wrap">
@@ -3327,8 +3324,7 @@ function buildQualityView() {
 // 淨補漆 = 補漆 − RV/PU 必經 BL（以 min(補漆 RV/PU, 終檢 RV/PU) 反推）
 const FINAL_SHEET = '終檢階段';
 const FPY_RVPU_MODELS = ['RV', 'PU'];
-const FPY_TREND_COLORS = { all: 'var(--info)', JJ: '#a855f7', TF: '#f59e0b', RVPU: '#10b981', OTHER: 'var(--fg-mute)' };
-const FPY_TREND_LABELS = { all: '全部', JJ: 'JJ', TF: 'TF', RVPU: 'RV+PU', OTHER: '其他' };
+const FPY_TREND_COLORS = { all: 'var(--info)', JJ: '#a855f7', TF: '#f59e0b', RV: '#10b981', PU: '#10b981' }; // 其餘車型用 var(--fg-mute)
 let rawFinalRecords = [];   // 終檢階段原始記錄 [{date:'YYYY/MM/DD', pid, model}]；離職過濾於計算時套用（員工表會定期重讀）
 let finalLoadState = 'idle'; // idle | loading | ok | err
 let fpyTrendModel = 'all';
@@ -3372,12 +3368,26 @@ async function loadFinalRecords(id, key) {
   if (currentView === 'quality') renderFPYTrend();
 }
 
+// filter：'all' 或單一車型代碼（大寫、去空白；空字串 = 未填車型）
+function fpyModelKey(model) { return String(model || '').trim().toUpperCase(); }
 function fpyModelMatch(model, filter) {
-  const m = String(model || '').trim().toUpperCase();
-  if (filter === 'all')  return true;
-  if (filter === 'RVPU') return FPY_RVPU_MODELS.includes(m);
-  if (filter === 'OTHER') return !['JJ', 'TF', ...FPY_RVPU_MODELS].includes(m);
-  return m === filter;
+  return filter === 'all' || fpyModelKey(model) === filter;
+}
+function fpyModelLabel(key) { return key === 'all' ? '全部' : (key || '（未填）'); }
+function fpyTrendColor(key) { return FPY_TREND_COLORS[key] || 'var(--fg-mute)'; }
+
+// 依當期資料重建車型下拉：補漆 ∪ 終檢 的所有車型，按終檢件數由大到小；原選項消失時退回「全部」
+function updateFPYModelOptions(paintRecs, finalRecs) {
+  const sel = document.getElementById('fpy-trend-model');
+  if (!sel) return;
+  const finalCnt = {};
+  paintRecs.forEach(r => { const k = fpyModelKey(r.model); if (!(k in finalCnt)) finalCnt[k] = 0; });
+  finalRecs.forEach(r => { const k = fpyModelKey(r.model); finalCnt[k] = (finalCnt[k] || 0) + 1; });
+  const models = Object.keys(finalCnt).sort((a, b) => finalCnt[b] - finalCnt[a] || a.localeCompare(b));
+  if (fpyTrendModel !== 'all' && !models.includes(fpyTrendModel)) fpyTrendModel = 'all';
+  sel.innerHTML = '<option value="all">全部</option>' +
+    models.map(k => `<option value="${escapeHtml(k)}">${escapeHtml(fpyModelLabel(k))} (${finalCnt[k]} 件)</option>`).join('');
+  sel.value = fpyTrendModel;
 }
 
 // paintRecs: [{date, model}]，finalRecs: [{date, model}]；回傳每日結果（依日期排序，含終檢 0 件的日期，fpy 為 null）
@@ -3408,21 +3418,22 @@ function renderFPYTrend() {
   const legend = document.getElementById('fpy-trend-legend');
   if (!svg) return;
   hideFPYTooltip();
-  document.querySelectorAll('#fpy-trend-filter button').forEach(b => b.classList.toggle('active', b.dataset.model === fpyTrendModel));
 
   const W = 800, H = 220, PL = 45, PR = 15, PT = 20, PB = 30;
   const plotW = W - PL - PR, plotH = H - PT - PB;
-  const yOf = v => PT + plotH * (1 - v);
-  let g = '';
-  [0.25, 0.5, 0.75, 1].forEach(v => {
-    g += `<line x1="${PL}" x2="${W - PR}" y1="${yOf(v)}" y2="${yOf(v)}" style="stroke:var(--border)" stroke-dasharray="3 3"/>`;
-    g += `<text x="${PL - 6}" y="${yOf(v) + 4}" text-anchor="end" font-size="11" style="fill:var(--fg-mute)">${v * 100}%</text>`;
-  });
-  g += `<line x1="${PL}" x2="${W - PR}" y1="${yOf(0)}" y2="${yOf(0)}" style="stroke:var(--border-up)"/>`;
-  const msg = t => { svg.innerHTML = g + `<text x="${PL + plotW / 2}" y="${PT + plotH / 2}" text-anchor="middle" font-size="13" style="fill:var(--fg-mute)">${t}</text>`; };
-
-  if (finalLoadState === 'loading' || finalLoadState === 'idle') { msg('終檢資料讀取中…'); legend.textContent = ''; return; }
-  if (finalLoadState === 'err') { msg('終檢資料讀取失敗，無法計算直行率'); legend.textContent = ''; return; }
+  let yAxisMax = 1;
+  const yOf = v => PT + plotH * (1 - v / yAxisMax);
+  const pctLabel = x => (Number.isInteger(x) ? x : x.toFixed(1)) + '%';
+  const grid = () => {
+    let h = '';
+    [0.25, 0.5, 0.75, 1].forEach(f => {
+      const v = f * yAxisMax;
+      h += `<line x1="${PL}" x2="${W - PR}" y1="${yOf(v)}" y2="${yOf(v)}" style="stroke:var(--border)" stroke-dasharray="3 3"/>`;
+      h += `<text x="${PL - 6}" y="${yOf(v) + 4}" text-anchor="end" font-size="11" style="fill:var(--fg-mute)">${pctLabel(v * 100)}</text>`;
+    });
+    return h + `<line x1="${PL}" x2="${W - PR}" y1="${yOf(0)}" y2="${yOf(0)}" style="stroke:var(--border-up)"/>`;
+  };
+  const msg = t => { svg.innerHTML = grid() + `<text x="${PL + plotW / 2}" y="${PT + plotH / 2}" text-anchor="middle" font-size="13" style="fill:var(--fg-mute)">${t}</text>`; legend.textContent = ''; };
 
   const s = document.getElementById('startDate').value;
   const e = document.getElementById('endDate').value;
@@ -3430,11 +3441,20 @@ function renderFPYTrend() {
   // 補漆：allRecords（原始資料、已排除離職，不套用品質分頁的異常過濾），與 2D/3D 看板一致
   const paintRecs = allRecords.filter(r => inRange(r[0])).map(r => ({ date: r[0], model: r[4] }));
   const finalRecs = rawFinalRecords.filter(r => inRange(r.date) && isActiveWorker(r.pid));
+  updateFPYModelOptions(paintRecs, finalRecs);
+
+  if (finalLoadState === 'loading' || finalLoadState === 'idle') { msg('終檢資料讀取中…'); return; }
+  if (finalLoadState === 'err') { msg('終檢資料讀取失敗，無法計算直行率'); return; }
+
   const points = computeDailyFPY(paintRecs, finalRecs, fpyTrendModel).filter(p => p.fpy !== null);
+  if (!points.length) { msg('此期間無終檢資料'); return; }
 
-  if (!points.length) { msg('此期間無終檢資料'); legend.textContent = ''; return; }
+  // Y 軸依資料最大值動態縮放（以 25% 為級距，最小 25%、最大 100%；max 96% 以上不再推到 125%）
+  const maxFpy = Math.max(0, ...points.map(d => d.fpy == null ? 0 : d.fpy));
+  yAxisMax = Math.min(1, Math.max(0.25, Math.ceil((maxFpy * 100 + 5) / 25) * 25 / 100));
+  let g = grid();
 
-  const color = FPY_TREND_COLORS[fpyTrendModel];
+  const color = fpyTrendColor(fpyTrendModel);
   const n = points.length;
   const xOf = i => n === 1 ? PL + plotW / 2 : PL + plotW * i / (n - 1);
   const step = Math.max(1, Math.ceil(n / 12));
@@ -3460,7 +3480,7 @@ function renderFPYTrend() {
   const sumFinal = points.reduce((a, p) => a + p.finalCount, 0);
   const sumNet = points.reduce((a, p) => a + p.paintNet, 0);
   const sumBL = points.reduce((a, p) => a + p.RVPU_BL, 0);
-  legend.textContent = `${FPY_TREND_LABELS[fpyTrendModel]}・${n} 天有終檢資料・期間合計 補漆淨 ${sumNet} / 終檢 ${sumFinal}` +
+  legend.textContent = `${fpyModelLabel(fpyTrendModel)}・${n} 天有終檢資料・期間合計 補漆淨 ${sumNet} / 終檢 ${sumFinal}` +
     (sumBL > 0 ? `（已扣 RV/PU 必經 BL ${sumBL}）` : '') +
     `・直行率 = (終檢 − 淨補漆) ÷ 終檢，平均為每日直行率的平均`;
 }
@@ -3488,10 +3508,8 @@ function hideFPYTooltip() {
   if (tip) tip.classList.remove('visible');
 }
 
-document.getElementById('fpy-trend-filter').addEventListener('click', ev => {
-  const btn = ev.target.closest('button[data-model]');
-  if (!btn) return;
-  fpyTrendModel = btn.dataset.model;
+document.getElementById('fpy-trend-model').addEventListener('change', ev => {
+  fpyTrendModel = ev.target.value;
   renderFPYTrend();
 });
 document.getElementById('fpy-trend-svg').addEventListener('mouseover', ev => {
@@ -4563,8 +4581,20 @@ async function init() {
   setInterval(refreshWorkerMap, WORKER_MAP_REFRESH_MS);
   checkAdminSession();
   const cfg = getConfig();
-  fetchFromSheets(cfg.id, cfg.key, cfg.sheet);
-  loadFinalRecords(cfg.id, cfg.key); // 終檢階段（直行率推移用），與補漆資料並行、互不影響
+  const loads = [
+    fetchFromSheets(cfg.id, cfg.key, cfg.sheet),
+    loadFinalRecords(cfg.id, cfg.key), // 終檢階段（直行率推移用），與補漆資料並行、互不影響
+  ];
+  if (location.hash === '#view-quality') openQualityTrendFromLink(loads);
+}
+
+// factory-flow「查看 14 天直行率推移」連結（#view-quality）：切到品質情報分頁，資料到齊後套用近 14 天並捲動到推移圖
+function openQualityTrendFromLink(loads) {
+  showView('quality');
+  Promise.all(loads).then(() => {
+    setQuick('14');
+    requestAnimationFrame(() => document.getElementById('fpy-trend-section').scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  });
 }
 
 // ── 即時看板主題切換（僅改顏色，不觸發任何重新計算或資料讀取）──
