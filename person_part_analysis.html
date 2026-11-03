@@ -167,6 +167,16 @@
   /* 工號後的姓名（員工表對照）：工號仍為視覺主角 */
   .worker-name { font-size: 0.75em; color: #64748B; margin-left: 4px; font-weight: normal; } /* 白底分頁（個人詳細／人員效率／評分等） */
   html:not([data-theme="light"]) #view-realtime .worker-name { color: #94A3B8; }           /* 即時看板深色主題 */
+
+  /* 相關看板膠囊導航（提示框固定淺藍底，深淺主題共用配色） */
+  .nav-capsule { display: inline-block; margin: 2px 4px 2px 0; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; text-decoration: none; border: 1px solid; background: #ffffff; transition: background 0.2s, transform 0.2s; }
+  .nav-capsule:hover { transform: translateY(-1px); }
+  .nav-capsule.c-2d { color: #1D4ED8; border-color: #93C5FD; }
+  .nav-capsule.c-2d:hover { background: #DBEAFE; }
+  .nav-capsule.c-3d { color: #0E7490; border-color: #67E8F9; }
+  .nav-capsule.c-3d:hover { background: #CFFAFE; }
+  .nav-capsule.c-ps { color: #B45309; border-color: #FCD34D; }
+  .nav-capsule.c-ps:hover { background: #FEF3C7; }
   /* 人員效率卡片：姓名另起一行（卡片僅 120px 寬，單行括號格式會斷行） */
   .worker-name-block { display: block; font-size: 0.55em; color: #64748B; font-weight: normal; margin-top: 2px; line-height: 1.1; }
 
@@ -322,7 +332,7 @@
 <!-- Pipeline Stage Notice -->
 <div style="background:#eef6ff;border:1px solid #cfe3fb;border-radius:8px;padding:0.6rem 1rem;margin-bottom:1rem;font-size:13px;color:#333;line-height:1.6;">
   🏭 目前看板資料來源：<strong id="pipelineStageText">補漆階段</strong><br>
-  📊 整修階段看板（開發中）｜✅ 終檢階段看板（開發中）
+  🔗 相關看板：<a class="nav-capsule c-2d" href="factory-flow.html" target="_blank">📊 流程看板 2D</a><a class="nav-capsule c-3d" href="factory-flow-3d.html" target="_blank">🧊 3D 數位孿生</a><a class="nav-capsule c-ps" href="paint-stations.html" target="_blank">🎯 工站碼表動態</a>
 </div>
 
 <!-- Tabs -->

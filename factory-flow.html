@@ -241,6 +241,13 @@ html[data-theme="light"] .worker-name { color: #64748B; }
   transition: border-color 0.2s, transform 0.2s;
 }
 .link-3d:hover { border-color: var(--info); transform: translateX(2px); }
+.link-dash {
+  display: inline-block; margin-left: 8px; vertical-align: middle;
+  font-size: 11px; font-weight: 600; letter-spacing: 0.02em; color: var(--purple); text-decoration: none;
+  border: 1px solid var(--border-up); background: var(--panel); padding: 3px 10px; border-radius: 999px;
+  transition: border-color 0.2s, transform 0.2s;
+}
+.link-dash:hover { border-color: var(--purple); transform: translateX(2px); }
 .trend-link-row { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); text-align: center; }
 .trend-link-btn {
   display: inline-flex; align-items: center; gap: 6px;
@@ -255,7 +262,7 @@ html[data-theme="light"] .worker-name { color: #64748B; }
 <div class="shell">
   <div class="topbar">
     <div class="title-group">
-      <div class="title">補漆房 <span class="accent">流程看板</span><a class="link-3d" href="factory-flow-3d.html">🧊 3D 數位孿生看板 →</a></div>
+      <div class="title">補漆房 <span class="accent">流程看板</span><a class="link-3d" href="factory-flow-3d.html">🧊 3D 數位孿生看板 →</a><a class="link-dash" href="person_part_analysis.html" target="_blank">📊 動態看板 →</a></div>
       <div class="subtitle">裕器工業 · 塗裝部門 · 下線 → 整修 → 補漆 → 終檢</div>
       <div class="data-src" id="data-src">資料來源：Google Sheet · 讀取中…</div>
     </div>

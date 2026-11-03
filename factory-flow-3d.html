@@ -100,6 +100,14 @@
       font-size: 11px; font-weight: 700; color: var(--info); text-decoration: none;
       background: var(--info-bg); border: 1px solid rgba(14,165,233,0.3); border-radius: 999px; padding: 4px 10px;
     }
+    .back-dash {
+      font-size: 11px; font-weight: 700; color: var(--purple); text-decoration: none;
+      background: rgba(124,58,237,0.12); border: 1px solid rgba(124,58,237,0.3); border-radius: 999px; padding: 4px 10px;
+    }
+    [data-theme="dark"] .back-dash { color: #c4b5fd; background: rgba(167,139,250,0.16); border-color: rgba(167,139,250,0.35); }
+    .brand-links { display: flex; flex-direction: column; gap: 3px; }
+    .back-2d, .back-dash { transition: filter 0.18s, border-color 0.18s; }
+    .back-2d:hover, .back-dash:hover { filter: brightness(1.15); border-color: currentColor; }
 
     .nav-pill {
       border: 1px solid rgba(14, 165, 233, 0.25); background: rgba(255, 255, 255, 0.65);
@@ -362,7 +370,10 @@
         </div>
         <div class="brand-sub" id="data-src">全廠 28 區宏觀 × A/B/C 棟微觀工站 · 連線中…</div>
       </div>
-      <a class="back-2d" href="factory-flow.html">🔙 2D 看板 →</a>
+      <div class="brand-links">
+        <a class="back-2d" href="factory-flow.html">🔙 2D 看板 →</a>
+        <a class="back-dash" href="person_part_analysis.html" target="_blank">📊 動態看板 →</a>
+      </div>
     </div>
 
     <div class="view-bar">

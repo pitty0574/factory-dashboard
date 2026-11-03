@@ -100,6 +100,7 @@ body {
 }
 .back-link:hover { color: var(--info); gap: 7px; }
 .back-link .arrow { font-size: 14px; line-height: 1; }
+.back-links { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
 .title { font-size: 17px; font-weight: 700; letter-spacing: 0.02em; }
 .title .accent { color: var(--info); }
 .subtitle { color: var(--fg-mute); font-size: 12px; letter-spacing: 0.04em; }
@@ -373,7 +374,11 @@ body {
 <div class="shell">
   <div class="topbar">
     <div class="title-group">
-      <a class="back-link" href="factory-flow.html"><span class="arrow">←</span> 返回流程看板</a>
+      <div class="back-links">
+        <a class="back-link" href="factory-flow.html"><span class="arrow">←</span> 返回流程看板</a>
+        <a class="back-link" href="factory-flow-3d.html" target="_blank">🧊 3D 數位孿生</a>
+        <a class="back-link" href="person_part_analysis.html" target="_blank">📊 動態看板</a>
+      </div>
       <div class="title">補漆房 <span class="accent">工站動態</span></div>
       <div class="subtitle" id="subtitle">裕器工業 · 塗裝部門 · 補漆區即時監控</div>
       <div class="data-src" id="data-src">資料來源：Google Sheet · 讀取中…</div>
