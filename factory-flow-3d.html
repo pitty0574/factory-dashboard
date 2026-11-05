@@ -566,16 +566,16 @@
     final:  { id: 'final',  bldg: 'B', zone: 'ZONE B3 · 終檢', title: '終檢區',     pos: { x: 8.5,   y: 0.22, z: B_MAIN_Z }, w: 6.4, d: 6.0, color: 0x10b981, hex: '#10b981' },
   };
 
-  // A棟射出機群配置 (世界座標；h=水平開合大型保桿機，v=垂直開合中小型機；scale 依噸數比例)
+  // A棟射出機群配置 (世界座標；5 台皆為水平開合 + 龍門手臂；scale 為相對大型機的等比縮放)
   const IMM_CYCLE = 2.1; // 成型週期 (秒)
   const IMM_LAYOUT = [
-    // 左半：大型 3 台 (2500T 最左，3000T-2 / 3000T-1 前後疊排)
-    { label: '2500T',   type: 'h', x: -11.0, z: -13.6, scale: 0.92 },
-    { label: '3000T-2', type: 'h', x: -3.0,  z: -15.5, scale: 1.00 },
-    { label: '3000T-1', type: 'h', x: -3.0,  z: -11.5, scale: 1.00 },
-    // 右半：小型 2 台緊鄰並排
-    { label: '500T',    type: 'v', x: 6.5,   z: -13.6, scale: 0.786 }, // 寬約大型 55%
-    { label: '750T',    type: 'v', x: 10.5,  z: -13.6, scale: 1.00 },  // 寬約大型 70%
+    // 上排 4 台
+    { label: '3000T-1', x: -11.0, z: -15.5, scale: 1.00 },
+    { label: '2500T',   x: -3.0,  z: -15.5, scale: 0.92 },
+    { label: '750T',    x: 5.0,   z: -15.5, scale: 0.60 },
+    { label: '500T',    x: 10.0,  z: -15.5, scale: 0.60 }, // 750T / 500T 視覺尺寸統一
+    // 下排 1 台 (與 2500T 同 x 線)
+    { label: '3000T-2', x: -3.0,  z: -11.5, scale: 1.00 },
   ];
 
   // 共用多段路徑取樣器
@@ -666,7 +666,7 @@
     el.className = 'imm-label';
     el.textContent = m.label;
     labelsContainer.appendChild(el);
-    return { el, pos: { x: m.x, y: m.type === 'h' ? 3.7 * m.scale : 0.22 + 3.9 * m.scale, z: m.z } };
+    return { el, pos: { x: m.x, y: 3.7 * m.scale, z: m.z } };
   });
 
   const pinElements = {};
@@ -956,7 +956,7 @@
         return group;
       }
 
-      // ★ 1. A棟：發泡成型區 (1台) + 射出成型區 (5台：3000T x2 + 2500T 水平開合 / 750T + 500T 垂直開合) ★
+      // ★ 1. A棟：發泡成型區 (1台) + 射出成型區 (5台：3000T x2 + 2500T + 750T + 500T，皆水平開合) ★
       (function buildAStations(){
         const gFoam = createTechPlatform(STATIONS_CFG.a_foam.w, STATIONS_CFG.a_foam.d, STATIONS_CFG.a_foam.color);
         gFoam.position.set(STATIONS_CFG.a_foam.pos.x, STATIONS_CFG.a_foam.pos.y, STATIONS_CFG.a_foam.pos.z);
@@ -974,85 +974,10 @@
         const gMold = createTechPlatform(STATIONS_CFG.a_mold.w, STATIONS_CFG.a_mold.d, STATIONS_CFG.a_mold.color);
         gMold.position.set(STATIONS_CFG.a_mold.pos.x, STATIONS_CFG.a_mold.pos.y, STATIONS_CFG.a_mold.pos.z);
 
-        // 中小型立式射出機 (750T / 500T)：上模沿 Y 軸垂直開合，開模時產品小方塊升起後消失
-        function buildVerticalImm(spec, phase) {
-          const g = new THREE.Group();
-          g.position.set(spec.x - STATIONS_CFG.a_mold.pos.x, 0, spec.z - STATIONS_CFG.a_mold.pos.z);
-          g.scale.setScalar(spec.scale);
-
-          const bed = new THREE.Mesh(
-            new THREE.BoxGeometry(3.2, 0.5, 1.9),
-            new THREE.MeshStandardMaterial({ color: 0x1e3a8a, metalness: 0.6, roughness: 0.35 })
-          );
-          bed.position.y = 0.5; bed.castShadow = true;
-
-          // 固定下模
-          const lowerMold = new THREE.Mesh(
-            new THREE.BoxGeometry(1.7, 0.3, 1.4),
-            new THREE.MeshStandardMaterial({ color: 0x2563eb, metalness: 0.5, roughness: 0.3 })
-          );
-          lowerMold.position.y = 0.9; lowerMold.castShadow = true;
-
-          // 4 根垂直導柱 + 頂部油壓座
-          for (const tx of [-0.75, 0.75]) for (const tz of [-0.6, 0.6]) {
-            const bar = new THREE.Mesh(
-              new THREE.CylinderGeometry(0.07, 0.07, 1.95, 8),
-              new THREE.MeshStandardMaterial({ color: 0xe2e8f0, metalness: 0.85, roughness: 0.15 })
-            );
-            bar.position.set(tx, 1.725, tz);
-            g.add(bar);
-          }
-          const crown = new THREE.Mesh(
-            new THREE.BoxGeometry(1.8, 0.3, 1.5),
-            new THREE.MeshStandardMaterial({ color: 0x1e3a8a, metalness: 0.6, roughness: 0.3 })
-          );
-          crown.position.y = 2.85; crown.castShadow = true;
-
-          // 可動上模 (閉模 y=1.2 ~ 開模 y=2.0) + 油壓缸桿
-          const upperMold = new THREE.Group();
-          const upperPlate = new THREE.Mesh(
-            new THREE.BoxGeometry(1.7, 0.3, 1.4),
-            new THREE.MeshStandardMaterial({ color: 0x0ea5e9, metalness: 0.4, roughness: 0.25 })
-          );
-          upperPlate.castShadow = true;
-          const ram = new THREE.Mesh(
-            new THREE.CylinderGeometry(0.16, 0.16, 1.6, 12),
-            new THREE.MeshStandardMaterial({ color: 0xcbd5e1, metalness: 0.85, roughness: 0.15 })
-          );
-          ram.position.y = 0.95;
-          upperMold.add(upperPlate, ram);
-          upperMold.position.y = 1.2;
-
-          // 側邊水平射出料管
-          const barrelMat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, emissive: 0x0ea5e9, emissiveIntensity: 0.3 });
-          const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 1.0, 12), barrelMat);
-          barrel.rotation.z = Math.PI / 2;
-          barrel.position.set(1.35, 1.0, 0);
-
-          // 成型品 (開模時自模具中央升起)
-          const moldedPart = new THREE.Mesh(
-            new THREE.BoxGeometry(0.45, 0.22, 0.45),
-            new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x38bdf8, emissiveIntensity: 0.3 })
-          );
-          moldedPart.position.y = 1.15;
-          moldedPart.visible = false;
-
-          const statusTower = new THREE.Mesh(
-            new THREE.CylinderGeometry(0.1, 0.1, 0.3, 12),
-            new THREE.MeshStandardMaterial({ color: 0x10b981, emissive: 0x10b981, emissiveIntensity: 0.9 })
-          );
-          statusTower.position.set(1.35, 1.65, 0.6);
-
-          g.add(bed, lowerMold, crown, upperMold, barrel, moldedPart, statusTower);
-          gMold.add(g);
-          animatedProps.imms.push({ type: 'v', upperMold, moldedPart, barrelMat, phase, wasOpen: false, partStart: -1 });
-        }
-
         IMM_LAYOUT.forEach((spec, i) => {
           const phase = i * (Math.PI * 2 / IMM_LAYOUT.length); // 5台錯開成型週期相位
-          if (spec.type === 'v') { buildVerticalImm(spec, phase); return; }
 
-          // 大型臥式保桿射出機 (3000T / 2500T)
+          // 臥式射出機 (水平開合模 + 龍門手臂取件，整組依 scale 等比縮放)
           const immGroup = new THREE.Group();
           immGroup.position.set(spec.x - STATIONS_CFG.a_mold.pos.x, 0, spec.z - STATIONS_CFG.a_mold.pos.z);
           immGroup.scale.setScalar(spec.scale);
@@ -1146,7 +1071,6 @@
           gMold.add(immGroup);
 
           animatedProps.imms.push({
-            type: 'h',
             movingPlaten,
             moldedPart,
             robotArm,
@@ -1469,23 +1393,8 @@
         animatedProps.imms.forEach(imm => {
           const cyc = (elapsed * (Math.PI * 2 / IMM_CYCLE) + imm.phase) % (Math.PI * 2);
           const norm = (Math.sin(cyc) + 1) * 0.5; // 0 (閉模射出) -> 1 (開模取件)
+          // 射出料管在閉模時發亮
           imm.barrelMat.emissiveIntensity = norm < 0.35 ? 0.95 : 0.25;
-          if (imm.type === 'v') {
-            // 立式機：上模沿 Y 軸上下開合 (閉模 1.2 ~ 開模 2.0)
-            imm.upperMold.position.y = 1.2 + norm * 0.8;
-            // 開模到位時產品自模具中央升起，0.3 秒後消失
-            const isOpen = norm > 0.85;
-            if (isOpen && !imm.wasOpen) imm.partStart = elapsed;
-            imm.wasOpen = isOpen;
-            const pt = elapsed - imm.partStart;
-            if (imm.partStart >= 0 && pt < 0.3) {
-              imm.moldedPart.visible = true;
-              imm.moldedPart.position.y = 1.15 + (pt / 0.3) * 0.45;
-            } else {
-              imm.moldedPart.visible = false;
-            }
-            return;
-          }
           // 可動模板開合行程 (-0.45 閉模 ~ -1.35 開模)
           imm.movingPlaten.position.x = -0.45 - norm * 0.90;
           // 開模時機械手臂下降取出保桿並橫移至後方輸送帶
@@ -1716,17 +1625,12 @@
         if (el) { el.style.left = sp.x + 'px'; el.style.top = sp.y + 'px'; }
       });
 
-      // 繪製 A 棟 5 台動態開合模射出成型機 (臥式水平開合 / 立式垂直開合)
+      // 繪製 A 棟 5 台動態水平開合模射出成型機
       IMM_LAYOUT.forEach((m, i) => {
         const s = m.scale;
         const norm = (Math.sin(elapsed * (Math.PI * 2 / IMM_CYCLE) + i * (Math.PI * 2 / IMM_LAYOUT.length)) + 1) * 0.5;
-        if (m.type === 'v') {
-          drawBox25D(m.x, m.z, 3.2 * s, 1.9 * s, 0.8 * s, '#1e3a8a', '#2563eb', '#ffffff', 1.4);
-          drawBox25D(m.x, m.z, 1.7 * s, 1.4 * s, 0.3 * s, '#0284c7', '#38bdf8', '#ffffff', 1.4, (0.8 + norm * 0.8) * s);
-        } else {
-          drawBox25D(m.x + 0.8 * s, m.z, 1.6 * s, 2.2 * s, 1.5 * s, '#1e3a8a', '#2563eb', '#ffffff', 1.4);
-          drawBox25D(m.x - (0.5 + norm * 0.8) * s, m.z, 1.1 * s, 2.2 * s, 1.5 * s, '#0284c7', '#38bdf8', '#ffffff', 1.4);
-        }
+        drawBox25D(m.x + 0.8 * s, m.z, 1.6 * s, 2.2 * s, 1.5 * s, '#1e3a8a', '#2563eb', '#ffffff', 1.4);
+        drawBox25D(m.x - (0.5 + norm * 0.8) * s, m.z, 1.1 * s, 2.2 * s, 1.5 * s, '#0284c7', '#38bdf8', '#ffffff', 1.4);
         const sp = toScreen(m.x, 2.2 * s, m.z);
         immLabelEls[i].el.style.left = sp.x + 'px'; immLabelEls[i].el.style.top = sp.y + 'px';
       });
@@ -1929,7 +1833,7 @@
       document.getElementById('detail-meta').textContent = '5台射出機動態開合模與取件運作中';
       content.innerHTML =
         section('射出機台即時動作狀態', getABuildingImmHtml()) +
-        section('設備說明', '<div style="font-size:12px;color:var(--fg-mute);line-height:1.6;">5 台射出機台循環動畫：3000T x2 / 2500T 為水平開合模 + 龍門機械手臂取出保桿，750T / 500T 為立式垂直開合模取件，後續可綁定 Google Sheet 射出日報分頁。</div>');
+        section('設備說明', '<div style="font-size:12px;color:var(--fg-mute);line-height:1.6;">5 台射出機台 (3000T x2 / 2500T / 750T / 500T) 皆為水平開合模 + 龍門機械手臂取件循環動畫，後續可綁定 Google Sheet 射出日報分頁。</div>');
       return;
     }
     if (id === 'a_foam') {
