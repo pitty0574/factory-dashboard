@@ -552,15 +552,14 @@
   // A / B / C 三大核心監控棟
   const CORE_BLDGS = [
     { key: 'A', cls: 'a-bldg', code: 'A 棟', name: '射出工廠 (射出成型・發泡成型)', x: -3.5, z: -13.6, w: 37.5, d: 10.4, h: 4.2, color: 0x2563eb, hex: '#2563eb', bannerZ: -18.8 },
-    { key: 'B', cls: 'b-bldg', code: 'B 棟', name: '塗裝後段 (整修・補漆・終檢)',   x: -3.5, z: 1.2,   w: 35.0, d: 10.6, h: 4.0, color: 0x10b981, hex: '#10b981', bannerZ: -4.1 },
+    { key: 'B', cls: 'b-bldg', code: 'B 棟', name: '塗裝後段 (整修・補漆・終檢)',   x: -3.5, z: 1.2,   w: 35.0, d: 10.6, h: 4.0, color: 0x10b981, hex: '#10b981', bannerZ: -4.1, skipBanner: true }, // ZONE B1/B2/B3 已標示各區，不顯示中央 banner
     { key: 'C', cls: 'c-bldg', code: 'C 棟', name: '塗裝工廠 (大塗線・下線區・點檢)', x: -10.5, z: 16.5, w: 22.5, d: 10.6, h: 4.2, color: 0xf59e0b, hex: '#f59e0b', bannerZ: 21.8 }
   ];
 
   // 6 大核心工站
   const STATIONS_CFG = {
     a_foam: { id: 'a_foam', bldg: 'A', zone: 'ZONE A1 · 發泡', title: '發泡成型區', pos: { x: -18.7, y: 0.22, z: -13.6 }, w: 5.0,  d: 6.2, color: 0x0ea5e9, hex: '#0ea5e9' },
-    a_mold: { id: 'a_mold', bldg: 'A', zone: 'ZONE A2 · 射出', title: '射出成型區', pos: { x: -0.5,  y: 0.22, z: -13.6 }, w: 28.0, d: 6.6, color: 0x2563eb, hex: '#2563eb',
-              pin: { x: 7.0, y: 5.6, z: -15.0, y2d: 4.2 } }, // 標籤錨點移到上排機台後方、抬高並右移，避免遮住機台標籤與 A 棟橫幅
+    a_mold: { id: 'a_mold', bldg: 'A', zone: 'ZONE A2 · 射出', title: '射出成型區', pos: { x: -0.5,  y: 0.22, z: -13.6 }, w: 28.0, d: 6.6, color: 0x2563eb, hex: '#2563eb', hidePin: true }, // 浮動標籤與右側面板重複且遮擋機台，僅保留隱藏元素供面板點擊觸發
     unload: { id: 'unload', bldg: 'C', zone: 'ZONE C · 下線',  title: '塗裝下線區', pos: { x: -3.0,  y: 0.22, z: 13.8 },  w: 6.0,  d: 5.8, color: 0xf59e0b, hex: '#f59e0b' },
     rework: { id: 'rework', bldg: 'B', zone: 'ZONE B1 · 整修', title: '整修區',     pos: { x: -13.5, y: 0.22, z: B_MAIN_Z }, w: 6.4, d: 6.0, color: 0x0ea5e9, hex: '#0ea5e9' },
     paint:  { id: 'paint',  bldg: 'B', zone: 'ZONE B2 · 補漆', title: '補漆區',     pos: { x: -2.5,  y: 0.22, z: B_MAIN_Z }, w: 6.4, d: 6.0, color: 0xf59e0b, hex: '#f59e0b' },
@@ -570,11 +569,13 @@
   // A棟射出機群配置 (世界座標；h=水平開合大型保桿機，v=垂直開合中小型機；scale 依噸數比例)
   const IMM_CYCLE = 2.1; // 成型週期 (秒)
   const IMM_LAYOUT = [
-    { label: '3000T-1', type: 'h', x: -10.5, z: -15.0, scale: 1.00 },
-    { label: '2500T',   type: 'h', x: -3.2,  z: -15.0, scale: 0.92 },
-    { label: '750T',    type: 'v', x: 3.6,   z: -15.0, scale: 1.00 },  // 寬約大型 70%
-    { label: '500T',    type: 'v', x: 9.8,   z: -15.0, scale: 0.786 }, // 寬約大型 55%
-    { label: '3000T-2', type: 'h', x: -0.5,  z: -11.5, scale: 1.00 },
+    // 左半：大型 3 台 (2500T 最左，3000T-2 / 3000T-1 前後疊排)
+    { label: '2500T',   type: 'h', x: -11.0, z: -13.6, scale: 0.92 },
+    { label: '3000T-2', type: 'h', x: -3.0,  z: -15.5, scale: 1.00 },
+    { label: '3000T-1', type: 'h', x: -3.0,  z: -11.5, scale: 1.00 },
+    // 右半：小型 2 台緊鄰並排
+    { label: '500T',    type: 'v', x: 6.5,   z: -13.6, scale: 0.786 }, // 寬約大型 55%
+    { label: '750T',    type: 'v', x: 10.5,  z: -13.6, scale: 1.00 },  // 寬約大型 70%
   ];
 
   // 共用多段路徑取樣器
@@ -636,6 +637,7 @@
   // 建立 DOM 標籤
   const bannerEls = [];
   CORE_BLDGS.forEach(b => {
+    if (b.skipBanner) return;
     const el = document.createElement('div');
     el.className = `bldg-banner ${b.cls}`;
     el.innerHTML = `<span class="tag">${b.code}</span><span>${b.name}</span>`;
@@ -686,6 +688,7 @@
       selectStation(cfg.id);
     });
     labelsContainer.appendChild(el);
+    if (cfg.hidePin) { el.style.display = 'none'; return; } // 不投影顯示，但保留給 [data-id] 點擊
     pinElements[cfg.id] = el;
   });
 
@@ -1513,9 +1516,7 @@
           if (camera.position.distanceTo(camTargetPos) < 0.15) isCamFlying = false;
         }
         if (controls) controls.update();
-        Object.values(STATIONS_CFG).forEach(cfg => projectToScreen(
-          cfg.pin ? { x: cfg.pin.x, y: cfg.pin.y, z: cfg.pin.z } : { x: cfg.pos.x, y: cfg.pos.y + 4.0, z: cfg.pos.z },
-          pinElements[cfg.id]));
+        Object.values(STATIONS_CFG).forEach(cfg => projectToScreen({ x: cfg.pos.x, y: cfg.pos.y + 4.0, z: cfg.pos.z }, pinElements[cfg.id]));
         bannerEls.forEach(b => projectToScreen(b.pos, b.el));
         if (showContextLabels) ctxEls.forEach(c => projectToScreen(c.pos, c.el));
         immLabelEls.forEach(m => projectToScreen(m.pos, m.el));
@@ -1710,7 +1711,7 @@
         const lp = Math.max(0, Math.min(1, (tShow - (3.5 + idx * 0.15)) / 0.75));
         const lift = (1 - lp) * 35;
         if (lp > 0) drawBox25D(st.pos.x, st.pos.z, st.w, st.d, 1.2, st.hex + '66', st.hex + '44', st.hex, 2.2, lift);
-        const sp = st.pin ? toScreen(st.pin.x, st.pin.y2d + lift, st.pin.z) : toScreen(st.pos.x, 2.2 + lift, st.pos.z);
+        const sp = toScreen(st.pos.x, 2.2 + lift, st.pos.z);
         const el = pinElements[st.id];
         if (el) { el.style.left = sp.x + 'px'; el.style.top = sp.y + 'px'; }
       });
