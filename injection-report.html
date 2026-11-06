@@ -112,15 +112,13 @@ input, select {
 }
 input:focus, select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(3,105,161,.2); }
 #f-pid { width: 140px; font-family: var(--font-mono); flex: none; }
-#f-shots, #f-qty { width: 120px; text-align: center; flex: none; }
+#f-qty { width: 120px; text-align: center; flex: none; }
 #pid-name { font-size: 18pt; font-weight: 700; white-space: nowrap; }
-#pid-name.unknown { color: var(--warn); font-weight: 400; font-size: 14pt; }
-.step-btn {
-  width: 50px; height: 44px; flex: none; border-radius: 8px;
-  border: 2px solid var(--border-up); background: var(--panel-alt); color: var(--fg);
-  font: 700 20pt var(--font-ui); cursor: pointer; line-height: 1;
-}
-.step-btn:hover { border-color: var(--accent); }
+#pid-name.unknown { color: var(--fg-mute); font-weight: 400; font-size: 14pt; }
+input[readonly] { background: var(--panel-alt); color: var(--fg-mute); border-style: dashed; cursor: default; }
+input[readonly]:focus { border-color: var(--border-up); box-shadow: none; }
+#f-mold.ready { color: var(--fg); font-weight: 700; font-family: var(--font-mono); }
+.auto-tag { font-size: 12pt; color: var(--fg-mute); white-space: nowrap; }
 .invalid { border-color: var(--crit) !important; animation: flash .25s 3; }
 @keyframes flash { 50% { background: var(--crit-fill); } }
 
@@ -234,13 +232,9 @@ tr.new td { animation: newrow 2s; }
       <div class="field"><select id="f-material"><option value="">（載入中…）</option></select></div>
 
       <label for="f-mold">模具編號</label>
-      <div class="field"><input id="f-mold" type="text" autocomplete="off" placeholder="例：M-500-003"></div>
-
-      <label for="f-shots">本次模次</label>
       <div class="field">
-        <button class="step-btn" type="button" data-step="-1" tabindex="-1">−</button>
-        <input id="f-shots" type="number" min="1" step="1" value="1">
-        <button class="step-btn" type="button" data-step="1" tabindex="-1">+</button>
+        <input id="f-mold" type="text" readonly tabindex="-1" value="(需先選車型和件號)">
+        <span class="auto-tag">(自動生成)</span>
       </div>
 
       <label for="f-qty">產出數量</label>
@@ -248,7 +242,7 @@ tr.new td { animation: newrow 2s; }
 
       <label for="f-shift">班別</label>
       <div class="field">
-        <select id="f-shift"><option>A</option><option>B</option><option>C</option></select>
+        <select id="f-shift"><option selected>早班</option><option>中班</option><option>晚班</option></select>
       </div>
 
       <label for="f-status">狀態</label>
@@ -275,8 +269,7 @@ tr.new td { animation: newrow 2s; }
   <section class="card">
     <h2>今日累計 <span id="totals-machine" style="color:var(--fg-mute);font-weight:400"></span></h2>
     <div class="totals">
-      <div><div class="k">模次總數</div><div class="v" id="t-shots">—</div></div>
-      <div><div class="k">產出件數</div><div class="v" id="t-qty">—</div></div>
+      <div style="grid-column:1 / -1"><div class="k">今日產出件數</div><div class="v" id="t-qty">—</div></div>
       <div><div class="k">今日第一筆</div><div class="v t" id="t-first">—</div></div>
       <div><div class="k">上一筆</div><div class="v t" id="t-last">—</div></div>
     </div>
@@ -287,8 +280,8 @@ tr.new td { animation: newrow 2s; }
     <h2>近期明細（最後 10 筆）</h2>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>時間</th><th>車型</th><th>件號</th><th>料號</th><th style="text-align:right">模次</th><th>工號 (姓名)</th></tr></thead>
-        <tbody id="recent"><tr><td colspan="6" class="empty">載入中…</td></tr></tbody>
+        <thead><tr><th>時間</th><th>車型</th><th>件號</th><th>料號</th><th>工號 (姓名)</th></tr></thead>
+        <tbody id="recent"><tr><td colspan="5" class="empty">載入中…</td></tr></tbody>
       </table>
     </div>
     <div class="hint" id="data-src"></div>
@@ -540,10 +533,8 @@ tr.new td { animation: newrow 2s; }
 
   function renderToday() {
     $('totals-machine').textContent = '· ' + currentMachine;
-    const shots = todayRows.reduce((s, r) => s + r.shots, 0);
     const qty = todayRows.reduce((s, r) => s + r.qty, 0);
     const times = todayRows.map(r => r.ts).filter(Boolean).sort((a, b) => a - b);
-    $('t-shots').textContent = shots.toLocaleString();
     $('t-qty').textContent = qty.toLocaleString();
     $('t-first').textContent = times.length ? hhmm(times[0]) : '—';
     $('t-last').textContent = times.length ? hhmm(times[times.length - 1]) : '—';
@@ -553,15 +544,15 @@ tr.new td { animation: newrow 2s; }
       <tr${i === 0 && newRowFlag ? ' class="new"' : ''}>
         <td>${r.ts ? hhmmss(r.ts) : '—'}</td>
         <td>${esc(r.model)}</td><td>${esc(r.part)}</td><td>${esc(r.material)}</td>
-        <td class="num">${r.shots}</td><td>${formatWorkerId(r.pid)}</td>
-      </tr>`).join('') : '<tr><td colspan="6" class="empty">今日尚無資料</td></tr>';
+        <td>${formatWorkerId(r.pid)}</td>
+      </tr>`).join('') : '<tr><td colspan="5" class="empty">今日尚無資料</td></tr>';
     newRowFlag = false;
   }
 
   function clearToday() {
     todayRows = [];
-    ['t-shots', 't-qty', 't-first', 't-last'].forEach(id => $(id).textContent = '—');
-    $('recent').innerHTML = '<tr><td colspan="6" class="empty">載入中…</td></tr>';
+    ['t-qty', 't-first', 't-last'].forEach(id => $(id).textContent = '—');
+    $('recent').innerHTML = '<tr><td colspan="5" class="empty">載入中…</td></tr>';
     renderMachineStatus('');
   }
 
@@ -591,15 +582,22 @@ tr.new td { animation: newrow 2s; }
     const name = workerName(pid);
     if (!pid) { el.textContent = ''; el.className = ''; }
     else if (name) { el.textContent = name; el.className = ''; }
-    else { el.textContent = pid.length >= 4 ? '查無此工號' : ''; el.className = 'unknown'; }
+    else { el.textContent = pid.length >= 4 ? '(查無工號)' : ''; el.className = 'unknown'; }
   }
   $('f-pid').addEventListener('input', () => { $('f-pid').classList.remove('invalid'); updatePidName(); });
 
-  // ── 模次 [-] [+] ──
-  document.querySelectorAll('.step-btn').forEach(b => b.addEventListener('click', () => {
-    const el = $('f-shots');
-    el.value = Math.max(1, Math.round(num(el.value)) + Number(b.dataset.step));
-  }));
+  // ── 模具編號 = 車型 + "-" + 件號（自動生成，唯讀）──
+  function moldNo() {
+    const model = $('f-model').value, part = $('f-part').value;
+    return model && part ? `${model}-${part}` : '';
+  }
+  function updateMold() {
+    const v = moldNo();
+    $('f-mold').value = v || '(需先選車型和件號)';
+    $('f-mold').classList.toggle('ready', !!v);
+  }
+  $('f-model').addEventListener('change', updateMold);
+  $('f-part').addEventListener('change', updateMold);
 
   // ── 訊息區 ──
   let msgTimer = null;
@@ -624,8 +622,7 @@ tr.new td { animation: newrow 2s; }
       model: $('f-model').value,
       partNo: $('f-part').value,
       materialNo: $('f-material').value,
-      moldNo: $('f-mold').value.trim(),
-      shots: Math.max(0, Math.round(num($('f-shots').value))),
+      moldNo: moldNo(),
       qty: Math.max(0, Math.round(num($('f-qty').value))),
       shift: $('f-shift').value,
       status: $('f-status').value,
@@ -670,13 +667,13 @@ tr.new td { animation: newrow 2s; }
     // 本地先加上去，下次 30 秒刷新會以 Sheet 實際資料為準
     if (params.machine === currentMachine) {
       todayRows.unshift({ ts: now, date: dateSlash(now), pid: params.pid, model: params.model,
-        part: params.partNo, material: params.materialNo, shots: params.shots, qty: params.qty });
+        part: params.partNo, material: params.materialNo, qty: params.qty });
       newRowFlag = true;
       renderToday();
     }
     renderMachineStatus(params.status);
-    $('f-shots').focus();
-    $('f-shots').select();
+    $('f-qty').focus();
+    $('f-qty').select();
   }
 
   // ── 彈窗 ──
@@ -694,12 +691,12 @@ tr.new td { animation: newrow 2s; }
     const row = (...cells) => '<div class="row">' + cells.map(([k, v]) => `<span><b>${k}：</b>${v}</span>`).join('') + '</div>';
     $('modal-summary').innerHTML =
       row(['機台', esc(p.machine)]) +
-      row(['工號', esc(p.pid) + (p.name ? ` (${esc(p.name)})` : ' <span style="color:var(--warn)">(查無姓名)</span>')]) +
+      row(['工號', esc(p.pid) + (p.name ? ` (${esc(p.name)})` : ' (查無工號)')]) +
       row(['車型', dash(p.model)]) +
       row(['件號', dash(p.partNo)]) +
       row(['料號', dash(p.materialNo)]) +
       row(['模具', dash(p.moldNo)]) +
-      row(['模次', p.shots], ['產出', p.qty]) +
+      row(['產出', p.qty]) +
       row(['班別', esc(p.shift)], ['狀態', `${STATUS_ICON[p.status] || ''} ${esc(p.status)}`]) +
       row(['備註', dash(p.note)]);
     $('modal-err').textContent = '';
@@ -715,7 +712,7 @@ tr.new td { animation: newrow 2s; }
     $('overlay').classList.remove('open');
     modalOpen = false;
     pending = null;
-    $('f-shots').focus();
+    $('f-qty').focus();
   }
 
   function setConfirmBusy(busy) {
@@ -829,7 +826,10 @@ tr.new td { animation: newrow 2s; }
   // ── 初始化 ──
   fillMachines();
   if (lsGet('lastPid')) $('f-pid').value = lsGet('lastPid');
-  if (['A', 'B', 'C'].includes(lsGet('lastShift'))) $('f-shift').value = lsGet('lastShift');
+  // 舊版存的 A/B/C 自動對應為早/中/晚班
+  const SHIFT_LEGACY = { A: '早班', B: '中班', C: '晚班' };
+  const lastShift = SHIFT_LEGACY[lsGet('lastShift')] || lsGet('lastShift');
+  if (['早班', '中班', '晚班'].includes(lastShift)) $('f-shift').value = lastShift;
   $('totals-machine').textContent = '· ' + currentMachine;
   if (!navigator.onLine) showMsg('離線中，請恢復網路後重試', 'err', false);
 
@@ -837,13 +837,13 @@ tr.new td { animation: newrow 2s; }
     console.error('[injection-report] 下拉選單讀取失敗', e);
     setConn(false);
     ['f-model', 'f-part', 'f-material'].forEach(id => fillSelect($(id), []));
-  });
+  }).then(updateMold);
   loadWorkerMap();
   refresh({ applyStatusToForm: true });
-  $(lsGet('lastPid') ? 'f-shots' : 'f-pid').focus();
+  $(lsGet('lastPid') ? 'f-qty' : 'f-pid').focus();
 
   setInterval(() => { if (!sending) refresh(); }, REFRESH_MS);
-  setInterval(() => { loadWorkerMap(); loadDropdowns().catch(() => {}); }, SLOW_REFRESH_MS);
+  setInterval(() => { loadWorkerMap(); loadDropdowns().catch(() => {}).then(updateMold); }, SLOW_REFRESH_MS);
 })();
 </script>
 </body>
