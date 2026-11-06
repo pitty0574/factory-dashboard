@@ -1,0 +1,850 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>A 棟射出日報</title>
+<style>
+/* 淺底為主；深色主題由 html[data-theme="dark"] 覆蓋（與其他看板一致） */
+:root {
+  --bg: #f1f4f8;
+  --panel: #ffffff;
+  --panel-alt: #f7f9fc;
+  --border: #d5dce6;
+  --border-up: #a9b4c4;
+  --fg: #0d1420;
+  --fg-mute: #556579;
+  --accent: #0369a1;
+  --accent-hover: #075985;
+  --accent-fg: #ffffff;
+  --ok: #16a34a;
+  --ok-fill: #dcfce7;
+  --warn: #b45309;
+  --warn-fill: #fef3c7;
+  --crit: #dc2626;
+  --crit-fill: #fee2e2;
+  --overlay: rgba(0,0,0,.5);
+  --font-ui: 'Microsoft JhengHei', 'Noto Sans TC', -apple-system, system-ui, sans-serif;
+  --font-mono: Consolas, 'JetBrains Mono', ui-monospace, monospace;
+  color-scheme: light;
+}
+html[data-theme="dark"] {
+  --bg: #0b1016;
+  --panel: #121a24;
+  --panel-alt: #1a2432;
+  --border: #273347;
+  --border-up: #3b4a62;
+  --fg: #e9edf2;
+  --fg-mute: #8b99ad;
+  --accent: #3b82f6;
+  --accent-hover: #2563eb;
+  --accent-fg: #ffffff;
+  --ok: #4ade80;
+  --ok-fill: rgba(74,222,128,.14);
+  --warn: #fbbf24;
+  --warn-fill: rgba(251,191,36,.14);
+  --crit: #f87171;
+  --crit-fill: rgba(248,113,113,.14);
+  --overlay: rgba(0,0,0,.65);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 16pt/1.4 var(--font-ui);
+}
+.wrap { max-width: 900px; margin: 0 auto; padding: 16px 16px 40px; }
+
+/* 錯誤 banner */
+#err-banner {
+  display: none;
+  background: var(--crit);
+  color: #fff;
+  padding: 10px 16px;
+  font-weight: 700;
+  text-align: center;
+  font-size: 16pt;
+}
+
+/* ── 頂部 ── */
+header {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 12px 0 16px;
+}
+header h1 { margin: 0; font-size: 20pt; font-weight: 700; white-space: nowrap; }
+header .spacer { flex: 1; }
+.status-badge {
+  display: inline-block; padding: 4px 12px; border-radius: 999px;
+  font-size: 14pt; font-weight: 700; border: 1px solid transparent;
+}
+.status-badge.ok   { background: var(--ok-fill);   color: var(--ok);   border-color: var(--ok); }
+.status-badge.warn { background: var(--warn-fill); color: var(--warn); border-color: var(--warn); }
+.status-badge.crit { background: var(--crit-fill); color: var(--crit); border-color: var(--crit); }
+.status-badge.none { background: var(--panel-alt); color: var(--fg-mute); border-color: var(--border); }
+.small-btn {
+  height: 40px; padding: 0 14px; border-radius: 8px;
+  border: 1px solid var(--border-up); background: var(--panel); color: var(--fg);
+  font: 13pt var(--font-ui); cursor: pointer;
+}
+.small-btn:hover { filter: brightness(.96); border-color: var(--fg-mute); }
+#conn { font-size: 13pt; white-space: nowrap; }
+
+/* ── 卡片 ── */
+.card {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 12px; padding: 20px 24px; margin-bottom: 16px;
+}
+.card h2 { margin: 0 0 14px; font-size: 18pt; }
+
+/* ── 表單 ── */
+.form-grid {
+  display: grid; grid-template-columns: 140px 1fr; gap: 12px 16px; align-items: center;
+}
+.form-grid label { font-size: 18pt; font-weight: 700; text-align: right; }
+.field { display: flex; align-items: center; gap: 10px; min-width: 0; }
+input, select {
+  height: 44px; font: 18pt var(--font-ui); color: var(--fg);
+  background: var(--panel); border: 2px solid var(--border-up); border-radius: 8px;
+  padding: 0 10px; width: 100%; min-width: 0;
+}
+input:focus, select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(3,105,161,.2); }
+#f-pid { width: 140px; font-family: var(--font-mono); flex: none; }
+#f-shots, #f-qty { width: 120px; text-align: center; flex: none; }
+#pid-name { font-size: 18pt; font-weight: 700; white-space: nowrap; }
+#pid-name.unknown { color: var(--warn); font-weight: 400; font-size: 14pt; }
+.step-btn {
+  width: 50px; height: 44px; flex: none; border-radius: 8px;
+  border: 2px solid var(--border-up); background: var(--panel-alt); color: var(--fg);
+  font: 700 20pt var(--font-ui); cursor: pointer; line-height: 1;
+}
+.step-btn:hover { border-color: var(--accent); }
+.invalid { border-color: var(--crit) !important; animation: flash .25s 3; }
+@keyframes flash { 50% { background: var(--crit-fill); } }
+
+.submit-row { text-align: center; margin-top: 22px; }
+.big-btn {
+  width: 80%; height: 60px; border: none; border-radius: 8px;
+  background: var(--accent); color: var(--accent-fg);
+  font: 700 24pt var(--font-ui); cursor: pointer;
+}
+.big-btn:hover:not(:disabled) { background: var(--accent-hover); }
+.big-btn:disabled { opacity: .6; cursor: not-allowed; }
+.hint { font-size: 12pt; color: var(--fg-mute); margin-top: 6px; }
+#msg { min-height: 36px; margin-top: 10px; font-size: 18pt; font-weight: 700; text-align: center; transition: opacity .5s; }
+#msg.ok { color: var(--ok); }
+#msg.err { color: var(--crit); }
+#msg.fade { opacity: 0; }
+
+/* ── 今日累計 ── */
+.totals { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 24px; }
+.totals .k { font-size: 16pt; color: var(--fg-mute); }
+.totals .v { font-size: 36pt; font-weight: 700; font-family: var(--font-mono); line-height: 1.15; }
+.totals .v.t { font-size: 24pt; }
+
+/* ── 明細 ── */
+table { width: 100%; border-collapse: collapse; font-size: 15pt; }
+th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; }
+th { color: var(--fg-mute); font-weight: 700; background: var(--panel-alt); }
+td.num { font-family: var(--font-mono); text-align: right; }
+tr.new td { animation: newrow 2s; }
+@keyframes newrow { from { background: var(--ok-fill); } }
+.empty { text-align: center; color: var(--fg-mute); padding: 18px; }
+.worker-name { color: var(--fg-mute); margin-left: 2px; }
+.table-wrap { overflow-x: auto; }
+
+/* ── Modal ── */
+.overlay {
+  position: fixed; inset: 0; background: var(--overlay);
+  display: none; align-items: center; justify-content: center; padding: 16px; z-index: 100;
+}
+.overlay.open { display: flex; animation: fadein .15s ease-out; }
+@keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
+.modal {
+  background: var(--panel); color: var(--fg); border-radius: 12px;
+  width: 100%; max-width: 560px; box-shadow: 0 20px 50px rgba(0,0,0,.35);
+  overflow: hidden;
+}
+.modal-head { padding: 16px 24px; font-size: 20pt; font-weight: 700; border-bottom: 1px solid var(--border); }
+.modal-body { padding: 16px 24px; font-size: 17pt; }
+.modal-body .row { display: flex; gap: 24px; padding: 3px 0; }
+.modal-body .row span b { color: var(--fg-mute); font-weight: 400; }
+#modal-err { color: var(--crit); font-weight: 700; margin-top: 10px; min-height: 0; }
+.modal-foot {
+  display: flex; gap: 12px; justify-content: flex-end;
+  padding: 16px 24px; border-top: 1px solid var(--border); background: var(--panel-alt);
+}
+.modal-foot button {
+  height: 54px; padding: 0 22px; border-radius: 8px; font: 700 17pt var(--font-ui); cursor: pointer;
+}
+#btn-cancel { background: var(--panel); color: var(--fg); border: 2px solid var(--border-up); }
+#btn-cancel:hover { border-color: var(--fg-mute); }
+#btn-confirm { background: var(--accent); color: var(--accent-fg); border: none; min-width: 220px; }
+#btn-confirm:hover:not(:disabled) { background: var(--accent-hover); }
+#btn-confirm:focus-visible { outline: 3px solid var(--warn); outline-offset: 2px; }
+#btn-confirm:disabled { opacity: .6; cursor: not-allowed; }
+.spinner {
+  display: inline-block; width: 18px; height: 18px; vertical-align: -2px; margin-right: 8px;
+  border: 3px solid rgba(255,255,255,.4); border-top-color: #fff; border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 640px) {
+  .form-grid { grid-template-columns: 1fr; gap: 4px; }
+  .form-grid label { text-align: left; margin-top: 8px; }
+  .big-btn { width: 100%; }
+}
+</style>
+</head>
+<body>
+<div id="err-banner">⚠ 資料來源異常，請檢查網路</div>
+
+<div class="wrap">
+  <header>
+    <h1>🏭 A 棟射出生產日報</h1>
+    <select id="hdr-machine" aria-label="機台切換" style="width:150px"></select>
+    <span id="machine-status" class="status-badge none">— 狀態未知</span>
+    <span class="spacer"></span>
+    <button class="small-btn" id="theme-toggle" type="button">🌙 深色主題</button>
+    <span id="conn">⚪ 連線中…</span>
+  </header>
+
+  <!-- 輸入表單 -->
+  <section class="card">
+    <div class="form-grid">
+      <label for="f-machine">機台</label>
+      <div class="field"><select id="f-machine"></select></div>
+
+      <label for="f-pid">工號</label>
+      <div class="field">
+        <input id="f-pid" type="text" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="4 碼">
+        <span id="pid-name"></span>
+      </div>
+
+      <label for="f-model">車型</label>
+      <div class="field"><select id="f-model"><option value="">（載入中…）</option></select></div>
+
+      <label for="f-part">件號</label>
+      <div class="field"><select id="f-part"><option value="">（載入中…）</option></select></div>
+
+      <label for="f-material">料號</label>
+      <div class="field"><select id="f-material"><option value="">（載入中…）</option></select></div>
+
+      <label for="f-mold">模具編號</label>
+      <div class="field"><input id="f-mold" type="text" autocomplete="off" placeholder="例：M-500-003"></div>
+
+      <label for="f-shots">本次模次</label>
+      <div class="field">
+        <button class="step-btn" type="button" data-step="-1" tabindex="-1">−</button>
+        <input id="f-shots" type="number" min="1" step="1" value="1">
+        <button class="step-btn" type="button" data-step="1" tabindex="-1">+</button>
+      </div>
+
+      <label for="f-qty">產出數量</label>
+      <div class="field"><input id="f-qty" type="number" min="0" step="1" value="1"></div>
+
+      <label for="f-shift">班別</label>
+      <div class="field">
+        <select id="f-shift"><option>A</option><option>B</option><option>C</option></select>
+      </div>
+
+      <label for="f-status">狀態</label>
+      <div class="field">
+        <select id="f-status">
+          <option value="生產中">🟢 生產中</option>
+          <option value="試模中">🟡 試模中</option>
+          <option value="待機">🔴 待機</option>
+        </select>
+      </div>
+
+      <label for="f-note">備註</label>
+      <div class="field"><input id="f-note" type="text" autocomplete="off"></div>
+    </div>
+
+    <div class="submit-row">
+      <button class="big-btn" id="btn-submit" type="button">📤 送出 (Enter)</button>
+      <div class="hint">Enter → 確認彈窗 → Enter 送出　｜　Ctrl+Enter 直接送出　｜　Esc 取消</div>
+      <div id="msg"></div>
+    </div>
+  </section>
+
+  <!-- 今日累計 -->
+  <section class="card">
+    <h2>今日累計 <span id="totals-machine" style="color:var(--fg-mute);font-weight:400"></span></h2>
+    <div class="totals">
+      <div><div class="k">模次總數</div><div class="v" id="t-shots">—</div></div>
+      <div><div class="k">產出件數</div><div class="v" id="t-qty">—</div></div>
+      <div><div class="k">今日第一筆</div><div class="v t" id="t-first">—</div></div>
+      <div><div class="k">上一筆</div><div class="v t" id="t-last">—</div></div>
+    </div>
+  </section>
+
+  <!-- 近期明細 -->
+  <section class="card">
+    <h2>近期明細（最後 10 筆）</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>時間</th><th>車型</th><th>件號</th><th>料號</th><th style="text-align:right">模次</th><th>工號 (姓名)</th></tr></thead>
+        <tbody id="recent"><tr><td colspan="6" class="empty">載入中…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="hint" id="data-src"></div>
+  </section>
+</div>
+
+<!-- 確認送出彈窗 -->
+<div class="overlay" id="overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+  <div class="modal">
+    <div class="modal-head" id="modal-title">📤 確認送出以下資料？</div>
+    <div class="modal-body">
+      <div id="modal-summary"></div>
+      <div id="modal-err"></div>
+    </div>
+    <div class="modal-foot">
+      <button id="btn-cancel" type="button">取消 (Esc)</button>
+      <button id="btn-confirm" type="button">✓ 確認送出 (Enter)</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const CONFIG = {
+    sheetsId:  '1qZgChM15eMQmstV4jhKhHYC8-BA0fl2eO6iG5eG-_mc',
+    apiKey:    'AIzaSyBMgXHsua64mciOFJwqH4NreGI11gMXR-s',
+    webAppUrl: 'https://script.google.com/macros/s/AKfycbwJneLA88cHecPtsQH965ieiGWbXw1KaqeLcMNRE7f2BBJT28882I45-Q21BF30k0_D/exec'
+  };
+  // 補漆房共用 Sheet（讀員工名單用）
+  const WORKER_SHEET_ID = '1xQoIxoLlM4LkKjDrYZ_87uIahtebPgPcG6Hitck1T5c';
+
+  const MACHINES = ['500T', '750T', '2500T', '3000T-1', '3000T-2'];
+  const DROPDOWN_RANGE = '下拉選單資料!A:C';     // A 車型 / B 件號 / C 料號
+  const STATUS_SHEET   = '射出機狀態';
+  const WORKER_SHEET_RANGE = '員工表!A2:D1000';  // A 工號 / B 姓名 / C 崗位 / D 狀態
+  const REFRESH_MS = 30000;
+  const SLOW_REFRESH_MS = 15 * 60 * 1000;        // 員工表、下拉選單每 15 分鐘重讀（省 API 配額）
+  const STATUS_ICON = { '生產中': '🟢', '試模中': '🟡', '待機': '🔴' };
+
+  const $ = id => document.getElementById(id);
+  function lsGet(k) { try { return localStorage.getItem(k); } catch(e) { return null; } }
+  function lsSet(k, v) { try { localStorage.setItem(k, v); } catch(e) {} }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+  function pad(n) { return String(n).padStart(2, '0'); }
+  function hhmm(d) { return d ? pad(d.getHours()) + ':' + pad(d.getMinutes()) : '—'; }
+  function hhmmss(d) { return hhmm(d) + ':' + pad(d.getSeconds()); }
+  function dateSlash(d) { return `${d.getFullYear()}/${pad(d.getMonth()+1)}/${pad(d.getDate())}`; }
+  function num(v) { const n = parseFloat(String(v == null ? '' : v).replace(/,/g, '')); return isFinite(n) ? n : 0; }
+
+  // ── Google Sheets 讀取 ──────────────────────────────────────────
+  async function sheetsBatchGet(sheetId, ranges) {
+    const qs = ranges.map(r => 'ranges=' + encodeURIComponent(r)).join('&');
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values:batchGet?key=${CONFIG.apiKey}&${qs}`;
+    const res = await fetch(url, { cache: 'no-store' });
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => null);
+      throw new Error((errJson && errJson.error && errJson.error.message) || `HTTP ${res.status}`);
+    }
+    const json = await res.json();
+    return (json.valueRanges || []).map(v => v.values || []);
+  }
+  // 分頁名稱以數字開頭或含「-」時，A1 表示法必須加單引號
+  function q(sheet) { return `'${sheet.replace(/'/g, "''")}'`; }
+
+  function normalizeDate(s) {
+    s = String(s || '').trim().replace(/\s*(上午|下午|AM|PM)[\s\d:：]*$/i, '').trim();
+    s = s.split('T')[0].trim().split(' ')[0].replace(/-/g, '/');
+    const m1 = s.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
+    if (m1) return `${m1[1]}/${m1[2].padStart(2,'0')}/${m1[3].padStart(2,'0')}`;
+    const m2 = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (m2) return `${m2[3]}/${m2[1].padStart(2,'0')}/${m2[2].padStart(2,'0')}`;
+    return '';
+  }
+  // 「2026/11/06 上午08:08:58」「2026-11-06 08:08:58」「ISO」→ Date（本機時區）
+  function parseTimestamp(raw) {
+    raw = String(raw || '').trim();
+    if (!raw) return null;
+    const m = raw.match(/(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})[\sT]*(上午|下午|AM|PM)?\s*(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?/i);
+    if (m && !/Z|[+-]\d{2}:?\d{2}$/.test(raw)) {
+      let h = parseInt(m[5], 10);
+      const ap = (m[4] || m[8] || '').toUpperCase();
+      if ((ap === '下午' || ap === 'PM') && h < 12) h += 12;
+      if ((ap === '上午' || ap === 'AM') && h === 12) h = 0;
+      return new Date(+m[1], +m[2] - 1, +m[3], h, +m[6], +(m[7] || 0));
+    }
+    const d = new Date(raw);
+    return isNaN(d) ? null : d;
+  }
+
+  // ── 員工表 ──
+  let WORKER_MAP = {};
+  async function loadWorkerMap() {
+    try {
+      const [rows] = await sheetsBatchGet(WORKER_SHEET_ID, [WORKER_SHEET_RANGE]);
+      const map = {};
+      rows.forEach(r => {
+        const [id, name, role, status] = r;
+        if (!id || !String(id).trim()) return;
+        map[String(id).trim()] = { name: (name || '').trim(), role: (role || '').trim(), active: (status || '').trim() !== '離職' };
+      });
+      WORKER_MAP = map;
+    } catch(e) {
+      console.warn('員工表讀取失敗，使用純工號顯示', e);
+    }
+    updatePidName();
+  }
+  function workerName(id) {
+    const info = WORKER_MAP[String(id == null ? '' : id).trim()];
+    return info && info.name ? info.name : '';
+  }
+  function formatWorkerId(id) {
+    const sid = String(id == null ? '' : id).trim();
+    const name = workerName(sid);
+    return esc(sid) + (name ? '<span class="worker-name">(' + esc(name) + ')</span>' : '');
+  }
+
+  // ── 下拉選單資料 ──
+  async function loadDropdowns() {
+    const [rows] = await sheetsBatchGet(CONFIG.sheetsId, [DROPDOWN_RANGE]);
+    // 第一列若是標題（車型/件號/料號）就略過
+    const body = rows.length && /車型|件號|料號/.test((rows[0] || []).join('')) ? rows.slice(1) : rows;
+    [['f-model', 0], ['f-part', 1], ['f-material', 2]].forEach(([id, col]) => {
+      const seen = new Set();
+      body.forEach(r => { const v = String(r[col] == null ? '' : r[col]).trim(); if (v) seen.add(v); });
+      fillSelect($(id), [...seen]);
+    });
+  }
+  function fillSelect(sel, values) {
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">（請選擇）</option>' +
+      values.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join('');
+    if (cur && values.includes(cur)) sel.value = cur;  // 重讀時保留目前選擇
+  }
+
+  // ── 射出機狀態 ──（依標題自動找「機台」「狀態」欄；找不到用 A=機台、B=狀態）
+  function parseStatusSheet(rows) {
+    const out = {};
+    if (!rows.length) return out;
+    let cM = 0, cS = 1, start = 0;
+    const header = rows[0].map(h => String(h || '').trim());
+    if (header.some(h => /機台|狀態/.test(h))) {
+      start = 1;
+      header.forEach((h, i) => {
+        if (/機台/.test(h)) cM = i;
+        else if (/^狀態|目前狀態|當前狀態/.test(h)) cS = i;
+      });
+    }
+    rows.slice(start).forEach(r => {
+      const m = String(r[cM] || '').trim();
+      if (m) out[m] = String(r[cS] || '').trim();
+    });
+    return out;
+  }
+  function statusKey(s) {
+    s = String(s || '');
+    if (/生產/.test(s)) return '生產中';
+    if (/試模/.test(s)) return '試模中';
+    if (/待機|停/.test(s)) return '待機';
+    return '';
+  }
+  function renderMachineStatus(raw) {
+    const el = $('machine-status');
+    const k = statusKey(raw);
+    el.className = 'status-badge ' + ({ '生產中': 'ok', '試模中': 'warn', '待機': 'crit' }[k] || 'none');
+    el.textContent = k ? `${STATUS_ICON[k]} ${k}` : (raw ? raw : '— 狀態未知');
+  }
+
+  // ── 機台分頁（依標題名稱自動對應欄位）──
+  // 標題找不到時的預設欄序：時間戳記, 日期, 機台, 工號, 姓名, 車型, 件號, 料號, 模具編號, 模次, 產出數量, 班別, 狀態, 備註
+  function parseMachineRows(rows) {
+    if (!rows.length) return [];
+    const col = { ts: 0, date: 1, pid: 3, model: 5, part: 6, material: 7, mold: 8, shots: 9, qty: 10, shift: 11, status: 12, note: 13 };
+    const header = rows[0].map(h => String(h || '').trim());
+    const isHeader = header.some(h => /工號|車型|時間/.test(h));
+    if (isHeader) {
+      const found = {};
+      header.forEach((h, i) => {
+        const set = k => { if (!(k in found)) { found[k] = i; } };
+        if (/時間戳記|時間/.test(h))        set('ts');
+        else if (/日期/.test(h))            set('date');
+        else if (/工號/.test(h))            set('pid');
+        else if (/車型/.test(h))            set('model');
+        else if (/件號/.test(h))            set('part');
+        else if (/料號/.test(h))            set('material');
+        else if (/模具/.test(h))            set('mold');
+        else if (/模次/.test(h))            set('shots');
+        else if (/產出|數量/.test(h))       set('qty');
+        else if (/班別/.test(h))            set('shift');
+        else if (/狀態/.test(h))            set('status');
+        else if (/備註/.test(h))            set('note');
+      });
+      Object.keys(col).forEach(k => { col[k] = k in found ? found[k] : -1; });
+    }
+    const g = (r, k) => (col[k] >= 0 && r[col[k]] != null ? String(r[col[k]]).trim() : '');
+    const out = [];
+    (isHeader ? rows.slice(1) : rows).forEach(r => {
+      const ts = parseTimestamp(g(r, 'ts'));
+      const date = normalizeDate(g(r, 'date')) || (ts ? dateSlash(ts) : '');
+      if (!date) return;
+      out.push({
+        ts, date,
+        pid: g(r, 'pid'), model: g(r, 'model'), part: g(r, 'part'), material: g(r, 'material'),
+        shots: num(g(r, 'shots')), qty: num(g(r, 'qty')),
+      });
+    });
+    return out;
+  }
+
+  // ── 狀態 ──
+  let currentMachine = MACHINES.includes(lsGet('lastMachine')) ? lsGet('lastMachine') : MACHINES[0];
+  let todayRows = [];       // 當前機台今日資料（新 → 舊）
+  let statusMap = {};
+  let refreshSeq = 0;       // 機台切換時丟棄舊請求的結果
+  let newRowFlag = false;
+
+  function setConn(ok) {
+    $('conn').textContent = ok ? '🟢 連線正常' : '🔴 連線異常';
+    $('err-banner').style.display = ok ? 'none' : 'block';
+  }
+
+  async function refresh({ applyStatusToForm = false } = {}) {
+    const seq = ++refreshSeq;
+    const machine = currentMachine;
+    try {
+      const [machineRows, statusRows] = await sheetsBatchGet(CONFIG.sheetsId, [q(machine) + '!A:Z', q(STATUS_SHEET) + '!A:Z']);
+      if (seq !== refreshSeq) return;
+      const t = dateSlash(new Date());
+      todayRows = parseMachineRows(machineRows)
+        .filter(r => r.date === t)
+        .sort((a, b) => (b.ts ? b.ts.getTime() : 0) - (a.ts ? a.ts.getTime() : 0));
+      statusMap = parseStatusSheet(statusRows);
+      renderMachineStatus(statusMap[machine]);
+      if (applyStatusToForm) {
+        const k = statusKey(statusMap[machine]);
+        if (k) $('f-status').value = k;
+      }
+      renderToday();
+      setConn(true);
+      $('data-src').textContent = '資料來源：Google Sheet · 最後更新 ' + hhmmss(new Date());
+    } catch (e) {
+      if (seq !== refreshSeq) return;
+      console.error('[injection-report] 讀取失敗', e);
+      setConn(false);
+      $('data-src').textContent = '讀取失敗：' + e.message;
+    }
+  }
+
+  function renderToday() {
+    $('totals-machine').textContent = '· ' + currentMachine;
+    const shots = todayRows.reduce((s, r) => s + r.shots, 0);
+    const qty = todayRows.reduce((s, r) => s + r.qty, 0);
+    const times = todayRows.map(r => r.ts).filter(Boolean).sort((a, b) => a - b);
+    $('t-shots').textContent = shots.toLocaleString();
+    $('t-qty').textContent = qty.toLocaleString();
+    $('t-first').textContent = times.length ? hhmm(times[0]) : '—';
+    $('t-last').textContent = times.length ? hhmm(times[times.length - 1]) : '—';
+
+    const recent = todayRows.slice(0, 10);
+    $('recent').innerHTML = recent.length ? recent.map((r, i) => `
+      <tr${i === 0 && newRowFlag ? ' class="new"' : ''}>
+        <td>${r.ts ? hhmmss(r.ts) : '—'}</td>
+        <td>${esc(r.model)}</td><td>${esc(r.part)}</td><td>${esc(r.material)}</td>
+        <td class="num">${r.shots}</td><td>${formatWorkerId(r.pid)}</td>
+      </tr>`).join('') : '<tr><td colspan="6" class="empty">今日尚無資料</td></tr>';
+    newRowFlag = false;
+  }
+
+  function clearToday() {
+    todayRows = [];
+    ['t-shots', 't-qty', 't-first', 't-last'].forEach(id => $(id).textContent = '—');
+    $('recent').innerHTML = '<tr><td colspan="6" class="empty">載入中…</td></tr>';
+    renderMachineStatus('');
+  }
+
+  // ── 機台切換（頂部與表單兩個下拉同步）──
+  function fillMachines() {
+    ['hdr-machine', 'f-machine'].forEach(id => {
+      $(id).innerHTML = MACHINES.map(m => `<option value="${m}">${m}</option>`).join('');
+      $(id).value = currentMachine;
+    });
+  }
+  function switchMachine(m) {
+    if (!MACHINES.includes(m) || m === currentMachine) return;
+    currentMachine = m;
+    $('hdr-machine').value = m;
+    $('f-machine').value = m;
+    lsSet('lastMachine', m);
+    clearToday();
+    refresh({ applyStatusToForm: true });
+  }
+  $('hdr-machine').addEventListener('change', e => switchMachine(e.target.value));
+  $('f-machine').addEventListener('change', e => switchMachine(e.target.value));
+
+  // ── 工號 → 姓名 ──
+  function updatePidName() {
+    const pid = $('f-pid').value.trim();
+    const el = $('pid-name');
+    const name = workerName(pid);
+    if (!pid) { el.textContent = ''; el.className = ''; }
+    else if (name) { el.textContent = name; el.className = ''; }
+    else { el.textContent = pid.length >= 4 ? '查無此工號' : ''; el.className = 'unknown'; }
+  }
+  $('f-pid').addEventListener('input', () => { $('f-pid').classList.remove('invalid'); updatePidName(); });
+
+  // ── 模次 [-] [+] ──
+  document.querySelectorAll('.step-btn').forEach(b => b.addEventListener('click', () => {
+    const el = $('f-shots');
+    el.value = Math.max(1, Math.round(num(el.value)) + Number(b.dataset.step));
+  }));
+
+  // ── 訊息區 ──
+  let msgTimer = null;
+  function showMsg(text, type, autoFade) {
+    const el = $('msg');
+    clearTimeout(msgTimer);
+    el.textContent = text;
+    el.className = type;
+    if (autoFade) msgTimer = setTimeout(() => { el.classList.add('fade'); }, 3000);
+  }
+
+  // ── 收集 / 驗證 ──
+  function collect() {
+    const pid = $('f-pid').value.trim();
+    const now = new Date();
+    return {
+      timestamp: `${dateSlash(now)} ${hhmmss(now)}`,
+      date: dateSlash(now),
+      machine: $('f-machine').value,
+      pid,
+      name: workerName(pid),
+      model: $('f-model').value,
+      partNo: $('f-part').value,
+      materialNo: $('f-material').value,
+      moldNo: $('f-mold').value.trim(),
+      shots: Math.max(0, Math.round(num($('f-shots').value))),
+      qty: Math.max(0, Math.round(num($('f-qty').value))),
+      shift: $('f-shift').value,
+      status: $('f-status').value,
+      note: $('f-note').value.trim(),
+    };
+  }
+  function validate() {
+    const bad = [];
+    if (!$('f-machine').value) bad.push(['f-machine', '機台']);
+    if (!$('f-pid').value.trim()) bad.push(['f-pid', '工號']);
+    bad.forEach(([id]) => {
+      const el = $(id);
+      el.classList.remove('invalid'); void el.offsetWidth; el.classList.add('invalid');
+    });
+    if (bad.length) {
+      showMsg('❌ 請填寫：' + bad.map(b => b[1]).join('、'), 'err', false);
+      $(bad[0][0]).focus();
+      return false;
+    }
+    return true;
+  }
+
+  // ── 送出 ──
+  async function postRecord(params) {
+    if (!navigator.onLine) throw new Error('離線中，請恢復網路後重試');
+    // 不設 Content-Type（預設 text/plain）→ 簡單請求，不觸發 CORS preflight，Apps Script 才收得到
+    const res = await fetch(CONFIG.webAppUrl, { method: 'POST', body: JSON.stringify(params) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json().catch(() => null);
+    if (json && json.ok === false) throw new Error(json.message || json.error || '伺服器拒絕');
+    return json;
+  }
+
+  function afterSuccess(params) {
+    const now = new Date();
+    showMsg('✅ 已上傳 ' + hhmmss(now), 'ok', true);
+    $('f-note').value = '';
+    $('f-qty').value = 1;
+    lsSet('lastMachine', params.machine);
+    lsSet('lastPid', params.pid);
+    lsSet('lastShift', params.shift);
+    // 本地先加上去，下次 30 秒刷新會以 Sheet 實際資料為準
+    if (params.machine === currentMachine) {
+      todayRows.unshift({ ts: now, date: dateSlash(now), pid: params.pid, model: params.model,
+        part: params.partNo, material: params.materialNo, shots: params.shots, qty: params.qty });
+      newRowFlag = true;
+      renderToday();
+    }
+    renderMachineStatus(params.status);
+    $('f-shots').focus();
+    $('f-shots').select();
+  }
+
+  // ── 彈窗 ──
+  let modalOpen = false;
+  let sending = false;
+  let modalOpenedAt = 0;
+  let pending = null;
+
+  function openModal() {
+    if (modalOpen || sending) return;
+    if (!validate()) return;
+    pending = collect();
+    const p = pending;
+    const dash = v => v ? esc(v) : '—';
+    const row = (...cells) => '<div class="row">' + cells.map(([k, v]) => `<span><b>${k}：</b>${v}</span>`).join('') + '</div>';
+    $('modal-summary').innerHTML =
+      row(['機台', esc(p.machine)]) +
+      row(['工號', esc(p.pid) + (p.name ? ` (${esc(p.name)})` : ' <span style="color:var(--warn)">(查無姓名)</span>')]) +
+      row(['車型', dash(p.model)]) +
+      row(['件號', dash(p.partNo)]) +
+      row(['料號', dash(p.materialNo)]) +
+      row(['模具', dash(p.moldNo)]) +
+      row(['模次', p.shots], ['產出', p.qty]) +
+      row(['班別', esc(p.shift)], ['狀態', `${STATUS_ICON[p.status] || ''} ${esc(p.status)}`]) +
+      row(['備註', dash(p.note)]);
+    $('modal-err').textContent = '';
+    setConfirmBusy(false);
+    $('overlay').classList.add('open');
+    modalOpen = true;
+    modalOpenedAt = Date.now();
+    $('btn-confirm').focus();
+  }
+
+  function closeModal() {
+    if (!modalOpen || sending) return;
+    $('overlay').classList.remove('open');
+    modalOpen = false;
+    pending = null;
+    $('f-shots').focus();
+  }
+
+  function setConfirmBusy(busy) {
+    const b = $('btn-confirm');
+    b.disabled = busy;
+    b.innerHTML = busy ? '<span class="spinner"></span>送出中...' : '✓ 確認送出 (Enter)';
+    $('btn-cancel').disabled = busy;
+  }
+
+  async function confirmSend() {
+    if (!modalOpen || sending || !pending) return;
+    sending = true;
+    const startedAt = Date.now();
+    setConfirmBusy(true);
+    $('modal-err').textContent = '';
+    try {
+      await postRecord(pending);
+      const params = pending;
+      sending = false;
+      closeModal();
+      afterSuccess(params);
+    } catch (e) {
+      // 至少鎖 500ms，防止連按重送
+      const wait = Math.max(0, 500 - (Date.now() - startedAt));
+      setTimeout(() => {
+        sending = false;
+        setConfirmBusy(false);
+        $('btn-confirm').focus();
+      }, wait);
+      $('modal-err').textContent = '❌ 錯誤：' + friendlyErr(e);
+    }
+  }
+
+  // Ctrl+Enter：不開彈窗直接送出
+  async function quickSend() {
+    if (modalOpen || sending) return;
+    if (!validate()) return;
+    const params = collect();
+    sending = true;
+    $('btn-submit').disabled = true;
+    $('btn-submit').innerHTML = '<span class="spinner"></span>送出中...';
+    showMsg('', '', false);
+    try {
+      await postRecord(params);
+      afterSuccess(params);
+    } catch (e) {
+      showMsg('❌ 錯誤：' + friendlyErr(e), 'err', false);
+    } finally {
+      setTimeout(() => {
+        sending = false;
+        $('btn-submit').disabled = false;
+        $('btn-submit').textContent = '📤 送出 (Enter)';
+      }, 500);
+    }
+  }
+
+  function friendlyErr(e) {
+    if (!navigator.onLine) return '離線中，請恢復網路後重試';
+    if (e instanceof TypeError) return '無法連線到伺服器，請檢查網路後重試';
+    return e.message || String(e);
+  }
+
+  $('btn-submit').addEventListener('click', openModal);
+  $('btn-confirm').addEventListener('click', confirmSend);
+  $('btn-cancel').addEventListener('click', closeModal);
+  $('overlay').addEventListener('mousedown', e => { if (e.target === $('overlay')) closeModal(); });
+
+  // ── 鍵盤 ──
+  document.addEventListener('keydown', e => {
+    if (modalOpen) {
+      if (e.key === 'Escape') { e.preventDefault(); closeModal(); return; }
+      if (e.key === 'Enter') {
+        e.preventDefault(); // 避免焦點按鈕的原生 click 再觸發一次
+        // 長按 Enter 的自動重複、或開窗瞬間的 Enter 不算確認
+        if (e.repeat || Date.now() - modalOpenedAt < 250) return;
+        if (document.activeElement === $('btn-cancel')) closeModal();
+        else confirmSend();
+        return;
+      }
+      if (e.key === 'Tab') { // 焦點鎖在彈窗內
+        e.preventDefault();
+        (document.activeElement === $('btn-confirm') ? $('btn-cancel') : $('btn-confirm')).focus();
+      }
+      return;
+    }
+    if (e.key !== 'Enter' || e.isComposing || e.repeat) return;
+    const t = e.target;
+    if (t.tagName === 'TEXTAREA') return;
+    if (t.tagName === 'BUTTON' && t !== $('btn-submit')) return; // 其他按鈕（主題、+/-）照原生行為
+    e.preventDefault();
+    if (e.ctrlKey) quickSend();
+    else openModal();
+  });
+
+  // ── 離線 / 恢復 ──
+  window.addEventListener('offline', () => { showMsg('離線中，請恢復網路後重試', 'err', false); setConn(false); });
+  window.addEventListener('online',  () => { showMsg('', '', false); refresh(); });
+
+  // ── 主題 ──
+  function applyTheme(t) {
+    document.documentElement.setAttribute('data-theme', t);
+    $('theme-toggle').textContent = t === 'dark' ? '☀️ 淺色主題' : '🌙 深色主題';
+  }
+  applyTheme(lsGet('injTheme') === 'dark' ? 'dark' : 'light');
+  $('theme-toggle').addEventListener('click', () => {
+    const next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    applyTheme(next);
+    lsSet('injTheme', next);
+  });
+
+  // ── 初始化 ──
+  fillMachines();
+  if (lsGet('lastPid')) $('f-pid').value = lsGet('lastPid');
+  if (['A', 'B', 'C'].includes(lsGet('lastShift'))) $('f-shift').value = lsGet('lastShift');
+  $('totals-machine').textContent = '· ' + currentMachine;
+  if (!navigator.onLine) showMsg('離線中，請恢復網路後重試', 'err', false);
+
+  loadDropdowns().catch(e => {
+    console.error('[injection-report] 下拉選單讀取失敗', e);
+    setConn(false);
+    ['f-model', 'f-part', 'f-material'].forEach(id => fillSelect($(id), []));
+  });
+  loadWorkerMap();
+  refresh({ applyStatusToForm: true });
+  $(lsGet('lastPid') ? 'f-shots' : 'f-pid').focus();
+
+  setInterval(() => { if (!sending) refresh(); }, REFRESH_MS);
+  setInterval(() => { loadWorkerMap(); loadDropdowns().catch(() => {}); }, SLOW_REFRESH_MS);
+})();
+</script>
+</body>
+</html>
