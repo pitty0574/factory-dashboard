@@ -768,6 +768,12 @@ input:focus, select:focus {
   font-size: 13pt;
   font-family: var(--font-ui);
 }
+/* 件號帶出料號時的短暫外框高亮 */
+.combobox input.auto-filled { animation: auto-fill-flash 0.3s ease-out; }
+@keyframes auto-fill-flash {
+  from { outline: 3px solid var(--accent-ring); outline-offset: 2px; border-color: var(--big); }
+  to   { outline: 3px solid transparent; outline-offset: 2px; }
+}
 .combo-empty {
   padding: 10px 14px;
   font-size: 12pt;
@@ -1295,7 +1301,7 @@ tbody td.empty { font-family: var(--font-ui); }
         <div class="f-item">
           <label for="f-mold">🛠️ 模具編號 <span class="lbl-code">MOLD ID</span></label>
           <div class="field">
-            <input id="f-mold" type="text" readonly tabindex="-1" value="(需先選車型和件號)">
+            <input id="f-mold" type="text" readonly tabindex="-1" value="(需先選件號)">
             <span class="auto-tag">AUTO</span>
           </div>
         </div>
@@ -1478,7 +1484,19 @@ tbody td.empty { font-family: var(--font-ui); }
       body.forEach(r => { const v = String(r[col] == null ? '' : r[col]).trim(); if (v) seen.add(v); });
       COMBOS[id].setOptions([...seen]);
     });
+    // 件號 → 車型 / 料號 對照（每列 1 對 1；件號重複時以第一筆為準）
+    // 讀取失敗時上面就會 throw，兩個 Map 保留上次快取
+    const toModel = {}, toMaterial = {};
+    body.forEach(r => {
+      const [model, part, mat] = [0, 1, 2].map(c => String(r[c] == null ? '' : r[c]).trim());
+      if (!part) return;
+      if (model && !(part in toModel)) toModel[part] = model;
+      if (mat && !(part in toMaterial)) toMaterial[part] = mat;
+    });
+    partToModel = toModel;
+    partToMaterial = toMaterial;
   }
+  let partToModel = {}, partToMaterial = {};
 
   // ── 智慧搜尋 Combobox：模糊搜尋 + 可自由輸入清單外的值（試模新車型）──
   // 套用值時對 input 發出 change 事件，模具編號 / 即時卡片照常讀 input.value
@@ -1489,6 +1507,8 @@ tbody td.empty { font-family: var(--font-ui); }
     let options = [];
     let items = [];     // 目前顯示的 { value, isNew }
     let active = -1;
+    let hint = '';
+    let committed = '';  // 上次對外發出 change 時的值
 
     function hl(v, q) {
       const i = q ? v.toLowerCase().indexOf(q.toLowerCase()) : -1;
@@ -1554,13 +1574,22 @@ tbody td.empty { font-family: var(--font-ui); }
       v = String(v).trim();
       const canon = options.find(o => o.toLowerCase() === v.toLowerCase());  // 只差大小寫 → 用清單正式寫法
       if (canon) v = canon;
-      const changed = input.value !== v;
       input.value = v;
       close();
-      if (changed) input.dispatchEvent(new Event('change', { bubbles: true }));
+      // 跟 focus 時的值比（不是跟 input.value 比）：打完完整件號直接 Enter 也要發 change
+      if (v !== committed) {
+        committed = v;
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      }
     }
 
-    input.addEventListener('focus', () => open(''));
+    input.addEventListener('focus', () => { committed = input.value; open(''); });
+    // 原生 change 併入 apply，避免同一次變更觸發兩次
+    input.addEventListener('change', e => {
+      if (!e.isTrusted) return;
+      e.stopImmediatePropagation();
+      apply(input.value);
+    });
     input.addEventListener('mousedown', () => { if (document.activeElement === input && !isOpen()) open(''); });
     input.addEventListener('input', () => open(input.value.trim()));
     input.addEventListener('blur', () => apply(input.value));
@@ -1604,8 +1633,13 @@ tbody td.empty { font-family: var(--font-ui); }
     return {
       setOptions(vals) {
         options = vals;
-        input.placeholder = vals.length ? '搜尋或直接輸入…' : '（選單載入失敗，可直接輸入）';
+        this.setHint(hint);
         if (isOpen()) render(document.activeElement === input ? input.value.trim() : '');
+      },
+      // 自訂 placeholder（例如「件號未建檔，請手動輸入料號」）；傳空值還原預設
+      setHint(text) {
+        hint = text || '';
+        input.placeholder = hint || (options.length ? '搜尋或直接輸入…' : '（選單載入失敗，可直接輸入）');
       },
     };
   }
@@ -1790,17 +1824,38 @@ tbody td.empty { font-family: var(--font-ui); }
   }
   $('f-pid').addEventListener('input', () => { $('f-pid').classList.remove('invalid'); updatePidName(); });
 
-  // ── 模具編號 = 車型 + "-" + 件號（自動生成，唯讀）──
-  function moldNo() {
-    const model = $('f-model').value, part = $('f-part').value;
-    return model && part ? `${model}-${part}` : '';
+  // ── 模具編號 = 件號對應車型 + "-" + 件號中段（自動生成，唯讀）──
+  // 例：YCQ-85022-0440S（Sheet 車型 CQ）→ CQ-85022
+  // 未建檔件號才退回用畫面上「生產車型」欄位的值
+  function calcMoldId(partNo) {
+    partNo = String(partNo || '').trim();
+    if (!partNo) return '';
+    const segments = partNo.split('-');
+    if (segments.length < 2 || !segments[1]) return '';
+    const model = partToModel[partNo] || $('f-model').value.trim() || '??';
+    return `${model}-${segments[1]}`;
   }
+  function moldNo() { return calcMoldId($('f-part').value); }
   function updateMold() {
     const v = moldNo();
-    $('f-mold').value = v || '(需先選車型和件號)';
+    $('f-mold').value = v || '(需先選件號)';
     $('f-mold').classList.toggle('ready', !!v);
   }
   ['f-model', 'f-part'].forEach(id => ['input', 'change'].forEach(ev => $(id).addEventListener(ev, updateMold)));
+
+  // ── 件號變更 → 自動帶出料號（仍可手動改；只在件號變更時覆蓋）──
+  function updateMaterial() {
+    const part = $('f-part').value.trim();
+    const mat = $('f-material');
+    const found = part ? partToMaterial[part] : '';
+    mat.value = found || '';
+    COMBOS['f-material'].setHint(part && !found ? '件號未建檔，請手動輸入料號' : '');
+    if (found) {
+      mat.classList.remove('auto-filled'); void mat.offsetWidth; mat.classList.add('auto-filled');
+    }
+  }
+  $('f-part').addEventListener('change', updateMaterial);
+  $('f-material').addEventListener('animationend', e => e.target.classList.remove('auto-filled'));
 
   // ── 左欄即時卡片：車型 / 件號跟隨下拉選擇 ──
   function updateLive() {
