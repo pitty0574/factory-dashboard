@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>全廠 3D 數位戰情室 · INTEGRATED v3.4 (360°建構展演版)</title>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700;800&family=Noto+Sans+TC:wght@400;500;700&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Orbitron:wght@700;800&family=JetBrains+Mono:wght@500;600;700;800&family=Noto+Sans+TC:wght@400;500;700&display=swap">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
   <style>
@@ -181,14 +181,37 @@
     }
     .ctx-label:hover { background: var(--info-bright); color: #fff; z-index: 15; transform: translate(-50%, -50%) scale(1.1); }
 
-    /* A棟射出機台上方噸數標籤 */
+    /* A棟射出機極簡狀態膠囊 (left/top 由 layoutImmLabels 每幀計算；引線從膠囊底垂直指向燈柱頂) */
+    :root { --imm-bg: rgba(255, 255, 255, 0.85); --imm-fg: #0f172a; --imm-border: rgba(15, 23, 42, 0.12); --imm-border-hover: rgba(15, 23, 42, 0.38); }
+    [data-theme="dark"] { --imm-bg: rgba(15, 23, 42, 0.78); --imm-fg: #f8fafc; --imm-border: rgba(255, 255, 255, 0.15); --imm-border-hover: rgba(255, 255, 255, 0.5); }
     .imm-label {
-      position: absolute; transform: translate(-50%, -100%);
-      pointer-events: none;
-      background: rgba(30, 58, 138, 0.82); border: 1px solid rgba(56, 189, 248, 0.7);
-      color: #e0f2fe; padding: 1px 6px; border-radius: 4px; font-size: 10px; font-weight: 700;
-      white-space: nowrap; z-index: 4; letter-spacing: 0.3px;
+      --st: #94a3b8;
+      position: absolute; height: 22px; box-sizing: border-box;
+      pointer-events: auto; cursor: pointer;
+      display: flex; align-items: center; gap: 5px; padding: 0 7px 0 6px;
+      background: var(--imm-bg); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+      border: 1px solid var(--imm-border); border-left: 3px solid var(--st); border-radius: 6px;
+      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.18);
+      white-space: nowrap; z-index: 6; line-height: 1;
+      transition: transform 0.15s, border-color 0.15s;
     }
+    .imm-label:hover { transform: translateY(-2px); border-color: var(--imm-border-hover); border-left-color: var(--st); z-index: 7; }
+    .imm-label .il-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--st); box-shadow: 0 0 6px var(--st); flex-shrink: 0; }
+    .imm-label .il-name { font-family: 'Orbitron', var(--font-mono); font-weight: 700; font-size: 11px; color: var(--imm-fg); letter-spacing: 0.4px; }
+    .imm-label .il-st { font-size: 11px; font-weight: 700; color: var(--st); }
+    .imm-label .il-lead {
+      position: absolute; top: 100%; width: 1px; height: 8px; margin-left: -0.5px; pointer-events: none;
+      background: linear-gradient(to bottom, var(--st), transparent);
+    }
+    .imm-label .il-lead::after {
+      content: ""; position: absolute; left: -2px; bottom: -2.5px; width: 5px; height: 5px; border-radius: 50%; background: var(--st);
+    }
+    .imm-label.st-run  { --st: #10b981; }
+    .imm-label.st-try  { --st: #f59e0b; }
+    .imm-label.st-idle { --st: #ef4444; }
+    .imm-label.st-off  { --st: #94a3b8; }
+    .imm-upd { margin-left: 6px; font-size: 10px; font-weight: 600; color: var(--fg-mute); font-family: var(--font-mono); }
+    .imm-upd.off { color: var(--crit); }
 
     /* 工站懸浮膠囊標籤 */
     .station-pin {
@@ -348,21 +371,9 @@
     .nav-title { font-weight: 800; font-size: 12px; }
     .nav-sub { font-size: 10px; color: var(--fg-mute); font-family: var(--font-mono); }
 
-    /* A棟射出機狀態：標籤色、圖例、操作面板、MOCK 標記 */
-    .imm-label { pointer-events: auto; cursor: pointer; border-left-width: 4px; }
-    .imm-label.st-run  { border-left-color: #22c55e; }
-    .imm-label.st-try  { border-left-color: #eab308; }
-    .imm-label.st-idle { border-left-color: #ef4444; }
-    .imm-label.st-off  { border-left-color: #6b7280; color: #cbd5e1; }
+    /* A棟射出機狀態：操作面板、MOCK 標記 */
     .status-badge.crit { background: var(--crit-bg); color: var(--crit); }
     .status-badge.none { background: rgba(107, 114, 128, 0.16); color: var(--fg-mute); }
-    .imm-legend {
-      position: absolute; transform: translate(0, -100%); pointer-events: none; z-index: 5;
-      background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 8px;
-      padding: 4px 8px; font-size: 11px; font-weight: 700; color: var(--fg); white-space: nowrap;
-      box-shadow: var(--card-glow); font-family: var(--font-mono);
-    }
-    .imm-legend .lg-time { display: block; font-size: 9.5px; font-weight: 600; color: var(--fg-mute); }
     .imm-panel {
       display: none; position: absolute; top: 76px; left: 16px; z-index: 30; width: 290px;
       background: var(--card-bg); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
@@ -407,9 +418,7 @@
   <div id="canvas-container"></div>
   <div id="labels-container">
     <div class="road-badge warn" id="badge-repaint">需補漆 —</div>
-    <div class="road-badge ok" id="badge-fpy">直行通道 —</div>
-    <div class="imm-legend" id="imm-legend">🟢 – / 🟡 – / 🔴 –<span class="lg-time">射出機狀態 讀取中…</span></div>
-  </div>
+    <div class="road-badge ok" id="badge-fpy">直行通道 —</div>  </div>
 
   <!-- A棟射出機狀態面板（點機台開啟） -->
   <div class="imm-panel" id="imm-panel"></div>
@@ -640,6 +649,7 @@
   IMM_LAYOUT.forEach(m => {
     immState[m.label] = { resolved: '', effective: 'offline', status: '', mode: '', updatedAt: '', updatedBy: '', note: '', lastTs: null };
   });
+  let immLastOk = 0; // 上次成功讀取時間 (refreshImm 寫入)
   function immEffective(label) { return (immState[label] && immState[label].effective) || 'offline'; }
   function immIsRunning(st) { return st === '生產中' || st === '試模中'; }
 
@@ -726,17 +736,84 @@
     ctxEls.push({ el, pos: { x: c.x, y: (c.y || 0) + c.h + 0.6, z: c.z } });
   });
 
+  // A棟射出機極簡膠囊：錨點在燈柱頂端 (燈柱位於機台局部 x 0.5、z 0.8，頂端高 2.925，平台 y 0.22)，引線從膠囊底指向燈柱頂
+  const IMM_LABEL_LEAD = 8;  // 引線基本長度 (px)
+  const IMM_LABEL_GAP = 4;   // 膠囊間最小間距 (px)
   const immLabelEls = IMM_LAYOUT.map(m => {
     const el = document.createElement('div');
-    el.className = 'imm-label ' + IMM_STATUS_CLS.offline;
-    el.textContent = m.label;
     el.addEventListener('click', (e) => { e.stopPropagation(); openImmPanel(m.label); });
     labelsContainer.appendChild(el);
-    return { el, pos: { x: m.x, y: 3.7 * m.scale, z: m.z } };
+    const item = { el, label: m.label, pos: { x: m.x + 0.5 * m.scale, y: 0.22 + 2.95 * m.scale, z: m.z + 0.8 * m.scale }, w: 0, h: 0, lead: null, dot: null };
+    setImmLabelContent(item, 'offline');
+    return item;
   });
-  // A棟射出機狀態圖例：掛在 A 棟前緣左角 (A 棟 x -22.25~15.25、z -18.8~-8.4)
-  const immLegendEl = document.getElementById('imm-legend');
-  const IMM_LEGEND_POS = { x: -21.6, y: 0.3, z: -8.7 };
+  function setImmLabelContent(item, st) {
+    item.el.className = 'imm-label ' + IMM_STATUS_CLS[st];
+    item.el.innerHTML = `<span class="il-dot"></span><span class="il-name">${item.label}</span><span class="il-st">${st === 'offline' ? '離線' : st}</span><span class="il-lead"></span>`;
+    item.lead = item.el.querySelector('.il-lead');
+    item.dot = item.el.querySelector('.il-dot');
+    item.w = 0; // 內容變了，下次排版重新量尺寸
+  }
+  function immRectHit(a, b, gap) {
+    return a.left < b.left + b.w + gap && a.left + a.w + gap > b.left && a.top < b.top + b.h + gap && a.top + a.h + gap > b.top;
+  }
+  // 禁區：「A 棟射出工廠」標題膠囊與 ZONE A1 發泡卡片的螢幕矩形
+  let immBannerA = null;
+  function immKeepOutRects() {
+    if (!immBannerA) immBannerA = labelsContainer.querySelector('.bldg-banner.a-bldg');
+    return [immBannerA, pinElements.a_foam].filter(el => el && el.style.display !== 'none').map(el => {
+      const r = el.getBoundingClientRect();
+      return { left: r.left, top: r.top, w: r.width, h: r.height };
+    }).filter(r => r.w > 0);
+  }
+  // pts: 與 immLabelEls 同序的螢幕座標 [{ x, y, vis }]；依螢幕 x 排序逐一放置：
+  // 先原位 → 左右錯開 (最多半個膠囊寬) → 仍重疊才往上推 1 個膠囊高；不得壓到禁區
+  function layoutImmLabels(pts) {
+    const keepOut = immKeepOutRects();
+    const placed = [];
+    immLabelEls.map((item, i) => ({ item, p: pts[i] }))
+      .filter(o => { if (!o.p.vis) o.item.el.style.display = 'none'; return o.p.vis; })
+      .sort((a, b) => a.p.x - b.p.x)
+      .forEach(({ item, p }) => {
+        item.el.style.display = '';
+        if (!item.w) { item.w = item.el.offsetWidth; item.h = item.el.offsetHeight; }
+        const w = item.w, h = item.h;
+        const baseLeft = p.x - w / 2, baseTop = p.y - IMM_LABEL_LEAD - h;
+        const maxUp = h + IMM_LABEL_GAP * 2; // 往上最多 1 個膠囊高 (含間距)
+        const dxs = [0, -w / 4, w / 4, -w / 2, w / 2];
+        let best = null, fallback = null;
+        const tryRect = r => {
+          if (keepOut.some(k => immRectHit(r, k, 0))) return false;
+          if (!placed.some(k => immRectHit(r, k, IMM_LABEL_GAP))) { best = r; return true; }
+          if (!fallback) fallback = r; // 不壓禁區但與其他膠囊重疊，作為退路
+          return false;
+        };
+        // 1) 原位與左右錯開
+        dxs.some(dx => tryRect({ left: baseLeft + dx, top: baseTop, w, h }));
+        // 2) 仍重疊：往上推到碰撞膠囊的上緣之上 (不超過 maxUp)
+        if (!best) dxs.some(dx => {
+          const left = baseLeft + dx;
+          const hits = placed.filter(k => immRectHit({ left, top: baseTop, w, h }, k, IMM_LABEL_GAP));
+          const top = hits.length ? Math.min(...hits.map(k => k.top)) - h - IMM_LABEL_GAP : baseTop;
+          return baseTop - top <= maxUp && tryRect({ left, top, w, h });
+        });
+        // 所有候選都壓到禁區時維持原位；膠囊 z-index 低於標題膠囊與工站卡片，會被蓋在下方
+        const r = best || fallback || { left: baseLeft, top: baseTop, w, h };
+        placed.push(r);
+        item.el.style.left = r.left + 'px';
+        item.el.style.top = r.top + 'px';
+        item.lead.style.left = Math.max(4, Math.min(w - 4, p.x - r.left)) + 'px';
+        item.lead.style.height = Math.max(4, p.y - r.top - h) + 'px';
+      });
+  }
+  // Orbitron 載入後膠囊寬度會變，重新量測
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => immLabelEls.forEach(item => { item.w = 0; }));
+  // 試模中只有圓點呼吸閃 (與燈柱、光暈同一 1.5 秒週期)
+  function blinkImmLabels(tryBlink) {
+    immLabelEls.forEach(item => {
+      if (item.dot) item.dot.style.opacity = immEffective(item.label) === '試模中' ? (0.25 + 0.75 * tryBlink).toFixed(3) : '';
+    });
+  }
 
   const pinElements = {};
   Object.values(STATIONS_CFG).forEach(cfg => {
@@ -1001,6 +1078,19 @@
       const animatedProps = { fan: null, laser: null, agv: null, borders: [], imms: [] };
       const stationMeshes = {};
       const immGroups = []; // 5 台射出機 group，供點擊判定單台機
+      // 射出機地面光暈共用貼圖：中心白 → 外圈透明 (顏色由各機 material.color 乘上)
+      const immGlowTexture = (() => {
+        const c = document.createElement('canvas');
+        c.width = c.height = 128;
+        const g = c.getContext('2d');
+        const grd = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+        grd.addColorStop(0, 'rgba(255,255,255,1)');
+        grd.addColorStop(0.45, 'rgba(255,255,255,0.55)');
+        grd.addColorStop(1, 'rgba(255,255,255,0)');
+        g.fillStyle = grd;
+        g.fillRect(0, 0, 128, 128);
+        return new THREE.CanvasTexture(c);
+      })();
       const workerGroups = { rework: new THREE.Group(), paint: new THREE.Group(), final: new THREE.Group() };
 
       function createTechPlatform(w, d, borderHex) {
@@ -1130,19 +1220,24 @@
           robotArm.add(armRod, gripper);
           robotArm.position.set(0.0, 2.6, 0.0);
 
-          // 機台頂部稼動狀態燈 (顏色/亮度由 immState 驅動，初始為 offline 灰)
+          // 機台頂部狀態燈柱 (高 1.0、直徑 0.5，立於固定模板頂 1.925；顏色/亮度由 immState 驅動，初始為 offline 灰)
           const lampMat = new THREE.MeshStandardMaterial({ color: IMM_STATUS_COLOR.offline, emissive: IMM_STATUS_COLOR.offline, emissiveIntensity: 0.2 });
-          const statusTower = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.4, 16), lampMat);
-          statusTower.position.set(0.5, 2.15, 0.8);
+          const statusTower = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 1.0, 20), lampMat);
+          statusTower.position.set(0.5, 2.43, 0.8);
 
-          // 地面狀態光環 (橢圓，避免與前後排機台重疊)
-          const ringMat = new THREE.MeshBasicMaterial({ color: IMM_STATUS_COLOR.offline, transparent: true, opacity: 0.4, side: THREE.DoubleSide, depthWrite: false });
-          const statusRing = new THREE.Mesh(new THREE.RingGeometry(2.6, 2.9, 48), ringMat);
-          statusRing.rotation.x = -Math.PI / 2;
-          statusRing.scale.set(1, 0.62, 1);
-          statusRing.position.y = 0.06;
+          // 地面狀態光暈 (半徑 = 底座長邊 4.6 × 0.7；白色徑向漸層貼圖 × 狀態色；平台頂面 y=0.25，略高避免 z-fighting)
+          const glowMat = new THREE.MeshBasicMaterial({
+            color: IMM_STATUS_COLOR.offline, map: immGlowTexture, transparent: true, opacity: 0.45,
+            depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide
+          });
+          const statusGlow = new THREE.Mesh(new THREE.CircleGeometry(4.6 * 0.7, 48), glowMat);
+          statusGlow.rotation.x = -Math.PI / 2;
+          statusGlow.position.y = 0.27;
 
-          immGroup.add(bed, fixedPlaten, barrel, movingPlaten, moldedPart, gantryPillar, gantryBeam, robotArm, statusTower, statusRing);
+          // 機台本體帶狀態色調：底座/固定模板/可動模板為本機專屬材質，只調 emissive
+          const bodyMats = [bed.material, fixedPlaten.material, movingPlaten.material];
+
+          immGroup.add(bed, fixedPlaten, barrel, movingPlaten, moldedPart, gantryPillar, gantryBeam, robotArm, statusTower, statusGlow);
           immGroup.userData = { immLabel: spec.label };
           immGroups.push(immGroup);
           gMold.add(immGroup);
@@ -1154,7 +1249,8 @@
             robotArm,
             barrelMat,
             lampMat,
-            ringMat,
+            glowMat,
+            bodyMats,
             phase
           });
         });
@@ -1478,19 +1574,26 @@
         });
 
         // 3. 更新 A棟 5台射出成型機動態開合模與取件循環 (週期 IMM_CYCLE 秒)；僅生產中/試模中播放，其餘停在閉模
-        const immLight = document.documentElement.getAttribute('data-theme') !== 'dark';
         const tryBlink = (Math.sin(elapsed * Math.PI * 2 / IMM_TRY_BLINK_SEC) + 1) * 0.5;
+        const immLight = document.documentElement.getAttribute('data-theme') !== 'dark';
         animatedProps.imms.forEach(imm => {
           const st = immEffective(imm.label);
           const running = immIsRunning(st);
           const col = IMM_STATUS_COLOR[st];
           imm.lampMat.color.setHex(col);
           imm.lampMat.emissive.setHex(col);
-          imm.ringMat.color.setHex(col);
-          if (st === '生產中')      { imm.lampMat.emissiveIntensity = immLight ? 1.2 : 1.0;  imm.ringMat.opacity = immLight ? 0.85 : 0.6; }
-          else if (st === '試模中') { imm.lampMat.emissiveIntensity = 0.2 + tryBlink * (immLight ? 1.1 : 0.9); imm.ringMat.opacity = (immLight ? 0.3 : 0.2) + tryBlink * 0.55; }
-          else if (st === '待機')   { imm.lampMat.emissiveIntensity = immLight ? 0.5 : 0.35; imm.ringMat.opacity = immLight ? 0.6 : 0.35; }
-          else                      { imm.lampMat.emissiveIntensity = 0.15;                  imm.ringMat.opacity = immLight ? 0.5 : 0.3; }
+          // 光暈：深色 AdditiveBlending 0.45；淺色 NormalBlending 0.35 (避免疊加成白一片)
+          imm.glowMat.color.setHex(col);
+          const glowBlend = immLight ? THREE.NormalBlending : THREE.AdditiveBlending;
+          if (imm.glowMat.blending !== glowBlend) { imm.glowMat.blending = glowBlend; imm.glowMat.needsUpdate = true; }
+          const glowBase = immLight ? 0.35 : 0.45;
+          imm.glowMat.opacity = st === '試模中' ? glowBase * (0.25 + 0.75 * tryBlink) : (st === 'offline' ? glowBase * 0.6 : glowBase);
+          let bodyTint = 0.2;
+          if (st === '生產中')      { imm.lampMat.emissiveIntensity = 1.6; }
+          else if (st === '試模中') { imm.lampMat.emissiveIntensity = 0.5 + tryBlink * 1.2; bodyTint = 0.1 + tryBlink * 0.15; }
+          else if (st === '待機')   { imm.lampMat.emissiveIntensity = 1.2; } // 待機維持紅燈亮著
+          else                      { imm.lampMat.emissiveIntensity = 0.1; bodyTint = 0.15; } // offline 調暗變灰
+          imm.bodyMats.forEach(m => { m.emissive.setHex(col); m.emissiveIntensity = bodyTint; });
 
           const cyc = (elapsed * (Math.PI * 2 / IMM_CYCLE) + imm.phase) % (Math.PI * 2);
           const norm = running ? (Math.sin(cyc) + 1) * 0.5 : 0; // 0 (閉模射出) -> 1 (開模取件)
@@ -1529,8 +1632,11 @@
         Object.values(STATIONS_CFG).forEach(cfg => projectToScreen({ x: cfg.pos.x, y: cfg.pos.y + 4.0, z: cfg.pos.z }, pinElements[cfg.id]));
         bannerEls.forEach(b => projectToScreen(b.pos, b.el));
         if (showContextLabels) ctxEls.forEach(c => projectToScreen(c.pos, c.el));
-        immLabelEls.forEach(m => projectToScreen(m.pos, m.el));
-        projectToScreen(IMM_LEGEND_POS, immLegendEl);
+        layoutImmLabels(immLabelEls.map(m => {
+          const v = new THREE.Vector3(m.pos.x, m.pos.y, m.pos.z).project(camera);
+          return { vis: v.z <= 1, x: (v.x * 0.5 + 0.5) * window.innerWidth, y: (-(v.y * 0.5) + 0.5) * window.innerHeight };
+        }));
+        blinkImmLabels(tryBlink);
         projectToScreen({ x: -8.0, y: 0.7, z: B_MAIN_Z }, document.getElementById('badge-repaint'));
         projectToScreen({ x: -2.5, y: 0.7, z: B_BYPASS_Z }, document.getElementById('badge-fpy'));
         renderer.render(scene, camera);
@@ -1727,24 +1833,37 @@
         if (el) { el.style.left = sp.x + 'px'; el.style.top = sp.y + 'px'; }
       });
 
-      // 繪製 A 棟 5 台動態水平開合模射出成型機
+      // 繪製 A 棟 5 台動態水平開合模射出成型機 (地面圓形光暈 + 狀態燈 + 極簡膠囊)
+      const tryBlink2D = (Math.sin(elapsed * Math.PI * 2 / IMM_TRY_BLINK_SEC) + 1) * 0.5;
+      const immPts2D = [];
       IMM_LAYOUT.forEach((m, i) => {
         const s = m.scale;
         const st = immEffective(m.label);
         const norm = immIsRunning(st) ? (Math.sin(elapsed * (Math.PI * 2 / IMM_CYCLE) + i * (Math.PI * 2 / IMM_LAYOUT.length)) + 1) * 0.5 : 0; // 待機/offline 停在閉模
+        // 地面圓形光暈 (半徑 = 底座長邊 4.6 × 0.7，俯視壓扁成橢圓)
+        const gc = toScreen(m.x, 0, m.z);
+        const gr = 4.6 * 0.7 * s * scale;
+        const glowBase = document.documentElement.getAttribute('data-theme') === 'dark' ? 0.45 : 0.35;
+        ctx.save();
+        ctx.globalAlpha = st === '試模中' ? glowBase * (0.25 + 0.75 * tryBlink2D) : (st === 'offline' ? glowBase * 0.6 : glowBase);
+        ctx.translate(gc.x, gc.y); ctx.scale(1, 0.72);
+        const grd = ctx.createRadialGradient(0, 0, 0, 0, 0, gr);
+        grd.addColorStop(0, IMM_STATUS_CSS[st]); grd.addColorStop(1, IMM_STATUS_CSS[st] + '00');
+        ctx.fillStyle = grd;
+        ctx.beginPath(); ctx.arc(0, 0, gr, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
         drawBox25D(m.x + 0.8 * s, m.z, 1.6 * s, 2.2 * s, 1.5 * s, '#1e3a8a', '#2563eb', '#ffffff', 1.4);
         drawBox25D(m.x - (0.5 + norm * 0.8) * s, m.z, 1.1 * s, 2.2 * s, 1.5 * s, '#0284c7', '#38bdf8', '#ffffff', 1.4);
-        // 狀態燈
+        // 狀態燈 (待機維持亮紅，offline 才調暗)
         const lp = toScreen(m.x + 0.8 * s, 1.9 * s, m.z);
-        ctx.globalAlpha = st === '試模中' ? 0.3 + 0.7 * (Math.sin(elapsed * Math.PI * 2 / IMM_TRY_BLINK_SEC) + 1) * 0.5 : (st === '生產中' ? 1 : 0.75);
-        ctx.beginPath(); ctx.arc(lp.x, lp.y, 6, 0, Math.PI * 2);
+        ctx.globalAlpha = st === '試模中' ? 0.3 + 0.7 * tryBlink2D : (st === 'offline' ? 0.6 : 1);
+        ctx.beginPath(); ctx.arc(lp.x, lp.y, 8, 0, Math.PI * 2);
         ctx.fillStyle = IMM_STATUS_CSS[st]; ctx.fill();
         ctx.globalAlpha = 1; ctx.lineWidth = 1.5; ctx.strokeStyle = '#ffffff'; ctx.stroke();
-        const sp = toScreen(m.x, 2.2 * s, m.z);
-        immLabelEls[i].el.style.left = sp.x + 'px'; immLabelEls[i].el.style.top = sp.y + 'px';
+        immPts2D.push({ vis: true, x: lp.x, y: lp.y - 8 }); // 膠囊引線指向狀態燈
       });
-      const lgp = toScreen(IMM_LEGEND_POS.x, 0.3, IMM_LEGEND_POS.z);
-      immLegendEl.style.left = lgp.x + 'px'; immLegendEl.style.top = lgp.y + 'px';
+      layoutImmLabels(immPts2D);
+      blinkImmLabels(tryBlink2D);
 
       carts2D.forEach(c => {
         c.t = (c.t + dt * c.speed) % 1;
@@ -1901,6 +2020,16 @@
     const mode = s.mode === '手動' ? ' · 手動' : '';
     return `<span class="status-badge ${IMM_BADGE_CLS[st]}">${IMM_STATUS_ICON[st]} ${immStatusText(st)}${mode}</span>`;
   }
+  // 射出機列表區塊：標題後接最後更新時間 (offline 時紅字)
+  function immUpdInfo() {
+    if (!immLastOk) return { cls: '', text: '讀取中…' };
+    const stale = Date.now() - immLastOk > IMM_OFFLINE_MS;
+    return stale ? { cls: 'off', text: '離線 · 最後 ' + immHms(new Date(immLastOk)) } : { cls: '', text: '更新 ' + immHms(new Date(immLastOk)) };
+  }
+  function immSection(title) {
+    const u = immUpdInfo();
+    return `<div class="detail-section"><h4>${esc(title)}<span class="imm-upd ${u.cls}">${u.text}</span></h4>${getABuildingImmHtml()}</div>`;
+  }
   function immSummaryText() {
     const c = immCounts();
     return `生產中 ${c['生產中']} · 試模中 ${c['試模中']} · 待機 ${c['待機']}` + (c.offline ? ` · 離線 ${c.offline}` : '');
@@ -1925,7 +2054,7 @@
       document.getElementById('detail-name').textContent = 'A 棟 · 射出工廠';
       document.getElementById('detail-meta').textContent = '射出機 ' + immSummaryText() + ' · 發泡成型區';
       content.innerHTML =
-        section('A 棟 · 射出成型機群動態 (5台)', getABuildingImmHtml()) +
+        immSection('A 棟 · 射出成型機群動態 (5台)') +
         section('A 棟產線分區', `
           <div class="worker-list">
             <div class="worker-row" style="cursor:pointer" onclick="document.querySelector('[data-id=a_mold]').click()"><span>🟦 射出成型區 (5台射出機：3000T x2 + 2500T + 750T + 500T)</span><span class="status-badge ok">運轉中</span></div>
@@ -1957,7 +2086,7 @@
           ['B棟補漆', '讀取中', 0, 'warn'],
           ['B棟終檢', '讀取中', 0, 'ok'],
         ])) +
-        section('A棟 · 射出成型機群動態', getABuildingImmHtml());
+        immSection('A棟 · 射出成型機群動態');
       return;
     }
     const { rework, paint, final } = stats;
@@ -1970,7 +2099,7 @@
     ]);
     document.getElementById('detail-content').innerHTML =
       section('C棟下線 → B棟各站今日實績', left) +
-      section('A棟 · 射出成型機群狀態', getABuildingImmHtml());
+      immSection('A棟 · 射出成型機群狀態');
   }
 
   function renderDetail(id) {
@@ -1979,7 +2108,7 @@
       document.getElementById('detail-name').textContent = 'A棟 · 射出成型區';
       document.getElementById('detail-meta').textContent = immSummaryText();
       content.innerHTML =
-        section('射出機台即時狀態（點選可查看）', getABuildingImmHtml()) +
+        immSection('射出機台即時狀態（點選可查看）') +
         section('設備說明', `<div style="font-size:12px;color:var(--fg-mute);line-height:1.6;">狀態來自 Google Sheet「射出機狀態」分頁。手動模式直接採用設定的狀態；自動模式依該機台分頁最後一筆上報：${AUTO_ACTIVE_MINUTES} 分鐘內為生產中，超過則為待機。只有生產中與試模中會播放開合模動畫。</div>`);
       return;
     }
@@ -2298,7 +2427,6 @@
     return (now - lastTs.getTime()) <= AUTO_ACTIVE_MINUTES * 60 * 1000 ? '生產中' : '待機';
   }
 
-  let immLastOk = 0;
   let immMockStep = 0;
 
   // 一次 batchGet：射出機狀態 A1:F6 + 5 個機台分頁 A2:A（只讀時間戳欄）
@@ -2351,14 +2479,13 @@
     const stale = !immLastOk || Date.now() - immLastOk > IMM_OFFLINE_MS;
     IMM_LAYOUT.forEach((m, i) => {
       const s = immState[m.label];
+      const prev = s.effective;
       s.effective = (stale || !s.resolved) ? 'offline' : s.resolved;
-      const el = immLabelEls[i].el;
-      el.textContent = `${m.label} · ${immStatusText(s.effective)}`;
-      el.className = 'imm-label ' + IMM_STATUS_CLS[s.effective];
+      if (s.effective !== prev || !immLabelEls[i].lead) setImmLabelContent(immLabelEls[i], s.effective);
     });
-    const c = immCounts();
-    immLegendEl.innerHTML = `🟢 ${c['生產中']} / 🟡 ${c['試模中']} / 🔴 ${c['待機']}` + (c.offline ? ` / ⚫ ${c.offline}` : '') +
-      `<span class="lg-time">射出機狀態 · ${immLastOk ? '更新 ' + immHms(new Date(immLastOk)) : '尚未讀取'}${stale && immLastOk ? '（連線中斷）' : ''}</span>`;
+    // 右側面板射出機列表標題後的更新時間
+    const u = immUpdInfo();
+    document.querySelectorAll('#detail-content .imm-upd').forEach(el => { el.className = 'imm-upd ' + u.cls; el.textContent = u.text; });
     if (immPanelLabel) renderImmPanelInfo();
     // 右側面板若正顯示射出機列表，就地更新徽章（不重繪整個面板）
     document.querySelectorAll('#detail-content [data-imm]').forEach(row => {
