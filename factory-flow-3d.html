@@ -1227,8 +1227,8 @@
 
           // 地面狀態光暈 (半徑 = 底座長邊 4.6 × 0.7；白色徑向漸層貼圖 × 狀態色；平台頂面 y=0.25，略高避免 z-fighting)
           const glowMat = new THREE.MeshBasicMaterial({
-            color: IMM_STATUS_COLOR.offline, map: immGlowTexture, transparent: true, opacity: 0.45,
-            depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide
+            color: IMM_STATUS_COLOR.offline, map: immGlowTexture, transparent: true, opacity: 0.5,
+            depthWrite: false, blending: THREE.NormalBlending, side: THREE.DoubleSide
           });
           const statusGlow = new THREE.Mesh(new THREE.CircleGeometry(4.6 * 0.7, 48), glowMat);
           statusGlow.rotation.x = -Math.PI / 2;
@@ -1582,11 +1582,9 @@
           const col = IMM_STATUS_COLOR[st];
           imm.lampMat.color.setHex(col);
           imm.lampMat.emissive.setHex(col);
-          // 光暈：深色 AdditiveBlending 0.45；淺色 NormalBlending 0.35 (避免疊加成白一片)
+          // 光暈：兩種主題皆 NormalBlending (射出平台為白色，Additive 疊加看不出來)；深色 0.5、淺色 0.35
           imm.glowMat.color.setHex(col);
-          const glowBlend = immLight ? THREE.NormalBlending : THREE.AdditiveBlending;
-          if (imm.glowMat.blending !== glowBlend) { imm.glowMat.blending = glowBlend; imm.glowMat.needsUpdate = true; }
-          const glowBase = immLight ? 0.35 : 0.45;
+          const glowBase = immLight ? 0.35 : 0.5;
           imm.glowMat.opacity = st === '試模中' ? glowBase * (0.25 + 0.75 * tryBlink) : (st === 'offline' ? glowBase * 0.6 : glowBase);
           let bodyTint = 0.2;
           if (st === '生產中')      { imm.lampMat.emissiveIntensity = 1.6; }
@@ -1843,7 +1841,7 @@
         // 地面圓形光暈 (半徑 = 底座長邊 4.6 × 0.7，俯視壓扁成橢圓)
         const gc = toScreen(m.x, 0, m.z);
         const gr = 4.6 * 0.7 * s * scale;
-        const glowBase = document.documentElement.getAttribute('data-theme') === 'dark' ? 0.45 : 0.35;
+        const glowBase = document.documentElement.getAttribute('data-theme') === 'dark' ? 0.5 : 0.35;
         ctx.save();
         ctx.globalAlpha = st === '試模中' ? glowBase * (0.25 + 0.75 * tryBlink2D) : (st === 'offline' ? glowBase * 0.6 : glowBase);
         ctx.translate(gc.x, gc.y); ctx.scale(1, 0.72);
