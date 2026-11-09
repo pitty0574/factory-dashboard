@@ -348,6 +348,53 @@
     .nav-title { font-weight: 800; font-size: 12px; }
     .nav-sub { font-size: 10px; color: var(--fg-mute); font-family: var(--font-mono); }
 
+    /* A棟射出機狀態：標籤色、圖例、操作面板、MOCK 標記 */
+    .imm-label { pointer-events: auto; cursor: pointer; border-left-width: 4px; }
+    .imm-label.st-run  { border-left-color: #22c55e; }
+    .imm-label.st-try  { border-left-color: #eab308; }
+    .imm-label.st-idle { border-left-color: #ef4444; }
+    .imm-label.st-off  { border-left-color: #6b7280; color: #cbd5e1; }
+    .status-badge.crit { background: var(--crit-bg); color: var(--crit); }
+    .status-badge.none { background: rgba(107, 114, 128, 0.16); color: var(--fg-mute); }
+    .imm-legend {
+      position: absolute; transform: translate(0, -100%); pointer-events: none; z-index: 5;
+      background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 8px;
+      padding: 4px 8px; font-size: 11px; font-weight: 700; color: var(--fg); white-space: nowrap;
+      box-shadow: var(--card-glow); font-family: var(--font-mono);
+    }
+    .imm-legend .lg-time { display: block; font-size: 9.5px; font-weight: 600; color: var(--fg-mute); }
+    .imm-panel {
+      display: none; position: absolute; top: 76px; left: 16px; z-index: 30; width: 290px;
+      background: var(--card-bg); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+      border: 1px solid var(--card-border); border-radius: 14px; box-shadow: var(--card-glow);
+      padding: 12px 14px; font-size: 12px; color: var(--fg); user-select: text;
+    }
+    .imm-panel.open { display: block; }
+    .imm-panel h3 { margin: 0 0 8px; font-size: 14px; display: flex; justify-content: space-between; align-items: center; }
+    .imm-panel .ip-close { background: none; border: none; color: var(--fg-mute); font-size: 16px; cursor: pointer; }
+    .imm-panel .ip-row { display: flex; justify-content: space-between; gap: 8px; padding: 3px 0; border-bottom: 1px dashed var(--card-border); }
+    .imm-panel .ip-row span:first-child { color: var(--fg-mute); flex-shrink: 0; }
+    .imm-panel .ip-row span:last-child { text-align: right; word-break: break-all; }
+    .imm-panel .ip-admin { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+    .imm-panel .ip-seg { display: flex; gap: 4px; }
+    .imm-panel .ip-seg button {
+      flex: 1; padding: 5px 0; border-radius: 7px; cursor: pointer; font-size: 12px; font-weight: 700;
+      border: 1px solid var(--card-border); background: transparent; color: var(--fg);
+    }
+    .imm-panel .ip-seg button.on { color: #fff; border-color: transparent; }
+    .imm-panel input { width: 100%; padding: 5px 7px; border-radius: 7px; border: 1px solid var(--card-border); background: transparent; color: var(--fg); font-size: 12px; }
+    .imm-panel .ip-btn { padding: 6px 0; border-radius: 8px; border: none; cursor: pointer; font-weight: 800; background: var(--info-bright); color: #fff; }
+    .imm-panel .ip-btn:disabled { opacity: 0.5; cursor: wait; }
+    .imm-panel .ip-link { background: none; border: none; color: var(--info); cursor: pointer; font-size: 11px; padding: 0; text-align: left; }
+    .imm-panel .ip-msg { font-size: 11px; min-height: 14px; }
+    .imm-panel .ip-msg.err { color: var(--crit); }
+    .imm-panel .ip-msg.ok { color: var(--ok); }
+    .mock-badge {
+      display: none; position: absolute; top: 62px; right: 16px; z-index: 40;
+      background: #a855f7; color: #fff; font-weight: 900; font-size: 12px; letter-spacing: 2px;
+      padding: 3px 10px; border-radius: 6px; font-family: var(--font-mono);
+    }
+
     @media (max-width: 1100px) {
       .hud-inspector { display: none; }
       .cam-controls { right: 16px; }
@@ -361,7 +408,12 @@
   <div id="labels-container">
     <div class="road-badge warn" id="badge-repaint">需補漆 —</div>
     <div class="road-badge ok" id="badge-fpy">直行通道 —</div>
+    <div class="imm-legend" id="imm-legend">🟢 – / 🟡 – / 🔴 –<span class="lg-time">射出機狀態 讀取中…</span></div>
   </div>
+
+  <!-- A棟射出機狀態面板（點機台開啟） -->
+  <div class="imm-panel" id="imm-panel"></div>
+  <div class="mock-badge" id="mock-badge">MOCK</div>
 
   <!-- 360度建構展演狀態提示橫幅 -->
   <div class="showcase-toast" id="showcase-toast">
@@ -578,6 +630,19 @@
     { label: '3000T-2', x: -3.0,  z: -11.5, scale: 1.00 },
   ];
 
+  // A棟射出機即時狀態 (由第 3 段 refreshImm 寫入；render loop 依 effective 決定燈號與開合動畫)
+  const IMM_STATUS_COLOR = { '生產中': 0x22c55e, '試模中': 0xeab308, '待機': 0xef4444, 'offline': 0x6b7280 };
+  const IMM_STATUS_CSS   = { '生產中': '#22c55e', '試模中': '#eab308', '待機': '#ef4444', 'offline': '#6b7280' };
+  const IMM_STATUS_CLS   = { '生產中': 'st-run', '試模中': 'st-try', '待機': 'st-idle', 'offline': 'st-off' };
+  const IMM_STATUS_ICON  = { '生產中': '🟢', '試模中': '🟡', '待機': '🔴', 'offline': '⚫' };
+  const IMM_TRY_BLINK_SEC = 1.5; // 試模中慢閃週期
+  const immState = {};
+  IMM_LAYOUT.forEach(m => {
+    immState[m.label] = { resolved: '', effective: 'offline', status: '', mode: '', updatedAt: '', updatedBy: '', note: '', lastTs: null };
+  });
+  function immEffective(label) { return (immState[label] && immState[label].effective) || 'offline'; }
+  function immIsRunning(st) { return st === '生產中' || st === '試模中'; }
+
   // 共用多段路徑取樣器
   const FLOW_PATHS = {
     unloadToRework: [
@@ -663,11 +728,15 @@
 
   const immLabelEls = IMM_LAYOUT.map(m => {
     const el = document.createElement('div');
-    el.className = 'imm-label';
+    el.className = 'imm-label ' + IMM_STATUS_CLS.offline;
     el.textContent = m.label;
+    el.addEventListener('click', (e) => { e.stopPropagation(); openImmPanel(m.label); });
     labelsContainer.appendChild(el);
     return { el, pos: { x: m.x, y: 3.7 * m.scale, z: m.z } };
   });
+  // A棟射出機狀態圖例：掛在 A 棟前緣左角 (A 棟 x -22.25~15.25、z -18.8~-8.4)
+  const immLegendEl = document.getElementById('imm-legend');
+  const IMM_LEGEND_POS = { x: -21.6, y: 0.3, z: -8.7 };
 
   const pinElements = {};
   Object.values(STATIONS_CFG).forEach(cfg => {
@@ -931,6 +1000,7 @@
       // ============================================================================
       const animatedProps = { fan: null, laser: null, agv: null, borders: [], imms: [] };
       const stationMeshes = {};
+      const immGroups = []; // 5 台射出機 group，供點擊判定單台機
       const workerGroups = { rework: new THREE.Group(), paint: new THREE.Group(), final: new THREE.Group() };
 
       function createTechPlatform(w, d, borderHex) {
@@ -1060,21 +1130,31 @@
           robotArm.add(armRod, gripper);
           robotArm.position.set(0.0, 2.6, 0.0);
 
-          // 機台頂部稼動狀態綠燈塔
-          const statusTower = new THREE.Mesh(
-            new THREE.CylinderGeometry(0.12, 0.12, 0.35, 12),
-            new THREE.MeshStandardMaterial({ color: 0x10b981, emissive: 0x10b981, emissiveIntensity: 0.9 })
-          );
-          statusTower.position.set(0.5, 2.1, 0.8);
+          // 機台頂部稼動狀態燈 (顏色/亮度由 immState 驅動，初始為 offline 灰)
+          const lampMat = new THREE.MeshStandardMaterial({ color: IMM_STATUS_COLOR.offline, emissive: IMM_STATUS_COLOR.offline, emissiveIntensity: 0.2 });
+          const statusTower = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.4, 16), lampMat);
+          statusTower.position.set(0.5, 2.15, 0.8);
 
-          immGroup.add(bed, fixedPlaten, barrel, movingPlaten, moldedPart, gantryPillar, gantryBeam, robotArm, statusTower);
+          // 地面狀態光環 (橢圓，避免與前後排機台重疊)
+          const ringMat = new THREE.MeshBasicMaterial({ color: IMM_STATUS_COLOR.offline, transparent: true, opacity: 0.4, side: THREE.DoubleSide, depthWrite: false });
+          const statusRing = new THREE.Mesh(new THREE.RingGeometry(2.6, 2.9, 48), ringMat);
+          statusRing.rotation.x = -Math.PI / 2;
+          statusRing.scale.set(1, 0.62, 1);
+          statusRing.position.y = 0.06;
+
+          immGroup.add(bed, fixedPlaten, barrel, movingPlaten, moldedPart, gantryPillar, gantryBeam, robotArm, statusTower, statusRing);
+          immGroup.userData = { immLabel: spec.label };
+          immGroups.push(immGroup);
           gMold.add(immGroup);
 
           animatedProps.imms.push({
+            label: spec.label,
             movingPlaten,
             moldedPart,
             robotArm,
             barrelMat,
+            lampMat,
+            ringMat,
             phase
           });
         });
@@ -1298,6 +1378,14 @@
         mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
         raycaster.setFromCamera(mouse, camera);
 
+        // 先判定是否點到單台射出機 → 開狀態面板
+        const immHits = raycaster.intersectObjects(immGroups, true);
+        if (immHits.length > 0) {
+          let o = immHits[0].object;
+          while (o && (!o.userData || !o.userData.immLabel)) o = o.parent;
+          if (o && o.userData && o.userData.immLabel) { openImmPanel(o.userData.immLabel); return; }
+        }
+
         const stHits = raycaster.intersectObjects(Object.values(stationMeshes), true);
         if (stHits.length > 0) {
           let o = stHits[0].object;
@@ -1389,12 +1477,25 @@
           c.mesh.rotation.y = -pt.angle;
         });
 
-        // 3. 更新 A棟 5台射出成型機動態開合模與取件循環 (週期 IMM_CYCLE 秒)
+        // 3. 更新 A棟 5台射出成型機動態開合模與取件循環 (週期 IMM_CYCLE 秒)；僅生產中/試模中播放，其餘停在閉模
+        const immLight = document.documentElement.getAttribute('data-theme') !== 'dark';
+        const tryBlink = (Math.sin(elapsed * Math.PI * 2 / IMM_TRY_BLINK_SEC) + 1) * 0.5;
         animatedProps.imms.forEach(imm => {
+          const st = immEffective(imm.label);
+          const running = immIsRunning(st);
+          const col = IMM_STATUS_COLOR[st];
+          imm.lampMat.color.setHex(col);
+          imm.lampMat.emissive.setHex(col);
+          imm.ringMat.color.setHex(col);
+          if (st === '生產中')      { imm.lampMat.emissiveIntensity = immLight ? 1.2 : 1.0;  imm.ringMat.opacity = immLight ? 0.85 : 0.6; }
+          else if (st === '試模中') { imm.lampMat.emissiveIntensity = 0.2 + tryBlink * (immLight ? 1.1 : 0.9); imm.ringMat.opacity = (immLight ? 0.3 : 0.2) + tryBlink * 0.55; }
+          else if (st === '待機')   { imm.lampMat.emissiveIntensity = immLight ? 0.5 : 0.35; imm.ringMat.opacity = immLight ? 0.6 : 0.35; }
+          else                      { imm.lampMat.emissiveIntensity = 0.15;                  imm.ringMat.opacity = immLight ? 0.5 : 0.3; }
+
           const cyc = (elapsed * (Math.PI * 2 / IMM_CYCLE) + imm.phase) % (Math.PI * 2);
-          const norm = (Math.sin(cyc) + 1) * 0.5; // 0 (閉模射出) -> 1 (開模取件)
-          // 射出料管在閉模時發亮
-          imm.barrelMat.emissiveIntensity = norm < 0.35 ? 0.95 : 0.25;
+          const norm = running ? (Math.sin(cyc) + 1) * 0.5 : 0; // 0 (閉模射出) -> 1 (開模取件)
+          // 射出料管在閉模時發亮（停機時不亮）
+          imm.barrelMat.emissiveIntensity = !running ? 0.12 : (norm < 0.35 ? 0.95 : 0.25);
           // 可動模板開合行程 (-0.45 閉模 ~ -1.35 開模)
           imm.movingPlaten.position.x = -0.45 - norm * 0.90;
           // 開模時機械手臂下降取出保桿並橫移至後方輸送帶
@@ -1429,6 +1530,7 @@
         bannerEls.forEach(b => projectToScreen(b.pos, b.el));
         if (showContextLabels) ctxEls.forEach(c => projectToScreen(c.pos, c.el));
         immLabelEls.forEach(m => projectToScreen(m.pos, m.el));
+        projectToScreen(IMM_LEGEND_POS, immLegendEl);
         projectToScreen({ x: -8.0, y: 0.7, z: B_MAIN_Z }, document.getElementById('badge-repaint'));
         projectToScreen({ x: -2.5, y: 0.7, z: B_BYPASS_Z }, document.getElementById('badge-fpy'));
         renderer.render(scene, camera);
@@ -1628,12 +1730,21 @@
       // 繪製 A 棟 5 台動態水平開合模射出成型機
       IMM_LAYOUT.forEach((m, i) => {
         const s = m.scale;
-        const norm = (Math.sin(elapsed * (Math.PI * 2 / IMM_CYCLE) + i * (Math.PI * 2 / IMM_LAYOUT.length)) + 1) * 0.5;
+        const st = immEffective(m.label);
+        const norm = immIsRunning(st) ? (Math.sin(elapsed * (Math.PI * 2 / IMM_CYCLE) + i * (Math.PI * 2 / IMM_LAYOUT.length)) + 1) * 0.5 : 0; // 待機/offline 停在閉模
         drawBox25D(m.x + 0.8 * s, m.z, 1.6 * s, 2.2 * s, 1.5 * s, '#1e3a8a', '#2563eb', '#ffffff', 1.4);
         drawBox25D(m.x - (0.5 + norm * 0.8) * s, m.z, 1.1 * s, 2.2 * s, 1.5 * s, '#0284c7', '#38bdf8', '#ffffff', 1.4);
+        // 狀態燈
+        const lp = toScreen(m.x + 0.8 * s, 1.9 * s, m.z);
+        ctx.globalAlpha = st === '試模中' ? 0.3 + 0.7 * (Math.sin(elapsed * Math.PI * 2 / IMM_TRY_BLINK_SEC) + 1) * 0.5 : (st === '生產中' ? 1 : 0.75);
+        ctx.beginPath(); ctx.arc(lp.x, lp.y, 6, 0, Math.PI * 2);
+        ctx.fillStyle = IMM_STATUS_CSS[st]; ctx.fill();
+        ctx.globalAlpha = 1; ctx.lineWidth = 1.5; ctx.strokeStyle = '#ffffff'; ctx.stroke();
         const sp = toScreen(m.x, 2.2 * s, m.z);
         immLabelEls[i].el.style.left = sp.x + 'px'; immLabelEls[i].el.style.top = sp.y + 'px';
       });
+      const lgp = toScreen(IMM_LEGEND_POS.x, 0.3, IMM_LEGEND_POS.z);
+      immLegendEl.style.left = lgp.x + 'px'; immLegendEl.style.top = lgp.y + 'px';
 
       carts2D.forEach(c => {
         c.t = (c.t + dt * c.speed) % 1;
@@ -1678,6 +1789,19 @@
   const OFFLINE_SEC = 15 * 60;
   const WORKER_SHEET_RANGE = '員工表!A2:D1000';
   const WORKER_MAP_REFRESH_MS = 15 * 60 * 1000; // 員工表每 15 分鐘重讀一次（30 秒 refresh 不重讀，省 API 配額）
+
+  // ── A棟射出機狀態（射出日報 Sheet，與補漆房 Sheet 分開；不受 localStorage gsId 覆寫）──
+  const IMM_SHEET_ID     = '1qZgChM15eMQmstV4jhKhHYC8-BA0fI2eO6iG5eG-_mc';
+  const IMM_WEBAPP_URL   = 'https://script.google.com/macros/s/AKfycbwJneLA88cHecPtsQH965ieiGWbXw1KaqeLcMNRE7f2BBJT28882I45-Q21BF30k0_D/exec';
+  const IMM_STATUS_SHEET = '射出機狀態';
+  const AUTO_ACTIVE_MINUTES = 30;            // 自動模式：最後上報距今 ≤ 此分鐘數視為生產中
+  const IMM_POLL_MS    = 60 * 1000;
+  const IMM_OFFLINE_MS = 5 * 60 * 1000;      // 距上次成功讀取超過此時間 → offline
+  const IMM_MOCK_MS    = 10 * 1000;
+  const IMM_MOCK = new URLSearchParams(location.search).get('mock') === '1';
+  // 管理者登入：與 person_part_analysis.html 同一組 hash 與 session key（同網域登入狀態互通）
+  const ADMIN_PASSWORD_HASH = '1758525ce651a482a458a59c562ec9eb81cfd0fd5a88b246375f7cd237c94a78';
+  const ADMIN_SESSION_KEY = 'admin_logged_in_until';
 
   function lsGet(k) { try { return localStorage.getItem(k); } catch(e) { return null; } }
   function getConn() { return { id: lsGet('gsId') || DEFAULT_CONFIG.sheetsId, key: lsGet('gsKey') || DEFAULT_CONFIG.apiKey }; }
@@ -1757,17 +1881,40 @@
     `;
   }
 
+  const IMM_LIST_ORDER = [
+    ['3000T-1', '1號 3000T 射出機 (3000T-1)'],
+    ['2500T',   '2號 2500T 射出機'],
+    ['3000T-2', '3號 3000T 射出機 (3000T-2)'],
+    ['750T',    '4號 750T 射出機'],
+    ['500T',    '5號 500T 射出機'],
+  ];
+  const IMM_BADGE_CLS = { '生產中': 'ok', '試模中': 'warn', '待機': 'crit', 'offline': 'none' };
+  function immStatusText(st) { return st === 'offline' ? '離線' : st; }
   function getABuildingImmHtml() {
-    return `
-      <div class="worker-list">
-        <div class="worker-row"><span>🤖 1號 3000T 射出機 (3000T-1)</span><span class="status-badge ok">自動成型中</span></div>
-        <div class="worker-row"><span>🤖 2號 2500T 射出機</span><span class="status-badge ok">自動成型中</span></div>
-        <div class="worker-row"><span>🤖 3號 3000T 射出機 (3000T-2)</span><span class="status-badge ok">自動成型中</span></div>
-        <div class="worker-row"><span>🤖 4號 750T 射出機</span><span class="status-badge ok">自動成型中</span></div>
-        <div class="worker-row"><span>🤖 5號 500T 射出機</span><span class="status-badge ok">自動成型中</span></div>
-      </div>
-    `;
+    return '<div class="worker-list">' + IMM_LIST_ORDER.map(([label, name]) =>
+      `<div class="worker-row" style="cursor:pointer" data-imm="${esc(label)}"><span>🤖 ${esc(name)}</span>${immBadgeHtml(label)}</div>`
+    ).join('') + '</div>';
   }
+  function immBadgeHtml(label) {
+    const s = immState[label];
+    const st = s.effective;
+    const mode = s.mode === '手動' ? ' · 手動' : '';
+    return `<span class="status-badge ${IMM_BADGE_CLS[st]}">${IMM_STATUS_ICON[st]} ${immStatusText(st)}${mode}</span>`;
+  }
+  function immSummaryText() {
+    const c = immCounts();
+    return `生產中 ${c['生產中']} · 試模中 ${c['試模中']} · 待機 ${c['待機']}` + (c.offline ? ` · 離線 ${c.offline}` : '');
+  }
+  function immCounts() {
+    const c = { '生產中': 0, '試模中': 0, '待機': 0, 'offline': 0 };
+    IMM_LAYOUT.forEach(m => { c[immEffective(m.label)]++; });
+    return c;
+  }
+  // 面板中的射出機列可點擊開啟狀態面板
+  document.getElementById('detail-content').addEventListener('click', (e) => {
+    const row = e.target.closest('[data-imm]');
+    if (row) openImmPanel(row.dataset.imm);
+  });
 
   function renderBuildingDetail(bldgKey) {
     selectedStation = null;
@@ -1776,7 +1923,7 @@
 
     if (bldgKey === 'A') {
       document.getElementById('detail-name').textContent = 'A 棟 · 射出工廠';
-      document.getElementById('detail-meta').textContent = '5台射出機動態運轉中 · 發泡成型區';
+      document.getElementById('detail-meta').textContent = '射出機 ' + immSummaryText() + ' · 發泡成型區';
       content.innerHTML =
         section('A 棟 · 射出成型機群動態 (5台)', getABuildingImmHtml()) +
         section('A 棟產線分區', `
@@ -1830,10 +1977,10 @@
     const content = document.getElementById('detail-content');
     if (id === 'a_mold') {
       document.getElementById('detail-name').textContent = 'A棟 · 射出成型區';
-      document.getElementById('detail-meta').textContent = '5台射出機動態開合模與取件運作中';
+      document.getElementById('detail-meta').textContent = immSummaryText();
       content.innerHTML =
-        section('射出機台即時動作狀態', getABuildingImmHtml()) +
-        section('設備說明', '<div style="font-size:12px;color:var(--fg-mute);line-height:1.6;">5 台射出機台 (3000T x2 / 2500T / 750T / 500T) 皆為水平開合模 + 龍門機械手臂取件循環動畫，後續可綁定 Google Sheet 射出日報分頁。</div>');
+        section('射出機台即時狀態（點選可查看）', getABuildingImmHtml()) +
+        section('設備說明', `<div style="font-size:12px;color:var(--fg-mute);line-height:1.6;">狀態來自 Google Sheet「射出機狀態」分頁。手動模式直接採用設定的狀態；自動模式依該機台分頁最後一筆上報：${AUTO_ACTIVE_MINUTES} 分鐘內為生產中，超過則為待機。只有生產中與試模中會播放開合模動畫。</div>`);
       return;
     }
     if (id === 'a_foam') {
@@ -2075,6 +2222,316 @@
       renderOverview();
     }
   }
+
+  // ============================================================================
+  // 4. A棟射出機狀態：讀取 / 判定 / 面板 / 管理者修改（與塗裝區 refresh 分開輪詢）
+  // ============================================================================
+  function immPad(n) { return String(n).padStart(2, '0'); }
+  function immHms(d) { return d ? `${immPad(d.getHours())}:${immPad(d.getMinutes())}:${immPad(d.getSeconds())}` : '—'; }
+  function immFmt(d) { return `${d.getFullYear()}/${immPad(d.getMonth() + 1)}/${immPad(d.getDate())} ${immHms(d)}`; }
+  function immLsSet(k, v) { try { localStorage.setItem(k, v); } catch(e) {} }
+  // 分頁名稱以數字開頭或含「-」時，A1 表示法必須加單引號
+  function immQ(sheet) { return `'${sheet.replace(/'/g, "''")}'`; }
+
+  // 「2026/11/06 上午08:08:58」「2026-11-06 08:08:58」「ISO」→ Date（同 injection-report parseTimestamp）
+  function parseImmTs(raw) {
+    raw = String(raw || '').trim();
+    if (!raw) return null;
+    const m = raw.match(/(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})[\sT]*(上午|下午|AM|PM)?\s*(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?/i);
+    if (m && !/Z|[+-]\d{2}:?\d{2}$/.test(raw)) {
+      let h = parseInt(m[5], 10);
+      const ap = (m[4] || m[8] || '').toUpperCase();
+      if ((ap === '下午' || ap === 'PM') && h < 12) h += 12;
+      if ((ap === '上午' || ap === 'AM') && h === 12) h = 0;
+      return new Date(+m[1], +m[2] - 1, +m[3], h, +m[6], +(m[7] || 0));
+    }
+    const d = new Date(raw);
+    return isNaN(d) ? null : d;
+  }
+  function immStatusKey(s) {
+    s = String(s || '');
+    if (/生產/.test(s)) return '生產中';
+    if (/試模/.test(s)) return '試模中';
+    if (/待機|停/.test(s)) return '待機';
+    return '';
+  }
+  function immModeKey(s) { return /手動/.test(String(s || '')) ? '手動' : '自動'; } // 空白視為自動
+
+  // 射出機狀態分頁：機台 | 狀態 | 更新時間 | 更新者 | 備註 | 模式（依標題找欄，列順序不固定，以 A 欄名稱比對）
+  function parseImmStatusSheet(rows) {
+    const out = {};
+    if (!rows.length) return out;
+    const col = { machine: 0, status: 1, time: 2, user: 3, note: 4, mode: 5 };
+    const header = rows[0].map(h => String(h || '').trim());
+    const isHeader = header.some(h => /機台|狀態|模式/.test(h));
+    if (isHeader) {
+      header.forEach((h, i) => {
+        if (/機台/.test(h))           col.machine = i;
+        else if (/模式/.test(h))      col.mode = i;
+        else if (/時間/.test(h))      col.time = i;
+        else if (/更新者/.test(h))    col.user = i;
+        else if (/備註/.test(h))      col.note = i;
+        else if (/狀態/.test(h))      col.status = i;
+      });
+    }
+    (isHeader ? rows.slice(1) : rows).forEach(r => {
+      const g = k => String(r[col[k]] == null ? '' : r[col[k]]).trim();
+      const m = g('machine');
+      if (m) out[m] = { status: g('status'), time: g('time'), user: g('user'), note: g('note'), mode: g('mode') };
+    });
+    return out;
+  }
+  // 機台分頁 A 欄（時間戳記）取最新時間；正常為最後一列，仍掃全欄取最大值以防手動插列
+  function lastImmTimestamp(rows) {
+    let last = null;
+    rows.forEach(r => {
+      const d = parseImmTs(r && r[0]);
+      if (d && (!last || d > last)) last = d;
+    });
+    return last;
+  }
+
+  // 狀態判定：手動 → 直接用 B 欄；自動 → 最後上報距今 ≤ AUTO_ACTIVE_MINUTES 為生產中，否則（或無資料）待機
+  function resolveMachineStatus(row, lastTs, now) {
+    if (immModeKey(row && row.mode) === '手動') return immStatusKey(row && row.status) || '待機';
+    if (!lastTs) return '待機';
+    return (now - lastTs.getTime()) <= AUTO_ACTIVE_MINUTES * 60 * 1000 ? '生產中' : '待機';
+  }
+
+  let immLastOk = 0;
+  let immMockStep = 0;
+
+  // 一次 batchGet：射出機狀態 A1:F6 + 5 個機台分頁 A2:A（只讀時間戳欄）
+  async function refreshImm() {
+    if (IMM_MOCK) { mockImmTick(); return; }
+    try {
+      const ranges = [immQ(IMM_STATUS_SHEET) + '!A1:F6', ...IMM_LAYOUT.map(m => immQ(m.label) + '!A2:A')];
+      const qs = ranges.map(r => 'ranges=' + encodeURIComponent(r)).join('&');
+      const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${IMM_SHEET_ID}/values:batchGet?key=${DEFAULT_CONFIG.apiKey}&${qs}`, { cache: 'no-store' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const vr = (await res.json()).valueRanges || [];
+      const statusRows = parseImmStatusSheet((vr[0] && vr[0].values) || []);
+      const now = Date.now();
+      IMM_LAYOUT.forEach((m, i) => {
+        const row = statusRows[m.label] || {};
+        const lastTs = lastImmTimestamp((vr[i + 1] && vr[i + 1].values) || []);
+        Object.assign(immState[m.label], {
+          resolved: resolveMachineStatus(row, lastTs, now),
+          status: immStatusKey(row.status) || row.status || '',
+          mode: immModeKey(row.mode),
+          updatedAt: row.time || '', updatedBy: row.user || '', note: row.note || '',
+          lastTs,
+        });
+      });
+      immLastOk = now;
+    } catch (e) {
+      console.warn('[射出機狀態] 讀取失敗，保留上次狀態', e); // 超過 IMM_OFFLINE_MS 由 applyImmState 標記 offline
+    }
+    applyImmState();
+  }
+
+  // ?mock=1：5 台依序輪流 生產中 → 試模中 → 待機 → offline
+  const IMM_MOCK_SEQ = ['生產中', '試模中', '待機', 'offline'];
+  function mockImmTick() {
+    const now = Date.now();
+    IMM_LAYOUT.forEach((m, i) => {
+      const st = IMM_MOCK_SEQ[(immMockStep + i) % IMM_MOCK_SEQ.length];
+      Object.assign(immState[m.label], {
+        resolved: st, status: st === 'offline' ? '待機' : st, mode: i % 2 ? '手動' : '自動',
+        updatedAt: immFmt(new Date(now)), updatedBy: 'MOCK', note: '測試資料',
+        lastTs: new Date(now - i * 9 * 60 * 1000),
+      });
+    });
+    immMockStep++;
+    immLastOk = now;
+    applyImmState();
+  }
+
+  function applyImmState() {
+    const stale = !immLastOk || Date.now() - immLastOk > IMM_OFFLINE_MS;
+    IMM_LAYOUT.forEach((m, i) => {
+      const s = immState[m.label];
+      s.effective = (stale || !s.resolved) ? 'offline' : s.resolved;
+      const el = immLabelEls[i].el;
+      el.textContent = `${m.label} · ${immStatusText(s.effective)}`;
+      el.className = 'imm-label ' + IMM_STATUS_CLS[s.effective];
+    });
+    const c = immCounts();
+    immLegendEl.innerHTML = `🟢 ${c['生產中']} / 🟡 ${c['試模中']} / 🔴 ${c['待機']}` + (c.offline ? ` / ⚫ ${c.offline}` : '') +
+      `<span class="lg-time">射出機狀態 · ${immLastOk ? '更新 ' + immHms(new Date(immLastOk)) : '尚未讀取'}${stale && immLastOk ? '（連線中斷）' : ''}</span>`;
+    if (immPanelLabel) renderImmPanelInfo();
+    // 右側面板若正顯示射出機列表，就地更新徽章（不重繪整個面板）
+    document.querySelectorAll('#detail-content [data-imm]').forEach(row => {
+      const badge = row.querySelector('.status-badge');
+      if (badge && immState[row.dataset.imm]) badge.outerHTML = immBadgeHtml(row.dataset.imm);
+    });
+    if (selectedStation === 'a_mold') document.getElementById('detail-meta').textContent = immSummaryText();
+  }
+
+  // ── 管理者登入（同 person_part_analysis.html）──
+  async function immSha256(text) {
+    const buf = new TextEncoder().encode(text);
+    const hash = await crypto.subtle.digest('SHA-256', buf);
+    return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+  function immIsAdmin() { return parseInt(lsGet(ADMIN_SESSION_KEY) || '0', 10) > Date.now(); }
+
+  // ── 點機台狀態面板 ──
+  const immPanelEl = document.getElementById('imm-panel');
+  let immPanelLabel = null;
+  let immDraft = { status: '待機', mode: '自動' };
+  let immLoginOpen = false;
+
+  function openImmPanel(label) {
+    if (!immState[label]) return;
+    const s = immState[label];
+    immPanelLabel = label;
+    immDraft = { status: immStatusKey(s.status) || (immIsRunning(s.effective) ? s.effective : '待機'), mode: s.mode || '自動' };
+    immLoginOpen = false;
+    renderImmPanel();
+    immPanelEl.classList.add('open');
+  }
+  function closeImmPanel() {
+    immPanelLabel = null;
+    immPanelEl.classList.remove('open');
+  }
+  function immRow(k, v) { return `<div class="ip-row"><span>${esc(k)}</span><span>${v}</span></div>`; }
+  function renderImmPanelInfo() {
+    const box = document.getElementById('ip-info');
+    if (!box || !immPanelLabel) return;
+    const s = immState[immPanelLabel];
+    const st = s.effective;
+    box.innerHTML =
+      immRow('目前燈號', `<b style="color:${IMM_STATUS_CSS[st]}">${IMM_STATUS_ICON[st]} ${immStatusText(st)}</b>`) +
+      immRow('設定狀態', esc(s.status || '—')) +
+      immRow('模式', esc(s.mode || '自動') + (s.mode === '手動' ? '' : `（${AUTO_ACTIVE_MINUTES} 分內有上報＝生產中）`)) +
+      immRow('最後上報', s.lastTs ? esc(immFmt(s.lastTs)) : '無資料') +
+      immRow('更新時間', esc(s.updatedAt || '—')) +
+      immRow('更新者', esc(s.updatedBy || '—')) +
+      immRow('備註', esc(s.note || '—'));
+  }
+  function immSegHtml(group, vals) {
+    return `<div class="ip-seg" data-group="${group}">` + vals.map(v => `<button type="button" data-val="${v}">${v}</button>`).join('') + '</div>';
+  }
+  function paintImmSegs() {
+    immPanelEl.querySelectorAll('.ip-seg').forEach(seg => {
+      const group = seg.dataset.group;
+      seg.querySelectorAll('button').forEach(b => {
+        const on = immDraft[group] === b.dataset.val;
+        b.classList.toggle('on', on);
+        b.style.background = on ? (group === 'status' ? IMM_STATUS_CSS[b.dataset.val] : 'var(--info-bright)') : '';
+      });
+    });
+  }
+  function renderImmPanel() {
+    const label = immPanelLabel;
+    let admin;
+    if (immIsAdmin()) {
+      admin = `
+        <div style="color:var(--fg-mute)">狀態</div>${immSegHtml('status', ['生產中', '試模中', '待機'])}
+        <div style="color:var(--fg-mute)">模式</div>${immSegHtml('mode', ['手動', '自動'])}
+        <input id="ip-note" maxlength="100" placeholder="備註（選填）">
+        <input id="ip-user" maxlength="30" placeholder="更新者工號／姓名（空白＝管理員）" value="${esc(lsGet('immAdminUser') || '')}">
+        <button type="button" class="ip-btn" data-act="submit">送出</button>
+        <div class="ip-msg" id="ip-msg"></div>
+        <button type="button" class="ip-link" data-act="logout">🔓 登出管理者</button>`;
+    } else if (immLoginOpen) {
+      admin = `
+        <input type="password" id="ip-pw" placeholder="請輸入管理者密碼">
+        <button type="button" class="ip-btn" data-act="login">登入</button>
+        <div class="ip-msg err" id="ip-msg"></div>`;
+    } else {
+      admin = `<button type="button" class="ip-link" data-act="login-open">🔑 管理者登入以修改狀態</button>`;
+    }
+    immPanelEl.innerHTML = `
+      <h3><span>🏭 ${esc(label)}${IMM_MOCK ? ' <small style="color:#a855f7">MOCK</small>' : ''}</span><button type="button" class="ip-close" data-act="close" title="關閉">✕</button></h3>
+      <div id="ip-info"></div>
+      <div class="ip-admin">${admin}</div>`;
+    renderImmPanelInfo();
+    paintImmSegs();
+    if (immLoginOpen && !immIsAdmin()) setTimeout(() => { const pw = document.getElementById('ip-pw'); if (pw) pw.focus(); }, 0);
+  }
+  function immMsg(text, type) {
+    const el = document.getElementById('ip-msg');
+    if (el) { el.textContent = text; el.className = 'ip-msg ' + (type || ''); }
+  }
+
+  async function immLogin() {
+    const pw = document.getElementById('ip-pw');
+    if (!pw) return;
+    if (await immSha256(pw.value) === ADMIN_PASSWORD_HASH) {
+      immLsSet(ADMIN_SESSION_KEY, String(Date.now() + 24 * 3600 * 1000));
+      immLoginOpen = false;
+      renderImmPanel();
+    } else {
+      immMsg('密碼錯誤', 'err');
+    }
+  }
+
+  // 不設 Content-Type（text/plain）→ 簡單請求，不觸發 CORS preflight（同 injection-report postRecord）
+  async function postImmStatus(params) {
+    if (!navigator.onLine) throw new Error('離線中，請恢復網路後重試');
+    const res = await fetch(IMM_WEBAPP_URL, { method: 'POST', body: JSON.stringify(params) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json().catch(() => null);
+    if (json && json.ok === false) throw new Error(json.message || json.error || '伺服器拒絕');
+    return json;
+  }
+
+  async function immSubmit(btn) {
+    if (!immIsAdmin()) { renderImmPanel(); return; }
+    const label = immPanelLabel;
+    const userRaw = document.getElementById('ip-user').value.trim();
+    immLsSet('immAdminUser', userRaw);
+    const params = {
+      action: 'setMachineStatus',
+      machine: label,
+      status: immDraft.status,
+      mode: immDraft.mode,
+      user: userRaw || '管理員',
+      note: document.getElementById('ip-note').value.trim(),
+    };
+    btn.disabled = true;
+    immMsg('送出中…');
+    try {
+      if (IMM_MOCK) {
+        Object.assign(immState[label], {
+          status: params.status, mode: params.mode, updatedAt: immFmt(new Date()), updatedBy: params.user, note: params.note || '手動設定',
+          resolved: resolveMachineStatus({ status: params.status, mode: params.mode }, immState[label].lastTs, Date.now()),
+        });
+        applyImmState();
+      } else {
+        await postImmStatus(params);
+        await refreshImm(); // 送出成功立即重讀，不等下一輪輪詢
+      }
+      if (immPanelLabel === label) { immMsg('✅ 已更新 ' + immHms(new Date()), 'ok'); document.getElementById('ip-note').value = ''; }
+    } catch (e) {
+      immMsg('❌ 送出失敗：' + e.message, 'err');
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  immPanelEl.addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    const seg = b.closest('.ip-seg');
+    if (seg) { immDraft[seg.dataset.group] = b.dataset.val; paintImmSegs(); return; }
+    const act = b.dataset.act;
+    if (act === 'close') closeImmPanel();
+    else if (act === 'login-open') { immLoginOpen = true; renderImmPanel(); }
+    else if (act === 'login') immLogin();
+    else if (act === 'logout') { try { localStorage.removeItem(ADMIN_SESSION_KEY); } catch(err) {} renderImmPanel(); }
+    else if (act === 'submit') immSubmit(b);
+  });
+  immPanelEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && e.target.id === 'ip-pw') { e.preventDefault(); immLogin(); }
+    if (e.key === 'Escape') closeImmPanel();
+  });
+
+  if (IMM_MOCK) document.getElementById('mock-badge').style.display = 'block';
+  refreshImm();
+  setInterval(refreshImm, IMM_MOCK ? IMM_MOCK_MS : IMM_POLL_MS);
 
   // 先讀員工表再載入看板資料；之後看板每 30 秒刷新，員工表每 15 分鐘重讀
   loadWorkerMap().then(refresh);
