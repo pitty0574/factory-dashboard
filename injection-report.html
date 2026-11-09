@@ -697,6 +697,83 @@ input:focus, select:focus {
   box-shadow: 0 0 0 3px var(--accent-ring), 0 0 14px var(--accent-ring);
 }
 
+/* ── 智慧搜尋 Combobox（車型 / 件號 / 料號）── */
+.combobox {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+.combobox input {
+  padding-right: 36px;
+}
+.combo-toggle {
+  position: absolute;
+  right: 6px; top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--fg-mute);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 10pt;
+  line-height: 1;
+  transition: background 0.15s, transform 0.15s;
+}
+.combo-toggle:hover { background: var(--panel-alt); color: var(--fg); }
+.combobox.open .combo-toggle { transform: translateY(-50%) rotate(180deg); }
+
+.combo-dropdown {
+  display: none;
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0; right: 0;
+  max-height: 320px;
+  overflow-y: auto;
+  /* panel 半透明，底下墊一層實色 bg，避免下方欄位文字透出 */
+  background: linear-gradient(var(--panel), var(--panel)), var(--bg);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--border-up);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  z-index: 50;
+}
+.combo-dropdown.open { display: block; }
+.combo-dropdown.up { top: auto; bottom: calc(100% + 4px); }
+
+.combo-option {
+  padding: 10px 14px;
+  cursor: pointer;
+  font-size: 14pt;
+  font-family: var(--font-mono);
+  color: var(--fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background 0.1s;
+}
+.combo-option:hover,
+.combo-option.active { background: var(--accent-ring); }
+.combo-option.current { box-shadow: inset 3px 0 0 var(--big); }
+.combo-option mark {
+  background: var(--warn-fill);
+  color: inherit;
+  padding: 1px 2px;
+  border-radius: 2px;
+}
+.combo-option.combo-new {
+  border-top: 1px dashed var(--border);
+  color: var(--warn);
+  font-size: 13pt;
+  font-family: var(--font-ui);
+}
+.combo-empty {
+  padding: 10px 14px;
+  font-size: 12pt;
+  color: var(--fg-mute);
+}
+
 /* 工號與姓名徽章 */
 #f-pid {
   width: 150px;
@@ -1184,17 +1261,35 @@ tbody td.empty { font-family: var(--font-ui); }
 
         <div class="f-item">
           <label for="f-model">🚗 生產車型 <span class="lbl-code">MODEL</span></label>
-          <div class="field"><select id="f-model"><option value="">（載入中…）</option></select></div>
+          <div class="field">
+            <div class="combobox" data-field="model">
+              <input type="text" id="f-model" autocomplete="off" spellcheck="false" placeholder="（載入中…）" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="combo-model-list">
+              <button type="button" class="combo-toggle" tabindex="-1" aria-label="展開選單">🔽</button>
+              <div class="combo-dropdown" id="combo-model-list" role="listbox"></div>
+            </div>
+          </div>
         </div>
 
         <div class="f-item">
           <label for="f-part">🔩 產品件號 <span class="lbl-code">PART NO.</span></label>
-          <div class="field"><select id="f-part"><option value="">（載入中…）</option></select></div>
+          <div class="field">
+            <div class="combobox" data-field="part">
+              <input type="text" id="f-part" autocomplete="off" spellcheck="false" placeholder="（載入中…）" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="combo-part-list">
+              <button type="button" class="combo-toggle" tabindex="-1" aria-label="展開選單">🔽</button>
+              <div class="combo-dropdown" id="combo-part-list" role="listbox"></div>
+            </div>
+          </div>
         </div>
 
         <div class="f-item">
           <label for="f-material">🧪 原料料號 <span class="lbl-code">MATERIAL</span></label>
-          <div class="field"><select id="f-material"><option value="">（載入中…）</option></select></div>
+          <div class="field">
+            <div class="combobox" data-field="material">
+              <input type="text" id="f-material" autocomplete="off" spellcheck="false" placeholder="（載入中…）" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="combo-material-list">
+              <button type="button" class="combo-toggle" tabindex="-1" aria-label="展開選單">🔽</button>
+              <div class="combo-dropdown" id="combo-material-list" role="listbox"></div>
+            </div>
+          </div>
         </div>
 
         <div class="f-item">
@@ -1381,15 +1476,143 @@ tbody td.empty { font-family: var(--font-ui); }
     [['f-model', 0], ['f-part', 1], ['f-material', 2]].forEach(([id, col]) => {
       const seen = new Set();
       body.forEach(r => { const v = String(r[col] == null ? '' : r[col]).trim(); if (v) seen.add(v); });
-      fillSelect($(id), [...seen]);
+      COMBOS[id].setOptions([...seen]);
     });
   }
-  function fillSelect(sel, values) {
-    const cur = sel.value;
-    sel.innerHTML = '<option value="">（請選擇）</option>' +
-      values.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join('');
-    if (cur && values.includes(cur)) sel.value = cur;  // 重讀時保留目前選擇
+
+  // ── 智慧搜尋 Combobox：模糊搜尋 + 可自由輸入清單外的值（試模新車型）──
+  // 套用值時對 input 發出 change 事件，模具編號 / 即時卡片照常讀 input.value
+  function createCombobox(root) {
+    const input = root.querySelector('input');
+    const toggle = root.querySelector('.combo-toggle');
+    const list = root.querySelector('.combo-dropdown');
+    let options = [];
+    let items = [];     // 目前顯示的 { value, isNew }
+    let active = -1;
+
+    function hl(v, q) {
+      const i = q ? v.toLowerCase().indexOf(q.toLowerCase()) : -1;
+      if (i < 0) return esc(v);
+      return esc(v.slice(0, i)) + '<mark>' + esc(v.slice(i, i + q.length)) + '</mark>' + esc(v.slice(i + q.length));
+    }
+    // 優先序：完全符合 > 字首 > 其他位置；同級維持原清單順序
+    function match(q) {
+      const lq = q.toLowerCase();
+      return options
+        .map((v, i) => {
+          const lv = v.toLowerCase(), p = lv.indexOf(lq);
+          return p < 0 ? null : { v, i, rank: lv === lq ? 0 : p === 0 ? 1 : 2 };
+        })
+        .filter(Boolean)
+        .sort((a, b) => a.rank - b.rank || a.i - b.i)
+        .map(m => m.v);
+    }
+    function render(q) {
+      items = (q ? match(q) : options).map(v => ({ value: v, isNew: false }));
+      if (q && !options.some(v => v.toLowerCase() === q.toLowerCase())) items.push({ value: q, isNew: true });
+      const cur = input.value.trim();
+      list.innerHTML = items.length ? items.map((it, i) => it.isNew
+        ? `<div class="combo-option combo-new" role="option" id="${list.id}-${i}" data-i="${i}">💡 新增 "${esc(it.value)}"（未建檔）</div>`
+        : `<div class="combo-option${it.value === cur ? ' current' : ''}" role="option" id="${list.id}-${i}" data-i="${i}">${hl(it.value, q)}</div>`
+      ).join('') : '<div class="combo-empty">（清單無資料，可直接輸入）</div>';
+      setActive(-1);
+    }
+    function setActive(i) {
+      active = i;
+      list.querySelectorAll('.combo-option').forEach(el => el.classList.toggle('active', +el.dataset.i === i));
+      const el = i >= 0 ? list.querySelector(`[data-i="${i}"]`) : null;
+      if (el) { el.scrollIntoView({ block: 'nearest' }); input.setAttribute('aria-activedescendant', el.id); }
+      else input.removeAttribute('aria-activedescendant');
+    }
+    const isOpen = () => list.classList.contains('open');
+    function open(q) {
+      render(q);
+      list.classList.add('open');
+      root.classList.add('open');
+      input.setAttribute('aria-expanded', 'true');
+      place();
+    }
+    function close() {
+      list.classList.remove('open', 'up');
+      root.classList.remove('open');
+      input.setAttribute('aria-expanded', 'false');
+      setActive(-1);
+    }
+    // 卡片是 overflow:hidden，下方空間不足時改向上展開
+    function place() {
+      list.classList.remove('up');
+      list.style.maxHeight = '';
+      const card = root.closest('.card');
+      if (!card) return;
+      const c = card.getBoundingClientRect(), r = input.getBoundingClientRect();
+      const below = c.bottom - r.bottom - 12, above = r.top - c.top - 12;
+      const up = below < Math.min(320, list.scrollHeight) && above > below;
+      list.classList.toggle('up', up);
+      list.style.maxHeight = Math.max(120, Math.min(320, up ? above : below)) + 'px';
+    }
+    function apply(v) {
+      v = String(v).trim();
+      const canon = options.find(o => o.toLowerCase() === v.toLowerCase());  // 只差大小寫 → 用清單正式寫法
+      if (canon) v = canon;
+      const changed = input.value !== v;
+      input.value = v;
+      close();
+      if (changed) input.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    input.addEventListener('focus', () => open(''));
+    input.addEventListener('mousedown', () => { if (document.activeElement === input && !isOpen()) open(''); });
+    input.addEventListener('input', () => open(input.value.trim()));
+    input.addEventListener('blur', () => apply(input.value));
+    toggle.addEventListener('mousedown', e => e.preventDefault());  // 焦點留在 input
+    toggle.addEventListener('click', () => {
+      if (isOpen()) close();
+      else if (document.activeElement !== input) input.focus();  // focus 會展開
+      else open('');
+    });
+    list.addEventListener('mousedown', e => e.preventDefault());
+    list.addEventListener('click', e => {
+      const el = e.target.closest('.combo-option');
+      if (el) apply(items[+el.dataset.i].value);
+    });
+    input.addEventListener('keydown', e => {
+      if (e.isComposing) return;
+      const n = items.length;
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (!isOpen()) { open(input.value.trim()); return; }
+        if (!n) return;
+        const d = e.key === 'ArrowDown' ? 1 : -1;
+        setActive(active < 0 ? (d > 0 ? 0 : n - 1) : (active + d + n) % n);
+      } else if (e.key === 'Enter') {
+        if (!isOpen()) return;  // 已收合 → 交給全域 Enter（開確認彈窗）
+        e.preventDefault();
+        e.stopPropagation();
+        apply(active >= 0 ? items[active].value : input.value);
+      } else if (e.key === 'Escape') {
+        if (!isOpen()) return;
+        e.preventDefault();
+        e.stopPropagation();
+        close();
+      } else if (e.key === 'Tab') {
+        if (isOpen() && active >= 0) apply(items[active].value);
+        else close();
+      }
+    });
+    document.addEventListener('mousedown', e => { if (!root.contains(e.target)) close(); });
+
+    return {
+      setOptions(vals) {
+        options = vals;
+        input.placeholder = vals.length ? '搜尋或直接輸入…' : '（選單載入失敗，可直接輸入）';
+        if (isOpen()) render(document.activeElement === input ? input.value.trim() : '');
+      },
+    };
   }
+  const COMBOS = {};
+  document.querySelectorAll('.combobox').forEach(root => {
+    COMBOS[root.querySelector('input').id] = createCombobox(root);
+  });
 
   // ── 射出機狀態 ──（依標題自動找「機台」「狀態」欄；找不到用 A=機台、B=狀態）
   function parseStatusSheet(rows) {
@@ -1577,8 +1800,7 @@ tbody td.empty { font-family: var(--font-ui); }
     $('f-mold').value = v || '(需先選車型和件號)';
     $('f-mold').classList.toggle('ready', !!v);
   }
-  $('f-model').addEventListener('change', updateMold);
-  $('f-part').addEventListener('change', updateMold);
+  ['f-model', 'f-part'].forEach(id => ['input', 'change'].forEach(ev => $(id).addEventListener(ev, updateMold)));
 
   // ── 左欄即時卡片：車型 / 件號跟隨下拉選擇 ──
   function updateLive() {
@@ -1588,8 +1810,7 @@ tbody td.empty { font-family: var(--font-ui); }
       $(out).classList.toggle('empty-val', !v);
     });
   }
-  $('f-model').addEventListener('change', updateLive);
-  $('f-part').addEventListener('change', updateLive);
+  ['f-model', 'f-part'].forEach(id => ['input', 'change'].forEach(ev => $(id).addEventListener(ev, updateLive)));
 
   // 狀態下拉左側色條
   function updateStatusColor() {
@@ -1836,7 +2057,7 @@ tbody td.empty { font-family: var(--font-ui); }
   loadDropdowns().catch(e => {
     console.error('[injection-report] 下拉選單讀取失敗', e);
     setConn(false);
-    ['f-model', 'f-part', 'f-material'].forEach(id => fillSelect($(id), []));
+    ['f-model', 'f-part', 'f-material'].forEach(id => COMBOS[id].setOptions([]));
   }).then(() => { updateMold(); updateLive(); });
   loadWorkerMap();
   refresh({ applyStatusToForm: true });
