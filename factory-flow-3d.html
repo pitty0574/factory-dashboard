@@ -182,8 +182,8 @@
     .ctx-label:hover { background: var(--info-bright); color: #fff; z-index: 15; transform: translate(-50%, -50%) scale(1.1); }
 
     /* A棟射出機極簡狀態膠囊 (left/top 由 layoutImmLabels 每幀計算；引線從膠囊底垂直指向燈柱頂) */
-    :root { --imm-bg: rgba(255, 255, 255, 0.85); --imm-fg: #0f172a; --imm-border: rgba(15, 23, 42, 0.12); --imm-border-hover: rgba(15, 23, 42, 0.38); }
-    [data-theme="dark"] { --imm-bg: rgba(15, 23, 42, 0.78); --imm-fg: #f8fafc; --imm-border: rgba(255, 255, 255, 0.15); --imm-border-hover: rgba(255, 255, 255, 0.5); }
+    :root { --imm-bg: rgba(255, 255, 255, 0.85); --imm-fg: #0f172a; --imm-border: rgba(15, 23, 42, 0.12); --imm-border-hover: rgba(15, 23, 42, 0.38); --qty-fg: #0369a1; }
+    [data-theme="dark"] { --imm-bg: rgba(15, 23, 42, 0.78); --imm-fg: #f8fafc; --imm-border: rgba(255, 255, 255, 0.15); --imm-border-hover: rgba(255, 255, 255, 0.5); --qty-fg: #38bdf8; }
     .imm-label {
       --st: #94a3b8;
       position: absolute; height: 22px; box-sizing: border-box;
@@ -213,36 +213,45 @@
     .imm-upd { margin-left: 6px; font-size: 10px; font-weight: 600; color: var(--fg-mute); font-family: var(--font-mono); }
     .imm-upd.off { color: var(--crit); }
 
-    /* 工站懸浮膠囊標籤 */
-    .station-pin {
-      position: absolute; transform: translate(-50%, -100%);
+    /* 工站單行膠囊 (外觀沿用 .imm-label 變數；錨點 = 工站設備頂，膠囊底距錨點 IMM_LABEL_LEAD 8px，由引線連接)
+       左側色條 --line = 工站色；狀態點 --st = 狀態 (綠 = 有人在線，灰 = 0 人 / 無資料 / 待串接) */
+    .station-pin, .fpy-pin {
+      --st: #94a3b8; --line: #94a3b8;
+      position: absolute; transform: translate(-50%, calc(-100% - 8px)); height: 22px; box-sizing: border-box;
       pointer-events: auto; cursor: pointer;
-      background: var(--card-bg); backdrop-filter: blur(12px);
-      border: 1.5px solid var(--card-border); border-radius: 11px;
-      padding: 5px 10px; min-width: 108px;
-      box-shadow: var(--card-glow);
-      transition: all 0.2s;
-      display: flex; flex-direction: column; align-items: center; gap: 1px;
-      z-index: 12;
+      display: flex; align-items: center; gap: 5px; padding: 0 7px 0 6px;
+      background: var(--imm-bg); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+      border: 1px solid var(--imm-border); border-left: 3px solid var(--line); border-radius: 6px;
+      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.18);
+      white-space: nowrap; z-index: 12; line-height: 1;
+      transition: transform 0.15s, border-color 0.15s;
     }
-    .station-pin::before {
-      content: ''; position: absolute; top: 0; left: 15%; right: 15%; height: 2px;
-      background: linear-gradient(90deg, transparent, var(--info-bright), transparent);
+    .station-pin:hover { transform: translate(-50%, calc(-100% - 10px)); border-color: var(--imm-border-hover); border-left-color: var(--line); }
+    .station-pin.selected { border-color: var(--info-bright); border-left-color: var(--line); box-shadow: 0 0 0 1.5px var(--info-bright), 0 2px 8px rgba(15, 23, 42, 0.18); }
+    .station-pin.st-on  { --st: #10b981; }
+    .station-pin.st-off { --st: #94a3b8; }
+    .station-pin .sp-dot, .fpy-pin .sp-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--st); box-shadow: 0 0 6px var(--st); flex-shrink: 0; }
+    .station-pin .sp-name, .fpy-pin .sp-name { font-size: 11px; font-weight: 800; color: var(--imm-fg); }
+    .station-pin .sp-sep, .fpy-pin .sp-sep { width: 1px; height: 10px; background: var(--imm-border); }
+    .station-pin .pin-count, .fpy-pin .pin-count { font-family: 'Orbitron', var(--font-mono); font-size: 11px; font-weight: 700; color: var(--imm-fg); letter-spacing: 0.3px; }
+    /* 數值 (件數 / 直行 %) 專屬色 + 粗體 + 底線，與 A 棟機台名稱黑字區分；「待串接」(.pin-pending) 不套用 */
+    .station-pin .pin-count:not(.pin-pending), .fpy-pin .pin-count {
+      color: var(--qty-fg); font-weight: 900;
+      text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px;
     }
-    .station-pin:hover { transform: translate(-50%, -106%) scale(1.05); border-color: var(--info-bright); }
-    .station-pin.selected { border-color: var(--info-bright); box-shadow: 0 0 0 2px var(--info-bright), var(--card-glow); }
-    .station-pin::after {
-      content: ''; position: absolute; bottom: -14px; left: 50%; transform: translateX(-50%);
-      width: 2px; height: 14px; background: linear-gradient(to bottom, var(--info-bright), transparent);
+    .station-pin .pin-meta { font-family: var(--font-mono); font-size: 10px; font-weight: 700; color: var(--fg-mute); }
+    .station-pin .sp-lead {
+      position: absolute; top: 100%; left: 50%; width: 1px; height: 8px; margin-left: -0.5px; pointer-events: none;
+      background: linear-gradient(to bottom, var(--line), transparent);
     }
-    .pin-zone { font-size: 8px; font-weight: 800; color: var(--info); font-family: var(--font-mono); }
-    .pin-title { font-size: 12px; font-weight: 800; color: var(--fg); }
-    .pin-count { font-size: 17px; font-weight: 800; font-family: var(--font-mono); line-height: 1.1; }
-    .pin-meta { font-size: 9px; font-family: var(--font-mono); padding: 1px 6px; border-radius: 5px; font-weight: 700; }
-    .pin-meta.ok { background: var(--ok-bg); color: var(--ok); }
-    .pin-meta.warn { background: var(--warn-bg); color: var(--warn); }
-    .pin-meta.info { background: var(--info-bg); color: var(--info); }
+    .station-pin .sp-lead::after {
+      content: ""; position: absolute; left: -2px; bottom: -2.5px; width: 5px; height: 5px; border-radius: 50%; background: var(--line);
+    }
 
+    /* 直行通道膠囊：外觀同 .station-pin，置中於直行通道投影點 (無引線、不可點)；全廠鳥瞰也常駐。原程式無直行率顏色門檻 → 固定 B 棟綠 */
+    .fpy-pin { --st: #10b981; --line: #10b981; transform: translate(-50%, -50%); pointer-events: none; cursor: default; z-index: 6; }
+
+    .road-badge.road-hidden { display: none; } /* 全廠鳥瞰隱藏；選中 B 棟或 B 棟工站才顯示 (setRoadBadges) */
     .road-badge {
       position: absolute; transform: translate(-50%, -50%);
       background: var(--card-bg); backdrop-filter: blur(8px);
@@ -417,8 +426,8 @@
 
   <div id="canvas-container"></div>
   <div id="labels-container">
-    <div class="road-badge warn" id="badge-repaint">需補漆 —</div>
-    <div class="road-badge ok" id="badge-fpy">直行通道 —</div>  </div>
+    <div class="road-badge warn road-hidden" id="badge-repaint">需補漆 —</div>
+    <div class="fpy-pin" id="badge-fpy"><span class="sp-dot"></span><span class="sp-name">直行</span><span class="sp-sep"></span><span class="pin-count" id="badge-fpy-val">—</span></div>  </div>
 
   <!-- A棟射出機狀態面板（點機台開啟） -->
   <div class="imm-panel" id="imm-panel"></div>
@@ -613,18 +622,18 @@
   // A / B / C 三大核心監控棟
   const CORE_BLDGS = [
     { key: 'A', cls: 'a-bldg', code: 'A 棟', name: '射出工廠 (射出成型・發泡成型)', x: -3.5, z: -13.6, w: 37.5, d: 10.4, h: 4.2, color: 0x2563eb, hex: '#2563eb', bannerZ: -18.8 },
-    { key: 'B', cls: 'b-bldg', code: 'B 棟', name: '塗裝後段 (整修・補漆・終檢)',   x: -3.5, z: 1.2,   w: 35.0, d: 10.6, h: 4.0, color: 0x10b981, hex: '#10b981', bannerZ: -4.1, skipBanner: true }, // ZONE B1/B2/B3 已標示各區，不顯示中央 banner
+    { key: 'B', cls: 'b-bldg', code: 'B 棟', name: '塗裝後段 (整修・補漆・終檢)',   x: -3.5, z: 1.2,   w: 35.0, d: 10.6, h: 4.0, color: 0x10b981, hex: '#10b981', bannerZ: -4.1 },
     { key: 'C', cls: 'c-bldg', code: 'C 棟', name: '塗裝工廠 (大塗線・下線區・點檢)', x: -10.5, z: 16.5, w: 22.5, d: 10.6, h: 4.2, color: 0xf59e0b, hex: '#f59e0b', bannerZ: 21.8 }
   ];
 
-  // 6 大核心工站
+  // 6 大核心工站 (short = 膠囊簡稱；topY = 平台上設備最高點的局部高度，膠囊錨點 = pos.y + topY，同 A 棟膠囊錨在燈柱頂)
   const STATIONS_CFG = {
-    a_foam: { id: 'a_foam', bldg: 'A', zone: 'ZONE A1 · 發泡', title: '發泡成型區', pos: { x: -18.7, y: 0.22, z: -13.6 }, w: 5.0,  d: 6.2, color: 0x0ea5e9, hex: '#0ea5e9' },
-    a_mold: { id: 'a_mold', bldg: 'A', zone: 'ZONE A2 · 射出', title: '射出成型區', pos: { x: -0.5,  y: 0.22, z: -13.6 }, w: 28.0, d: 6.6, color: 0x2563eb, hex: '#2563eb', hidePin: true }, // 浮動標籤與右側面板重複且遮擋機台，僅保留隱藏元素供面板點擊觸發
-    unload: { id: 'unload', bldg: 'C', zone: 'ZONE C · 下線',  title: '塗裝下線區', pos: { x: -3.0,  y: 0.22, z: 13.8 },  w: 6.0,  d: 5.8, color: 0xf59e0b, hex: '#f59e0b' },
-    rework: { id: 'rework', bldg: 'B', zone: 'ZONE B1 · 整修', title: '整修區',     pos: { x: -13.5, y: 0.22, z: B_MAIN_Z }, w: 6.4, d: 6.0, color: 0x0ea5e9, hex: '#0ea5e9' },
-    paint:  { id: 'paint',  bldg: 'B', zone: 'ZONE B2 · 補漆', title: '補漆區',     pos: { x: -2.5,  y: 0.22, z: B_MAIN_Z }, w: 6.4, d: 6.0, color: 0xf59e0b, hex: '#f59e0b' },
-    final:  { id: 'final',  bldg: 'B', zone: 'ZONE B3 · 終檢', title: '終檢區',     pos: { x: 8.5,   y: 0.22, z: B_MAIN_Z }, w: 6.4, d: 6.0, color: 0x10b981, hex: '#10b981' },
+    a_foam: { id: 'a_foam', bldg: 'A', zone: 'ZONE A1 · 發泡', title: '發泡成型區', short: '發泡', topY: 1.62, pos: { x: -18.7, y: 0.22, z: -13.6 }, w: 5.0,  d: 6.2, color: 0x0ea5e9, hex: '#0ea5e9' }, // 發泡機頂板
+    a_mold: { id: 'a_mold', bldg: 'A', zone: 'ZONE A2 · 射出', title: '射出成型區', short: '射出', topY: 2.95, pos: { x: -0.5,  y: 0.22, z: -13.6 }, w: 28.0, d: 6.6, color: 0x2563eb, hex: '#2563eb', hidePin: true }, // 浮動標籤與右側面板重複且遮擋機台，僅保留隱藏元素供面板點擊觸發
+    unload: { id: 'unload', bldg: 'C', zone: 'ZONE C · 下線',  title: '塗裝下線區', short: '下線', topY: 1.78, pos: { x: -3.0,  y: 0.22, z: 13.8 },  w: 6.0,  d: 5.8, color: 0xf59e0b, hex: '#f59e0b' }, // 高貨箱頂
+    rework: { id: 'rework', bldg: 'B', zone: 'ZONE B1 · 整修', title: '整修區',     short: '整修', topY: 2.88, pos: { x: -13.5, y: 0.22, z: B_MAIN_Z }, w: 6.4, d: 6.0, color: 0x0ea5e9, hex: '#0ea5e9' }, // 燈架頂
+    paint:  { id: 'paint',  bldg: 'B', zone: 'ZONE B2 · 補漆', title: '補漆區',     short: '補漆', topY: 3.85, pos: { x: -2.5,  y: 0.22, z: B_MAIN_Z }, w: 6.4, d: 6.0, color: 0xf59e0b, hex: '#f59e0b' }, // 排氣扇頂
+    final:  { id: 'final',  bldg: 'B', zone: 'ZONE B3 · 終檢', title: '終檢區',     short: '終檢', topY: 3.16, pos: { x: 8.5,   y: 0.22, z: B_MAIN_Z }, w: 6.4, d: 6.0, color: 0x10b981, hex: '#10b981' }, // 檢查門燈條頂
   };
 
   // A棟射出機群配置 (世界座標；5 台皆為水平開合 + 龍門手臂；scale 為相對大型機的等比縮放)
@@ -632,7 +641,7 @@
   const IMM_LAYOUT = [
     // 上排 4 台
     { label: '3000T-1', x: -11.0, z: -15.5, scale: 1.00 },
-    { label: '2500T',   x: -3.0,  z: -15.5, scale: 0.92 },
+    { label: '2500T',   x: -3.0,  z: -15.5, scale: 0.92, tier: 1 }, // tier：標籤往上錯開的層數 (只影響膠囊，不動機台)
     { label: '750T',    x: 5.0,   z: -15.5, scale: 0.60 },
     { label: '500T',    x: 10.0,  z: -15.5, scale: 0.60 }, // 750T / 500T 視覺尺寸統一
     // 下排 1 台 (與 2500T 同 x 線)
@@ -743,7 +752,7 @@
     const el = document.createElement('div');
     el.addEventListener('click', (e) => { e.stopPropagation(); openImmPanel(m.label); });
     labelsContainer.appendChild(el);
-    const item = { el, label: m.label, pos: { x: m.x + 0.5 * m.scale, y: 0.22 + 2.95 * m.scale, z: m.z + 0.8 * m.scale }, w: 0, h: 0, lead: null, dot: null };
+    const item = { el, label: m.label, tier: m.tier || 0, pos: { x: m.x + 0.5 * m.scale, y: 0.22 + 2.95 * m.scale, z: m.z + 0.8 * m.scale }, w: 0, h: 0, lead: null, dot: null };
     setImmLabelContent(item, 'offline');
     return item;
   });
@@ -778,7 +787,14 @@
         item.el.style.display = '';
         if (!item.w) { item.w = item.el.offsetWidth; item.h = item.el.offsetHeight; }
         const w = item.w, h = item.h;
-        const baseLeft = p.x - w / 2, baseTop = p.y - IMM_LABEL_LEAD - h;
+        // tier 每層往上一個膠囊高 (引線自動拉長)；正上方有禁區時只抬到禁區下緣 2px
+        const top0 = p.y - IMM_LABEL_LEAD - h, left0 = p.x - w / 2;
+        let raise = item.tier * (h + IMM_LABEL_GAP);
+        keepOut.forEach(k => {
+          if (raise && k.left < left0 + w && k.left + k.w > left0 && k.top < top0 && k.top + k.h > top0 - raise)
+            raise = Math.max(0, Math.min(raise, top0 - (k.top + k.h) - 2));
+        });
+        const baseLeft = left0, baseTop = top0 - raise;
         const maxUp = h + IMM_LABEL_GAP * 2; // 往上最多 1 個膠囊高 (含間距)
         const dxs = [0, -w / 4, w / 4, -w / 2, w / 2];
         let best = null, fallback = null;
@@ -818,17 +834,14 @@
   const pinElements = {};
   Object.values(STATIONS_CFG).forEach(cfg => {
     const el = document.createElement('div');
-    el.className = 'station-pin';
+    el.className = 'station-pin st-off';
     el.dataset.id = cfg.id;
+    el.style.setProperty('--line', cfg.hex);
     const isReady = ['unload', 'rework', 'paint', 'final'].includes(cfg.id);
-    const defaultVal = cfg.id === 'a_mold' ? '5 台運轉中' : (isReady ? '—' : '待串接');
-    const defaultMeta = cfg.id === 'a_mold' ? '3000T x2 + 2500T + 750T + 500T' : (isReady ? '讀取中' : 'A棟產線模組');
-    el.innerHTML = `
-      <span class="pin-zone">${cfg.zone}</span>
-      <span class="pin-title">${cfg.title}</span>
-      <span class="pin-count" id="pin-count-${cfg.id}">${defaultVal}</span>
-      <span class="pin-meta info" id="pin-meta-${cfg.id}">${defaultMeta}</span>
-    `;
+    el.innerHTML = `<span class="sp-dot"></span><span class="sp-name">${cfg.short}</span><span class="sp-sep"></span>`
+      + `<span class="pin-count${isReady ? '' : ' pin-pending'}" id="pin-count-${cfg.id}">${isReady ? '—' : '待串接'}</span>`
+      + (isReady ? `<span class="sp-sep"></span><span class="pin-meta" id="pin-meta-${cfg.id}">—人</span>` : '') // 待串接不顯示人數欄
+      + `<span class="sp-lead"></span>`;
     el.addEventListener('click', (e) => {
       e.stopPropagation();
       selectStation(cfg.id);
@@ -837,6 +850,19 @@
     if (cfg.hidePin) { el.style.display = 'none'; return; } // 不投影顯示，但保留給 [data-id] 點擊
     pinElements[cfg.id] = el;
   });
+  // 工站膠囊內容：count 為數量文字；online 為在線人數 (null = 無人員資料 → 「—人」)；狀態點 在線 > 0 綠，否則灰
+  function setStationPin(id, count, online) {
+    const el = pinElements[id];
+    if (!el) return;
+    document.getElementById('pin-count-' + id).textContent = count;
+    document.getElementById('pin-meta-' + id).textContent = (online == null ? '—' : online) + '人';
+    el.classList.toggle('st-on', online > 0);
+    el.classList.toggle('st-off', !(online > 0));
+  }
+  // 需補漆 % 只在 B 棟視角或選中 B 棟工站時顯示 (直行通道膠囊常駐，不受此控制)
+  function setRoadBadges(on) {
+    document.getElementById('badge-repaint').classList.toggle('road-hidden', !on);
+  }
 
   document.getElementById('btn-toggle-ctx').onclick = () => {
     showContextLabels = !showContextLabels;
@@ -885,6 +911,7 @@
         const p = CAM_PRESETS[key];
         if (!p) return;
         isShowcasing = false;
+        setRoadBadges(key === 'b');
         document.getElementById('showcase-toast').style.display = 'none';
         labelsContainer.style.opacity = '1';
         dropItems.forEach(item => { item.mesh.position.y = item.baseY; item.mesh.scale.set(1, 1, 1); });
@@ -901,6 +928,7 @@
       startShowcase = function() {
         isCamFlying = false;
         isShowcasing = true;
+        setRoadBadges(false);
         showcaseStartTime = performance.now() / 1000;
         document.getElementById('showcase-toast').style.display = 'flex';
         document.getElementById('mode-indicator').textContent = '目前模式：🎬 360° 數位戰情室建構展演中…';
@@ -1627,7 +1655,7 @@
           if (camera.position.distanceTo(camTargetPos) < 0.15) isCamFlying = false;
         }
         if (controls) controls.update();
-        Object.values(STATIONS_CFG).forEach(cfg => projectToScreen({ x: cfg.pos.x, y: cfg.pos.y + 4.0, z: cfg.pos.z }, pinElements[cfg.id]));
+        Object.values(STATIONS_CFG).forEach(cfg => projectToScreen({ x: cfg.pos.x, y: cfg.pos.y + cfg.topY, z: cfg.pos.z }, pinElements[cfg.id]));
         bannerEls.forEach(b => projectToScreen(b.pos, b.el));
         if (showContextLabels) ctxEls.forEach(c => projectToScreen(c.pos, c.el));
         layoutImmLabels(immLabelEls.map(m => {
@@ -1676,6 +1704,7 @@
       const p = PRESETS_2D[key];
       if (!p) return;
       isShowcasing2D = false; rotAngle = 0;
+      setRoadBadges(key === 'b');
       document.getElementById('showcase-toast').style.display = 'none';
       targetCamX = p.x; targetCamZ = p.z; targetScale = p.s;
       document.getElementById('mode-indicator').textContent = '目前模式：' + p.label;
@@ -1687,6 +1716,7 @@
     startShowcase = function() {
       isShowcasing2D = true;
       showcaseStart2D = performance.now() / 1000;
+      setRoadBadges(false);
       targetCamX = -2; targetCamZ = 1; targetScale = 14.2;
       document.getElementById('showcase-toast').style.display = 'flex';
       document.getElementById('mode-indicator').textContent = '目前模式：🎬 360° 數位戰情室建構展演中…';
@@ -1826,7 +1856,7 @@
         const lp = Math.max(0, Math.min(1, (tShow - (3.5 + idx * 0.15)) / 0.75));
         const lift = (1 - lp) * 35;
         if (lp > 0) drawBox25D(st.pos.x, st.pos.z, st.w, st.d, 1.2, st.hex + '66', st.hex + '44', st.hex, 2.2, lift);
-        const sp = toScreen(st.pos.x, 2.2 + lift, st.pos.z);
+        const sp = toScreen(st.pos.x, 1.2 + lift, st.pos.z); // 2.5D 工站方塊頂 (同 A 棟膠囊錨在狀態燈)
         const el = pinElements[st.id];
         if (el) { el.style.left = sp.x + 'px'; el.style.top = sp.y + 'px'; }
       });
@@ -1960,10 +1990,7 @@
   let unloadCount = 385;
   const unloadInitial = 430;
   function renderUnloadPin() {
-    const cEl = document.getElementById('pin-count-unload');
-    const mEl = document.getElementById('pin-meta-unload');
-    if (cEl) cEl.textContent = unloadCount + ' PCS';
-    if (mEl) mEl.textContent = '已送B棟 ' + (unloadInitial - unloadCount);
+    setStationPin('unload', unloadCount, null); // C 棟下線無人員資料 → 灰點「—人」；已送B棟見右側面板
   }
   renderUnloadPin();
 
@@ -1975,6 +2002,7 @@
     Object.values(pinElements).forEach(el => el.classList.toggle('selected', el.dataset.id === id));
     const cfg = STATIONS_CFG[id];
     if (cfg) focus3DStation(cfg.pos);
+    setRoadBadges(!!cfg && cfg.bldg === 'B');
     renderDetail(id);
   }
 
@@ -2132,7 +2160,7 @@
     const [title, s] = map[id] || [];
     if (!s) return;
     document.getElementById('detail-name').textContent = title;
-    document.getElementById('detail-meta').textContent = `${s.workers.length} 位作業員 · ${s.activeCount} 位在線`;
+    document.getElementById('detail-meta').textContent = `${s.workers.length} 位作業員 · ${s.activeCount} 位在線` + (id === 'final' && s.last ? ` · 最後 ${hhmm(s.last)}` : '');
     const workersHtml = s.workers.length
       ? '<div class="worker-list">' + s.workers.slice(0, 8).map(w =>
           `<div class="worker-row"><span><span class="id">${formatWorkerId(w.pid)}</span><span class="name">最後 ${hhmm(w.lastTs)}</span></span><span class="count">${w.count} PCS</span></div>`
@@ -2310,18 +2338,13 @@
       };
 
       const { rework, paint, final } = stats;
-      document.getElementById('pin-count-rework').textContent = rework.count + ' PCS';
-      document.getElementById('pin-meta-rework').textContent = `${rework.workers.length} 人 (${rework.activeCount} 在線)`;
+      setStationPin('rework', rework.count, rework.activeCount);
       update3DWorkers('rework', rework.workers);
 
-      document.getElementById('pin-count-paint').textContent = paint.count + ' PCS';
-      document.getElementById('pin-meta-paint').textContent = `${paint.workers.length} 人 (${paint.activeCount} 在線)`;
-      document.getElementById('pin-meta-paint').className = 'pin-meta warn';
+      setStationPin('paint', paint.count, paint.activeCount);
       update3DWorkers('paint', paint.workers);
 
-      document.getElementById('pin-count-final').textContent = final.count + ' PCS';
-      document.getElementById('pin-meta-final').textContent = final.last ? `最後 ${hhmm(final.last)}` : `${final.workers.length} 人`;
-      document.getElementById('pin-meta-final').className = 'pin-meta ok';
+      setStationPin('final', final.count, final.activeCount);
       update3DWorkers('final', final.workers);
 
       // 直行率 = (終檢 − 淨補漆) / 終檢；淨補漆 = 補漆 − RV/PU 必經 BL
@@ -2336,7 +2359,7 @@
       document.getElementById('kpi-repaint-delta').textContent = `淨補漆 ${net.paintNetCount} ÷ 終檢 ${final.count}`;
       document.getElementById('flow-summary').textContent = `直行 ${fpy} ｜ 需補漆 ${rep}`;
       document.getElementById('badge-repaint').textContent = `需補漆 ${rep}`;
-      document.getElementById('badge-fpy').textContent = `直行通道 ${fpy}`;
+      document.getElementById('badge-fpy-val').textContent = fpy;
 
       const allPids = new Set([...rework.workers, ...paint.workers, ...final.workers].map(w => w.pid));
       document.getElementById('kpi-workers-delta').textContent = `B棟今日實績 ${allPids.size} 人`;
