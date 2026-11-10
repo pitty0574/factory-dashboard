@@ -1521,6 +1521,11 @@ function normalizeDate(s) {
 function dateToISO(s) { return s.replace(/\//g,'-'); } // YYYY/MM/DD → YYYY-MM-DD
 function isoToSlash(s) { return s.replace(/-/g,'/'); } // YYYY-MM-DD → YYYY/MM/DD
 function today() { return new Date().toISOString().slice(0,10); }
+// 本機日期 YYYY/MM/DD（today() 取 UTC，台灣早上 8 點前會落在前一天）
+function localTodaySlash() {
+  const d = new Date();
+  return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
+}
 function addDays(iso, n) {
   const d = new Date(iso); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10);
 }
@@ -3054,6 +3059,7 @@ function buildQDailyTrend() {
 // ── 長期趨勢分析（依當前日期範圍，前後兩半比較）───────────────────────────────
 let qLongTrendCharts  = {};
 let qLongTrendRowData = {};
+let qLongTrendAxisDates = []; // 小圖 X 軸：整個品質資料有生產的日期
 const LONG_TREND_DIMS = [
   { key: 'model', keyFn: r => r[4] || '—' },
   { key: 'part',  keyFn: r => r[5] || '—' },
@@ -3066,27 +3072,51 @@ function qLongTrendDir(diff) {
   return                  { arrow: '→', label: '持平', color: '#888' };
 }
 
-function qLongTrendAggregate(recs, useWeek) {
-  if (!useWeek) {
-    const dates = [...new Set(recs.map(r => r[0]))].sort();
-    const labels = dates.map(d => d.slice(5));
-    const data   = dates.map(dt => {
-      const dr = recs.filter(r => r[0] === dt);
-      return +(dr.reduce((s, r) => s + (r[7] || 0), 0) / dr.length).toFixed(2);
-    });
-    return { labels, data };
-  }
-  const weekMap = {};
+// X 軸以 axisDates（整個品質資料有生產的日期）為準；該系列當天／當週沒資料 → null
+function qLongTrendAggregate(recs, useWeek, axisDates) {
+  const keyOf = useWeek ? d => qWeekMonday(dateToISO(d)) : d => d;
+  const keys = [...new Set(axisDates.map(keyOf))].sort();
+  const map = {};
   recs.forEach(r => {
-    const mon = qWeekMonday(dateToISO(r[0]));
-    if (!weekMap[mon]) weekMap[mon] = { sum: 0, count: 0 };
-    weekMap[mon].sum   += r[7] || 0;
-    weekMap[mon].count += 1;
+    const k = keyOf(r[0]);
+    if (!map[k]) map[k] = { sum: 0, count: 0 };
+    map[k].sum   += r[7] || 0;
+    map[k].count += 1;
   });
-  const weekKeys = Object.keys(weekMap).sort();
-  const labels = weekKeys.map(k => qWeekLabel(k));
-  const data   = weekKeys.map(k => +(weekMap[k].sum / weekMap[k].count).toFixed(2));
-  return { labels, data };
+  const labels = keys.map(k => (useWeek ? qWeekLabel(k) : k.slice(5)));
+  const data   = keys.map(k => (map[k] ? +(map[k].sum / map[k].count).toFixed(2) : null));
+  return { keys, labels, data };
+}
+
+// 線性回歸（略過 null）；回傳斜率與各點趨勢值，缺值位置維持 null
+function qLongTrendRegPts(data) {
+  const pts = data.map((y, i) => [i, y]).filter(p => p[1] != null);
+  const n = pts.length;
+  if (n < 2) return null;
+  let sx = 0, sy = 0, sxy = 0, sx2 = 0;
+  pts.forEach(([x, y]) => { sx += x; sy += y; sxy += x * y; sx2 += x * x; });
+  const denom = n * sx2 - sx * sx;
+  if (denom === 0) return null;
+  const a = (n * sxy - sx * sy) / denom;
+  const b = (sy - a * sx) / n;
+  return { a, pts: data.map((y, i) => (y == null ? null : +(a * i + b).toFixed(3))) };
+}
+
+// Y 軸上限：依最大值往上取到 1/2/2.5/5×10^n 的刻度，最多約 5～6 格
+function qLongTrendNiceMax(maxVal) {
+  if (!(maxVal > 0)) return { max: 1, step: 0.2 };
+  const raw = maxVal / 5;
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const step = [1, 2, 2.5, 5, 10].map(m => m * mag).find(st => st >= raw);
+  return { max: +(Math.ceil(maxVal / step - 1e-9) * step).toFixed(6), step };
+}
+
+// 面積漸層：#378ADD 由上往下 alpha 0.25 → 0
+function qLongTrendAreaGradient(ctx, area) {
+  const g = ctx.createLinearGradient(0, area.top, 0, area.bottom);
+  g.addColorStop(0, 'rgba(55,138,221,0.25)');
+  g.addColorStop(1, 'rgba(55,138,221,0)');
+  return g;
 }
 
 function buildQLongTrendMiniChart(canvasId, dim, idx) {
@@ -3094,28 +3124,50 @@ function buildQLongTrendMiniChart(canvasId, dim, idx) {
   const canvasEl = document.getElementById(canvasId);
   if (!row || !canvasEl) return;
   const useWeek = row.totalDays > 30;
-  const { labels, data } = qLongTrendAggregate(row.recs, useWeek);
+  const { keys, labels, data } = qLongTrendAggregate(row.recs, useWeek, qLongTrendAxisDates);
+
+  const LINE = '#378ADD';
+  const todayKey = useWeek ? qWeekMonday(dateToISO(localTodaySlash())) : localTodaySlash();
+  const isToday = i => keys[i] === todayKey;
+  const isGap = c => data[c.p1DataIndex - 1] == null; // 前一格無資料 → 這段是跨過缺值接起來的
 
   const datasets = [{
     label: row.key,
     data,
-    borderColor: '#378ADD',
-    backgroundColor: '#378ADD18',
-    borderWidth: 2, pointRadius: 4, pointBackgroundColor: '#378ADD',
-    fill: true, tension: 0.3, order: 2,
+    borderColor: LINE,
+    borderWidth: 2.5,
+    cubicInterpolationMode: 'monotone',
+    spanGaps: true,
+    fill: true,
+    backgroundColor: c => (c.chart.chartArea ? qLongTrendAreaGradient(c.chart.ctx, c.chart.chartArea) : 'rgba(55,138,221,0.1)'),
+    pointRadius: 3.5,
+    pointHoverRadius: 6,
+    pointBorderWidth: 2,
+    pointHoverBorderWidth: 2,
+    pointBackgroundColor: c => (isToday(c.dataIndex) ? '#ffffff' : LINE),
+    pointBorderColor: c => (isToday(c.dataIndex) ? LINE : '#ffffff'),
+    pointHoverBackgroundColor: c => (isToday(c.dataIndex) ? '#ffffff' : LINE),
+    pointHoverBorderColor: c => (isToday(c.dataIndex) ? LINE : '#ffffff'),
+    segment: {
+      borderDash: c => (isGap(c) ? [4, 4] : isToday(c.p1DataIndex) ? [6, 4] : undefined),
+      borderColor: c => (isGap(c) ? 'rgba(55,138,221,0.4)' : undefined),
+    },
+    clip: 6,
+    order: 2,
   }];
-  const reg = linReg(data);
-  if (reg && data.length >= 2) {
-    const { a, b } = reg;
-    const isUp = a > 0.01, isDn = a < -0.01;
-    const trendColor = isUp ? '#e74c3c' : isDn ? '#1D9E75' : '#888888';
-    const trendPts = data.map((_, i) => +(a * i + b).toFixed(3));
+  const reg = qLongTrendRegPts(data);
+  if (reg) {
+    const isUp = reg.a > 0.01, isDn = reg.a < -0.01;
+    const trendColor = isUp ? 'rgba(231,76,60,0.45)' : isDn ? 'rgba(29,158,117,0.45)' : 'rgba(136,136,136,0.45)';
     datasets.push({
-      label: '趨勢線', data: trendPts, borderColor: trendColor, borderWidth: 2,
-      borderDash: [6, 4], pointRadius: 0, fill: false, tension: 0, order: 1,
-      tooltip: { enabled: false },
+      label: '趨勢線', data: reg.pts, borderColor: trendColor, borderWidth: 1.5,
+      borderDash: [6, 4], pointRadius: 0, pointHoverRadius: 0, spanGaps: true,
+      fill: false, tension: 0, order: 3,
     });
   }
+
+  const vals = datasets.flatMap(d => d.data).filter(v => v != null);
+  const yAxis = qLongTrendNiceMax(Math.max(...vals));
 
   if (qLongTrendCharts[canvasId]) qLongTrendCharts[canvasId].destroy();
   qLongTrendCharts[canvasId] = new Chart(canvasEl, {
@@ -3123,15 +3175,35 @@ function buildQLongTrendMiniChart(canvasId, dim, idx) {
     data: { labels, datasets },
     options: {
       responsive: true, maintainAspectRatio: false,
+      layout: { padding: { top: 6 } },
+      interaction: { mode: 'index', intersect: false },
       plugins: {
         legend: { display: false },
-        tooltip: { filter: item => item.datasetIndex === 0, callbacks: { label: ctx => `平均 ${ctx.parsed.y.toFixed(1)} 點/隻` } }
+        tooltip: {
+          displayColors: false,
+          footerColor: '#fbbf24',
+          filter: item => item.datasetIndex === 0 && item.parsed.y != null,
+          callbacks: {
+            title: items => (items.length ? (useWeek ? `週區間：${labels[items[0].dataIndex]}` : keys[items[0].dataIndex]) : ''),
+            label: c => `平均 ${c.parsed.y.toFixed(1)} 點/隻`,
+            footer: items => (items.length && isToday(items[0].dataIndex) ? (useWeek ? '⚠ 本週資料未完整' : '⚠ 今日資料未完整') : ''),
+          },
+        },
       },
       scales: {
-        x: { grid: { color: 'rgba(136,135,128,0.12)' }, ticks: { font: { size: 11 }, autoSkip: true, maxTicksLimit: 10 } },
-        y: { min: 0, grid: { color: 'rgba(136,135,128,0.12)' }, ticks: { font: { size: 11 }, callback: v => v + ' 點' } }
-      }
-    }
+        x: {
+          grid: { display: false },
+          border: { color: '#cbd5e1' },
+          ticks: { color: '#64748B', font: { size: 11 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 10 },
+        },
+        y: {
+          min: 0, max: yAxis.max,
+          grid: { color: 'rgba(100,116,139,0.18)' },
+          border: { display: false, dash: [4, 4] },
+          ticks: { stepSize: yAxis.step, color: '#64748B', font: { size: 11 }, callback: v => +v.toFixed(2) + ' 點' },
+        },
+      },
+    },
   });
 }
 
@@ -3205,6 +3277,7 @@ function buildLongTrendAnalysis() {
   const bodyEl    = document.getElementById('qLongTrendBody');
 
   const all = getQualityRecs();
+  qLongTrendAxisDates = [...new Set(all.map(r => r[0]))].sort();
   if (!all.length) {
     shortEl.style.display  = 'none';
     bodyEl.style.display   = 'none';
@@ -3459,12 +3532,6 @@ function computeDailyFPY(paintRecs, finalRecs, modelFilter) {
   });
 }
 
-// 本機日期 YYYY/MM/DD（today() 取 UTC，台灣早上 8 點前會落在前一天）
-function fpyTodaySlash() {
-  const d = new Date();
-  return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
-}
-
 // 面積漸層：主色由上往下 alpha 0.30 → 0.05 → 0
 function fpyAreaGradient(ctx, area) {
   const g = ctx.createLinearGradient(0, area.top, 0, area.bottom);
@@ -3586,7 +3653,7 @@ function renderFPYTrend() {
   const n = points.length;
   const values = points.map(p => p.fpy * 100);
   const avgPct = values.reduce((a, v) => a + v, 0) / n; // 每日直行率的平均
-  const todayStr = fpyTodaySlash();
+  const todayStr = localTodaySlash();
   const isToday = i => !!points[i] && points[i].date === todayStr;
   const ptColor = i => (values[i] >= avgPct ? FPY_COLOR : FPY_LOW_COLOR);
 
