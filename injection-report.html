@@ -1349,7 +1349,7 @@ tbody td.empty { font-family: var(--font-ui); }
       <div class="hero-counter-box">
         <div class="hero-label">今日累計產出 TOTAL OUTPUT</div>
         <div class="mono" id="t-qty">—</div>
-        <div class="hero-unit">PCS / 件</div>
+        <div class="hero-unit">模 / 組</div>
       </div>
 
       <div class="telemetry-box batch-box">
@@ -1934,7 +1934,8 @@ tbody td.empty { font-family: var(--font-ui); }
       out.push({
         ts, date,
         pid: g(r, 'pid'), model: g(r, 'model'), part: g(r, 'part'), material: g(r, 'material'),
-        shots: num(g(r, 'shots')), qty: num(g(r, 'qty')),
+        // H 欄留白（舊資料）→ null，仍計入今日模次；只有明確 0（兩穴件號2 列）才排除
+        shots: g(r, 'shots') === '' ? null : num(g(r, 'shots')), qty: num(g(r, 'qty')),
       });
     });
     return out;
@@ -1981,7 +1982,8 @@ tbody td.empty { font-family: var(--font-ui); }
 
   function renderToday() {
     $('totals-machine').textContent = currentMachine;
-    const qty = todayRows.reduce((s, r) => s + r.qty, 0);
+    // 今日模次：只加總 H 欄（本次模次）≠ 0 的列的 I 欄，一模兩穴的件號2 列不重複計
+    const qty = todayRows.reduce((s, r) => s + (r.shots === 0 ? 0 : r.qty), 0);
     const times = todayRows.map(r => r.ts).filter(Boolean).sort((a, b) => a - b);
     const qtyEl = $('t-qty');
     const nextQtyText = qty.toLocaleString();
@@ -2357,11 +2359,11 @@ tbody td.empty { font-family: var(--font-ui); }
     lsSet('lastPid', params.pid);
     lsSet('lastShift', params.shift);
     // 本地先加上去，下次 30 秒刷新會以 Sheet 實際資料為準
-    // 一模兩穴＝2 列（件號1、件號2 各 qty 件），今日累計自然是 模次 × 2 件
+    // 一模兩穴＝2 列（件號1 H=N、件號2 H=0，各 qty 件），今日模次只 +N
     const parts = params.cavity === 2 ? [params.partNo, params.partNo2] : [params.partNo];
     if (params.machine === currentMachine) {
       parts.slice().reverse().forEach(part => todayRows.unshift({ ts: now, date: dateSlash(now), pid: params.pid,
-        model: params.model, part, material: params.materialNo, qty: params.qty }));
+        model: params.model, part, material: params.materialNo, shots: part === params.partNo ? params.qty : 0, qty: params.qty }));
       newRowFlag = true;
       renderToday();
     }

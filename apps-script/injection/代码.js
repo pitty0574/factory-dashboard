@@ -224,7 +224,6 @@ function doPost(e) {
     const partNo2    = String(params.partNo2 || '').trim();
     const materialNo = params.materialNo || params.partNumber || '';
     const moldNo     = params.moldNo     || params.moldNumber || '';
-    const shots      = params.shots      || params.cycleCount || 1;
     const qtyRaw     = params.qty != null ? params.qty : params.totalCount;
     const shift      = params.shift      || '';
     const status     = params.status     || '生產中';
@@ -263,7 +262,7 @@ function doPost(e) {
         part,                         // E 件號
         materialNo,                   // F 料號
         moldNo,                       // G 模具編號
-        h,                            // H 本次模次
+        h,                            // H 本次模次（兩穴的件號2 列＝0，加總 H 欄＝實際模次）
         qty,                          // I 產出數量（兩穴時＝模次數，兩列各記一次）
         shift,                        // J 班別
         status,                       // K 狀態
@@ -274,10 +273,11 @@ function doPost(e) {
       if (cCavity != null) row[cCavity] = cavityRaw == null || cavityRaw === '' ? '' : cavity;
       return row;
     };
-    // 一模兩穴：件號1 那列 H=1、件號2 那列 H=0，加總 H 欄＝實際模次數
+    // 一模一穴：H=輸入數量；一模兩穴：件號1 那列 H=模次數 N、件號2 那列 H=0
+    // → 今日模次＝H≠0 的列的 I 欄加總（件號2 那列不重複計）
     const rows = cavity === 2
-      ? [makeRow(partNo, 1), makeRow(partNo2, 0)]
-      : [makeRow(partNo, Number(shots) || 1)];
+      ? [makeRow(partNo, qty), makeRow(partNo2, 0)]
+      : [makeRow(partNo, qty)];
 
     const lock = LockService.getScriptLock();
     lock.waitLock(10000);
