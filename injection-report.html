@@ -862,6 +862,137 @@ input[readonly]:focus {
   color: var(--fg-mute);
 }
 
+/* 模穴數：一模一穴時件號佔滿整列；一模兩穴時件號1／件號2 並排 */
+.form-bento:not(.dual) #fi-part { grid-column: span 2; }
+.form-bento:not(.dual) #fi-part2 { display: none; }
+
+/* 批次進行中鎖定的欄位 */
+input:disabled, select:disabled {
+  background: var(--panel-alt);
+  color: var(--fg-mute);
+  border-style: dashed;
+  cursor: not-allowed;
+  opacity: 1;
+}
+input:disabled:hover, select:disabled:hover { border-color: var(--border-up); }
+.combo-toggle:disabled { visibility: hidden; }
+.lock-tag {
+  display: none;
+  font-size: 9pt;
+  font-family: var(--font-mono);
+  color: var(--warn);
+  font-weight: 700;
+}
+.batch-locked .lock-tag { display: inline; }
+
+/* ── 幹部批次區塊 ── */
+.batch-panel {
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--warn);
+  border-radius: 10px;
+  padding: 10px 14px 12px;
+}
+.batch-panel.active { border-left-color: var(--ok); }
+#batch-info {
+  font-size: 11.5pt;
+  color: var(--fg-mute);
+  margin-bottom: 8px;
+  min-height: 1.45em;
+}
+#batch-info b { color: var(--fg); font-family: var(--font-mono); }
+.batch-panel.active #batch-info b { color: var(--ok); }
+.batch-ctrl {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+#f-batch-qty {
+  width: 130px;
+  flex: none;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 16pt;
+  font-weight: 800;
+}
+.batch-btn {
+  height: 44px;
+  padding: 0 16px;
+  border-radius: 10px;
+  border: 1px solid var(--border-up);
+  background: var(--field-bg);
+  color: var(--fg);
+  font: 700 12.5pt var(--font-ui);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.16s ease;
+}
+.batch-btn:hover:not(:disabled) { border-color: var(--hud-corner); box-shadow: 0 0 12px var(--accent-ring); }
+.batch-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+#btn-batch-start:not(:disabled) { border-color: var(--ok); color: var(--ok); }
+#btn-batch-end:not(:disabled) { border-color: var(--crit); color: var(--crit); }
+html[data-theme="light"] #btn-batch-start:not(:disabled) { color: #047857; }
+html[data-theme="light"] #btn-batch-end:not(:disabled) { color: #b91c1c; }
+
+/* ── 左欄批次進度 ── */
+.batch-box { margin-bottom: 14px; }
+#bp-body { margin-top: 6px; display: flex; flex-direction: column; gap: 10px; }
+.bp-empty { font-size: 13pt; color: var(--fg-dim); font-weight: 500; padding: 2px 0 4px; }
+.bp-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+.bp-part {
+  font-family: var(--font-mono);
+  font-size: 13pt;
+  font-weight: 700;
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.bp-count {
+  font-family: var(--font-mono);
+  font-size: 17pt;
+  font-weight: 800;
+  color: var(--big);
+  white-space: nowrap;
+}
+.bp-count .bp-of { color: var(--fg-mute); font-size: 12pt; font-weight: 600; }
+.bp-row.done .bp-count { color: var(--ok); }
+.bp-row.over .bp-count .bp-n { color: var(--crit); }
+.bp-bar {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--field-bg);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+.bp-bar i {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, var(--accent-2), var(--big));
+  box-shadow: 0 0 8px var(--big-glow);
+  transition: width 0.4s ease;
+}
+.bp-row.done .bp-bar i { background: var(--ok); box-shadow: 0 0 8px var(--ok-fill); }
+.bp-row.over .bp-bar i { background: var(--crit); box-shadow: 0 0 8px var(--crit-fill); }
+.bp-done {
+  font-size: 12pt;
+  font-weight: 700;
+  color: var(--ok);
+  background: var(--ok-fill);
+  border-radius: 8px;
+  padding: 6px 10px;
+}
+html[data-theme="light"] .bp-done { color: #047857; }
+
 /* 狀態下拉左側發光色條 */
 #f-status {
   border-left-width: 6px;
@@ -1157,6 +1288,7 @@ tbody td.empty { font-family: var(--font-ui); }
   .wrap { padding: 4px 14px 32px; }
   .form-bento { grid-template-columns: 1fr; }
   .f-item.span-2 { grid-column: span 1; }
+  .form-bento:not(.dual) #fi-part { grid-column: span 1; }
   header .sep, .cyber-clock { display: none; }
 }
 </style>
@@ -1220,6 +1352,11 @@ tbody td.empty { font-family: var(--font-ui); }
         <div class="hero-unit">PCS / 件</div>
       </div>
 
+      <div class="telemetry-box batch-box">
+        <div class="eyebrow"><span>批次進度 BATCH PROGRESS</span><span id="bp-tag">—</span></div>
+        <div id="bp-body"><div class="bp-empty">尚未開始批次</div></div>
+      </div>
+
       <div class="time-grid">
         <div class="time-row">
           <span>⏱ 第一筆紀錄</span>
@@ -1258,6 +1395,19 @@ tbody td.empty { font-family: var(--font-ui); }
         </div>
 
         <div class="f-item span-2">
+          <label for="f-batch-qty">📋 幹部批次設定 <span class="lbl-code">BATCH QTY</span></label>
+          <div class="batch-panel" id="batch-panel">
+            <div id="batch-info">讀取批次中…</div>
+            <div class="batch-ctrl">
+              <input id="f-batch-qty" type="number" min="1" step="1" placeholder="每件號件數" autocomplete="off">
+              <span class="qty-unit-tag">件 / 每件號</span>
+              <button class="batch-btn" id="btn-batch-start" type="button">▶ 開始新批次</button>
+              <button class="batch-btn" id="btn-batch-end" type="button" disabled>■ 結束批次</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="f-item span-2">
           <label for="f-pid">👤 作業員工號 <span class="lbl-code">OPERATOR ID</span></label>
           <div class="field">
             <input id="f-pid" type="text" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="輸入 4 碼">
@@ -1277,7 +1427,17 @@ tbody td.empty { font-family: var(--font-ui); }
         </div>
 
         <div class="f-item">
-          <label for="f-part">🔩 產品件號 <span class="lbl-code">PART NO.</span></label>
+          <label for="f-cavity">🧩 模穴數 <span class="lbl-code">CAVITY</span> <span class="lock-tag">🔒 批次鎖定</span></label>
+          <div class="field">
+            <select id="f-cavity">
+              <option value="1" selected>一模一穴</option>
+              <option value="2">一模兩穴</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="f-item" id="fi-part">
+          <label for="f-part">🔩 產品件號 <span class="lbl-code">PART NO.</span> <span class="lock-tag">🔒 批次鎖定</span></label>
           <div class="field">
             <div class="combobox" data-field="part">
               <input type="text" id="f-part" autocomplete="off" spellcheck="false" placeholder="（載入中…）" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="combo-part-list">
@@ -1287,8 +1447,19 @@ tbody td.empty { font-family: var(--font-ui); }
           </div>
         </div>
 
+        <div class="f-item" id="fi-part2">
+          <label for="f-part2">🔩 產品件號2 <span class="lbl-code">PART NO.2</span> <span class="lock-tag">🔒 批次鎖定</span></label>
+          <div class="field">
+            <div class="combobox" data-field="part2">
+              <input type="text" id="f-part2" autocomplete="off" spellcheck="false" placeholder="（載入中…）" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="combo-part2-list">
+              <button type="button" class="combo-toggle" tabindex="-1" aria-label="展開選單">🔽</button>
+              <div class="combo-dropdown" id="combo-part2-list" role="listbox"></div>
+            </div>
+          </div>
+        </div>
+
         <div class="f-item">
-          <label for="f-material">🧪 原料料號 <span class="lbl-code">MATERIAL</span></label>
+          <label for="f-material">🧪 原料料號 <span class="lbl-code">MATERIAL</span> <span class="lock-tag">🔒 批次鎖定</span></label>
           <div class="field">
             <div class="combobox" data-field="material">
               <input type="text" id="f-material" autocomplete="off" spellcheck="false" placeholder="（載入中…）" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="combo-material-list">
@@ -1307,10 +1478,10 @@ tbody td.empty { font-family: var(--font-ui); }
         </div>
 
         <div class="f-item">
-          <label for="f-qty">📦 產出數量 <span class="lbl-code">QTY</span></label>
+          <label for="f-qty"><span id="qty-label">📦 產出數量</span> <span class="lbl-code" id="qty-code">QTY</span></label>
           <div class="field">
-            <input id="f-qty" type="number" min="0" step="1" value="1">
-            <span class="qty-unit-tag">件 (PCS)</span>
+            <input id="f-qty" type="number" min="1" step="1" value="1">
+            <span class="qty-unit-tag" id="qty-unit">件 (PCS)</span>
           </div>
         </div>
 
@@ -1479,24 +1650,65 @@ tbody td.empty { font-family: var(--font-ui); }
     const [rows] = await sheetsBatchGet(CONFIG.sheetsId, [DROPDOWN_RANGE]);
     // 第一列若是標題（車型/件號/料號）就略過
     const body = rows.length && /車型|件號|料號/.test((rows[0] || []).join('')) ? rows.slice(1) : rows;
-    [['f-model', 0], ['f-part', 1], ['f-material', 2]].forEach(([id, col]) => {
+    const lists = [0, 1, 2].map(col => {
       const seen = new Set();
       body.forEach(r => { const v = String(r[col] == null ? '' : r[col]).trim(); if (v) seen.add(v); });
-      COMBOS[id].setOptions([...seen]);
+      return [...seen];
     });
+    COMBOS['f-model'].setOptions(lists[0]);
+    COMBOS['f-material'].setOptions(lists[2]);
     // 件號 → 車型 / 料號 對照（每列 1 對 1；件號重複時以第一筆為準）
-    // 讀取失敗時上面就會 throw，兩個 Map 保留上次快取
-    const toModel = {}, toMaterial = {};
+    // 車型 → 件號清單（給件號1／件號2 篩選用）
+    // 讀取失敗時上面就會 throw，Map 保留上次快取
+    const toModel = {}, toMaterial = {}, toParts = {};
     body.forEach(r => {
       const [model, part, mat] = [0, 1, 2].map(c => String(r[c] == null ? '' : r[c]).trim());
       if (!part) return;
       if (model && !(part in toModel)) toModel[part] = model;
       if (mat && !(part in toMaterial)) toMaterial[part] = mat;
+      if (model) (toParts[model] = toParts[model] || new Set()).add(part);
     });
     partToModel = toModel;
     partToMaterial = toMaterial;
+    allParts = lists[1];
+    modelToParts = Object.fromEntries(Object.entries(toParts).map(([m, s]) => [m, [...s]]));
+    applyPartFilter();
   }
   let partToModel = {}, partToMaterial = {};
+  let allParts = [], modelToParts = {};
+
+  // ── 件號1／件號2 依生產車型篩選（共用同一份清單）──
+  // 車型空白，或是清單外的自由輸入新車型 → 列出全部件號
+  function partsForModel() {
+    const model = $('f-model').value.trim();
+    return modelToParts[model] || null;   // null = 不篩選
+  }
+  function applyPartFilter() {
+    const list = partsForModel() || allParts;
+    ['f-part', 'f-part2'].forEach(id => COMBOS[id].setOptions(list));
+  }
+  // 換車型：已選的件號不屬於新車型就清空（件號1 連同料號、模具編號）；批次進行中件號鎖定，不清
+  function onModelChange() {
+    applyPartFilter();
+    const list = partsForModel();
+    if (!list || activeBatch) return;
+    const p1 = $('f-part').value.trim(), p2 = $('f-part2').value.trim();
+    const cleared = [];
+    if (p1 && !list.includes(p1)) {
+      $('f-part').value = '';
+      updateMaterial();   // 件號空白 → 料號清空、提示還原
+      cleared.push('件號1 ' + p1);
+    }
+    if (p2 && !list.includes(p2)) {
+      $('f-part2').value = '';
+      cleared.push('件號2 ' + p2);
+    }
+    if (cleared.length) {
+      updateMold();
+      updateLive();
+      showMsg(`ℹ️ ${cleared.join('、')} 不屬於車型 ${$('f-model').value.trim()}，已清空`, 'ok', true);
+    }
+  }
 
   // ── 智慧搜尋 Combobox：模糊搜尋 + 可自由輸入清單外的值（試模新車型）──
   // 套用值時對 input 發出 change 事件，模具編號 / 即時卡片照常讀 input.value
@@ -1640,6 +1852,12 @@ tbody td.empty { font-family: var(--font-ui); }
       setHint(text) {
         hint = text || '';
         input.placeholder = hint || (options.length ? '搜尋或直接輸入…' : '（選單載入失敗，可直接輸入）');
+      },
+      // 批次進行中鎖定
+      setDisabled(b) {
+        if (b) close();
+        input.disabled = b;
+        toggle.disabled = b;
       },
     };
   }
@@ -1809,6 +2027,10 @@ tbody td.empty { font-family: var(--font-ui); }
     lsSet('lastMachine', m);
     clearToday();
     refresh({ applyStatusToForm: true });
+    ++batchSeq;
+    setActiveBatch(null);
+    $('batch-info').textContent = '讀取批次中…';
+    loadActiveBatch();
   }
   $('hdr-machine').addEventListener('change', e => switchMachine(e.target.value));
   $('f-machine').addEventListener('change', e => switchMachine(e.target.value));
@@ -1855,17 +2077,201 @@ tbody td.empty { font-family: var(--font-ui); }
     }
   }
   $('f-part').addEventListener('change', updateMaterial);
+  $('f-model').addEventListener('change', onModelChange);
   $('f-material').addEventListener('animationend', e => e.target.classList.remove('auto-filled'));
 
   // ── 左欄即時卡片：車型 / 件號跟隨下拉選擇 ──
   function updateLive() {
-    [['live-model', 'f-model'], ['live-part', 'f-part']].forEach(([out, src]) => {
-      const v = $(src).value;
+    const p2 = isDual() ? $('f-part2').value.trim() : '';
+    [['live-model', $('f-model').value], ['live-part', $('f-part').value + (p2 ? ' / ' + p2 : '')]].forEach(([out, v]) => {
       $(out).textContent = v || '—';
       $(out).classList.toggle('empty-val', !v);
     });
   }
-  ['f-model', 'f-part'].forEach(id => ['input', 'change'].forEach(ev => $(id).addEventListener(ev, updateLive)));
+  ['f-model', 'f-part', 'f-part2'].forEach(id => ['input', 'change'].forEach(ev => $(id).addEventListener(ev, updateLive)));
+
+  // ── 模穴數：一模兩穴展開件號2，數量欄改為「模次」──
+  // 兩穴時每模次寫 2 列（件號1、件號2 各一列，數量都＝模次），模具編號從件號1 解析、兩列共用
+  const isDual = () => $('f-cavity').value === '2';
+  function applyCavity() {
+    const dual = isDual();
+    document.querySelector('.form-bento').classList.toggle('dual', dual);
+    $('qty-label').textContent = dual ? '🔁 模次' : '📦 產出數量';
+    $('qty-code').textContent = dual ? 'SHOTS' : 'QTY';
+    $('qty-unit').textContent = dual ? '模 (每模 2 件)' : '件 (PCS)';
+    if (!dual) $('f-part2').value = '';
+    updateLive();
+  }
+  $('f-cavity').addEventListener('change', applyCavity);
+
+  // ── 批次（以 Sheet「批次紀錄」為準，不存 localStorage）──
+  let activeBatch = null;   // { batchId, machine, cavity, partNo, partNo2, materialNo, moldNo, batchQty, startTime, startPid, ... }
+  let batchProgress = {};   // { 件號: 已產出件數 }
+  let batchSeq = 0;         // 機台切換 / 開始 / 結束時丟棄舊請求的結果
+  let batchBusy = false;
+
+  async function gasGet(params) {
+    const res = await fetch(CONFIG.webAppUrl + '?' + new URLSearchParams(params), { cache: 'no-store' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
+    if (!json || json.ok === false) throw new Error((json && (json.error || json.message)) || '伺服器拒絕');
+    return json;
+  }
+
+  async function loadActiveBatch() {
+    const seq = ++batchSeq;
+    const machine = currentMachine;
+    try {
+      const r = await gasGet({ action: 'getActiveBatch', machine });
+      if (seq !== batchSeq || machine !== currentMachine) return;
+      setActiveBatch(r.batch, r.progress);
+    } catch (e) {
+      if (seq !== batchSeq) return;
+      console.warn('[injection-report] 批次讀取失敗', e);
+      if (!activeBatch) $('batch-info').textContent = '⚠️ 批次讀取失敗（仍可照常登錄）：' + friendlyErr(e);
+    }
+  }
+
+  async function loadBatchProgress(batchId) {
+    const seq = batchSeq;
+    try {
+      const r = await gasGet({ action: 'getBatchProgress', batchId });
+      if (seq !== batchSeq || !activeBatch || activeBatch.batchId !== batchId) return;
+      batchProgress = r.progress || {};
+      renderBatch();
+    } catch (e) {
+      console.warn('[injection-report] 批次進度校正失敗，保留前端累加值', e);
+    }
+  }
+
+  function setActiveBatch(b, progress) {
+    const prevId = activeBatch && activeBatch.batchId;
+    activeBatch = b || null;
+    batchProgress = progress || {};
+    // 新帶入的批次 → 表單改成批次設定（直接設值，不觸發件號 change，避免料號被覆蓋）
+    if (activeBatch && activeBatch.batchId !== prevId) {
+      $('f-cavity').value = String(activeBatch.cavity === 2 ? 2 : 1);
+      $('f-part').value = activeBatch.partNo;
+      $('f-part2').value = activeBatch.cavity === 2 ? activeBatch.partNo2 : '';
+      $('f-material').value = activeBatch.materialNo;
+      $('f-batch-qty').value = activeBatch.batchQty;
+      applyCavity();
+      updateMold();
+    }
+    applyBatchLock();
+    renderBatchInfo();
+    renderBatch();
+  }
+
+  function applyBatchLock() {
+    const locked = !!activeBatch;
+    $('f-cavity').disabled = locked;
+    ['f-part', 'f-part2', 'f-material'].forEach(id => COMBOS[id].setDisabled(locked));
+    $('f-batch-qty').disabled = locked;
+    $('btn-batch-start').disabled = locked || batchBusy;
+    $('btn-batch-end').disabled = !locked || batchBusy;
+    document.querySelector('.form-bento').classList.toggle('batch-locked', locked);
+    $('batch-panel').classList.toggle('active', locked);
+  }
+
+  function renderBatchInfo() {
+    const b = activeBatch;
+    $('batch-info').innerHTML = b
+      ? `🟢 進行中 <b>${esc(b.batchId)}</b>　${b.cavity === 2 ? '一模兩穴' : '一模一穴'} · 每件號 ${b.batchQty} 件 · 開始 ${esc(String(b.startTime).slice(5, 16))}${b.startPid ? ' · ' + formatWorkerId(b.startPid) : ''}`
+      : '目前沒有進行中的批次（仍可照常登錄）。選好模穴數、件號、料號並輸入批次數量後按「開始新批次」。';
+  }
+
+  // 左欄批次進度：每個件號一行 已產出 / 批次數量 + 進度條；超過用紅色，不阻擋輸入
+  function renderBatch() {
+    const b = activeBatch;
+    if (!b) {
+      $('bp-tag').textContent = '—';
+      $('bp-body').innerHTML = '<div class="bp-empty">尚未開始批次</div>';
+      return;
+    }
+    const target = b.batchQty;
+    const parts = b.cavity === 2 ? [b.partNo, b.partNo2] : [b.partNo];
+    let allDone = true;
+    const html = parts.map(p => {
+      const n = batchProgress[p] || 0;
+      if (n < target) allDone = false;
+      const cls = n > target ? 'over' : n >= target ? 'done' : '';
+      const pct = target ? Math.min(100, n / target * 100) : 0;
+      return `<div class="bp-row ${cls}">
+        <div class="bp-head">
+          <span class="bp-part" title="${esc(p)}">${esc(p)}</span>
+          <span class="bp-count"><span class="bp-n">${n.toLocaleString()}</span><span class="bp-of"> / ${target.toLocaleString()}</span></span>
+        </div>
+        <div class="bp-bar"><i style="width:${pct}%"></i></div>
+      </div>`;
+    }).join('');
+    $('bp-body').innerHTML = html + (allDone ? '<div class="bp-done">✅ 批次完成 — 請幹部按「結束批次」</div>' : '');
+    $('bp-tag').textContent = b.cavity === 2 ? '2 CAV' : '1 CAV';
+  }
+
+  async function startBatch() {
+    if (activeBatch || batchBusy) return;
+    const dual = isDual();
+    const p1 = $('f-part').value.trim(), p2 = $('f-part2').value.trim(), mat = $('f-material').value.trim();
+    const qRaw = $('f-batch-qty').value.trim();
+    const pid = $('f-pid').value.trim();
+    const bad = [];
+    if (!pid) bad.push(['f-pid', '工號（開始人）']);
+    if (!p1) bad.push(['f-part', '件號1']);
+    if (dual && !p2) bad.push(['f-part2', '件號2']);
+    else if (dual && p2 === p1) bad.push(['f-part2', '件號2（不能與件號1 相同）']);
+    if (!mat) bad.push(['f-material', '料號']);
+    if (!isPosIntStr(qRaw)) bad.push(['f-batch-qty', '批次數量（正整數）']);
+    if (bad.length) { flagInvalid(bad); return; }
+
+    const machine = currentMachine;
+    const qty = Number(qRaw);
+    const mold = moldNo();
+    const ok = confirm(`確定在 ${machine} 開始新批次？\n\n` +
+      `模穴數：${dual ? '一模兩穴' : '一模一穴'}\n件號1：${p1}\n` + (dual ? `件號2：${p2}\n` : '') +
+      `料號：${mat}\n模具：${mold || '—'}\n批次數量：每件號 ${qty} 件\n開始人：${pid} ${workerName(pid)}`);
+    if (!ok) return;
+
+    batchBusy = true;
+    applyBatchLock();
+    $('btn-batch-start').textContent = '開始中…';
+    try {
+      const r = await postRecord({ action: 'startBatch', machine, cavity: dual ? 2 : 1, partNo: p1, partNo2: dual ? p2 : '',
+        materialNo: mat, moldNo: mold, batchQty: qty, pid });
+      if (machine === currentMachine) { ++batchSeq; setActiveBatch(r.batch, {}); }
+      showMsg('✅ 已開始批次 ' + r.batchId + (r.aborted && r.aborted.length ? `（舊批次 ${r.aborted.join('、')} 已中止）` : ''), 'ok', true);
+    } catch (e) {
+      showMsg('❌ 開始批次失敗：' + friendlyErr(e), 'err', false);
+    } finally {
+      batchBusy = false;
+      $('btn-batch-start').textContent = '▶ 開始新批次';
+      applyBatchLock();
+    }
+  }
+
+  async function endBatch() {
+    const b = activeBatch;
+    if (!b || batchBusy) return;
+    const parts = b.cavity === 2 ? [b.partNo, b.partNo2] : [b.partNo];
+    const lines = parts.map(p => `${p}：${batchProgress[p] || 0} / ${b.batchQty}`).join('\n');
+    if (!confirm(`確定結束批次 ${b.batchId}？\n\n${lines}\n\n結束後件號／料號會解除鎖定。`)) return;
+
+    batchBusy = true;
+    applyBatchLock();
+    try {
+      await postRecord({ action: 'endBatch', batchId: b.batchId, pid: $('f-pid').value.trim() });
+      if (activeBatch && activeBatch.batchId === b.batchId) { ++batchSeq; setActiveBatch(null); }
+      showMsg('✅ 批次 ' + b.batchId + ' 已結束', 'ok', true);
+    } catch (e) {
+      showMsg('❌ 結束批次失敗：' + friendlyErr(e), 'err', false);
+      loadActiveBatch();  // 可能已被其他裝置結束 → 以 Sheet 為準
+    } finally {
+      batchBusy = false;
+      applyBatchLock();
+    }
+  }
+  $('btn-batch-start').addEventListener('click', startBatch);
+  $('btn-batch-end').addEventListener('click', endBatch);
 
   // 狀態下拉左側色條
   function updateStatusColor() {
@@ -1897,27 +2303,37 @@ tbody td.empty { font-family: var(--font-ui); }
       name: workerName(pid),
       model: $('f-model').value,
       partNo: $('f-part').value,
+      partNo2: isDual() ? $('f-part2').value.trim() : '',
       materialNo: $('f-material').value,
       moldNo: moldNo(),
-      qty: Math.max(0, Math.round(num($('f-qty').value))),
+      cavity: isDual() ? 2 : 1,
+      qty: Number($('f-qty').value.trim()),   // 兩穴時為模次；validate 已確認是正整數
       shift: $('f-shift').value,
       status: $('f-status').value,
       note: $('f-note').value.trim(),
+      batchId: activeBatch && activeBatch.machine === $('f-machine').value ? activeBatch.batchId : '',
     };
+  }
+  const isPosIntStr = s => /^\d+$/.test(s) && Number(s) > 0;
+  function flagInvalid(bad) {
+    bad.forEach(([id]) => {
+      const el = $(id);
+      el.classList.remove('invalid'); void el.offsetWidth; el.classList.add('invalid');
+    });
+    showMsg('❌ 請填寫：' + bad.map(b => b[1]).join('、'), 'err', false);
+    $(bad[0][0]).focus();
   }
   function validate() {
     const bad = [];
     if (!$('f-machine').value) bad.push(['f-machine', '機台']);
     if (!$('f-pid').value.trim()) bad.push(['f-pid', '工號']);
-    bad.forEach(([id]) => {
-      const el = $(id);
-      el.classList.remove('invalid'); void el.offsetWidth; el.classList.add('invalid');
-    });
-    if (bad.length) {
-      showMsg('❌ 請填寫：' + bad.map(b => b[1]).join('、'), 'err', false);
-      $(bad[0][0]).focus();
-      return false;
+    if (isDual()) {
+      const p2 = $('f-part2').value.trim();
+      if (!p2) bad.push(['f-part2', '件號2']);
+      else if (p2 === $('f-part').value.trim()) bad.push(['f-part2', '件號2（不能與件號1 相同）']);
     }
+    if (!isPosIntStr($('f-qty').value.trim())) bad.push(['f-qty', (isDual() ? '模次' : '產出數量') + '（正整數）']);
+    if (bad.length) { flagInvalid(bad); return false; }
     return true;
   }
 
@@ -1941,11 +2357,19 @@ tbody td.empty { font-family: var(--font-ui); }
     lsSet('lastPid', params.pid);
     lsSet('lastShift', params.shift);
     // 本地先加上去，下次 30 秒刷新會以 Sheet 實際資料為準
+    // 一模兩穴＝2 列（件號1、件號2 各 qty 件），今日累計自然是 模次 × 2 件
+    const parts = params.cavity === 2 ? [params.partNo, params.partNo2] : [params.partNo];
     if (params.machine === currentMachine) {
-      todayRows.unshift({ ts: now, date: dateSlash(now), pid: params.pid, model: params.model,
-        part: params.partNo, material: params.materialNo, qty: params.qty });
+      parts.slice().reverse().forEach(part => todayRows.unshift({ ts: now, date: dateSlash(now), pid: params.pid,
+        model: params.model, part, material: params.materialNo, qty: params.qty }));
       newRowFlag = true;
       renderToday();
+    }
+    // 批次進度：先 +N 即時顯示，再用 Sheet 校正
+    if (params.batchId && activeBatch && activeBatch.batchId === params.batchId) {
+      parts.forEach(p => { batchProgress[p] = (batchProgress[p] || 0) + params.qty; });
+      renderBatch();
+      loadBatchProgress(params.batchId);
     }
     renderMachineStatus(params.status);
     $('f-qty').focus();
@@ -1969,10 +2393,15 @@ tbody td.empty { font-family: var(--font-ui); }
       row(['機台', esc(p.machine)]) +
       row(['工號', esc(p.pid) + (p.name ? ` (${esc(p.name)})` : ' (查無工號)')]) +
       row(['車型', dash(p.model)]) +
-      row(['件號', dash(p.partNo)]) +
+      row(['模穴數', p.cavity === 2 ? '一模兩穴' : '一模一穴'], ['批次', dash(p.batchId)]) +
+      (p.cavity === 2
+        ? row(['件號1', dash(p.partNo)], ['件號2', dash(p.partNo2)])
+        : row(['件號', dash(p.partNo)])) +
       row(['料號', dash(p.materialNo)]) +
       row(['模具', dash(p.moldNo)]) +
-      row(['產出', p.qty]) +
+      (p.cavity === 2
+        ? row(['模次', `${p.qty}（每件號各 ${p.qty} 件，共 ${p.qty * 2} 件）`])
+        : row(['產出', p.qty])) +
       row(['班別', esc(p.shift)], ['狀態', `${STATUS_ICON[p.status] || ''} ${esc(p.status)}`]) +
       row(['備註', dash(p.note)]);
     $('modal-err').textContent = '';
@@ -2077,7 +2506,8 @@ tbody td.empty { font-family: var(--font-ui); }
     if (e.key !== 'Enter' || e.isComposing || e.repeat) return;
     const t = e.target;
     if (t.tagName === 'TEXTAREA') return;
-    if (t.tagName === 'BUTTON' && t !== $('btn-submit')) return; // 其他按鈕（主題、+/-）照原生行為
+    if (t.tagName === 'BUTTON' && t !== $('btn-submit')) return; // 其他按鈕（主題、+/-、批次）照原生行為
+    if (t === $('f-batch-qty')) { e.preventDefault(); return; } // 批次數量欄不觸發送出
     e.preventDefault();
     if (e.ctrlKey) quickSend();
     else openModal();
@@ -2112,13 +2542,16 @@ tbody td.empty { font-family: var(--font-ui); }
   loadDropdowns().catch(e => {
     console.error('[injection-report] 下拉選單讀取失敗', e);
     setConn(false);
-    ['f-model', 'f-part', 'f-material'].forEach(id => COMBOS[id].setOptions([]));
+    ['f-model', 'f-part', 'f-part2', 'f-material'].forEach(id => COMBOS[id].setOptions([]));
   }).then(() => { updateMold(); updateLive(); });
   loadWorkerMap();
   refresh({ applyStatusToForm: true });
+  applyCavity();
+  loadActiveBatch();
   $(lsGet('lastPid') ? 'f-qty' : 'f-pid').focus();
 
-  setInterval(() => { if (!sending) refresh(); }, REFRESH_MS);
+  // 批次也跟著輪詢：其他裝置開始 / 結束批次時同步
+  setInterval(() => { if (!sending) { refresh(); if (!batchBusy) loadActiveBatch(); } }, REFRESH_MS);
   setInterval(() => { loadWorkerMap(); loadDropdowns().catch(() => {}).then(() => { updateMold(); updateLive(); }); }, SLOW_REFRESH_MS);
 })();
 </script>
