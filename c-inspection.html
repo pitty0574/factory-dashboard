@@ -1,0 +1,1268 @@
+<!doctype html>
+<html lang="zh-Hant" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>C 棟點檢｜Smart Factory SCADA</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700;800&family=Noto+Sans+TC:wght@400;500;700&family=Orbitron:wght@600;700;800&display=swap">
+<style>
+/* ══════════════════════════════════════════════════════════════════
+   工業 4.0 智慧戰情室主題變數 (深色預設 / 淺色高科技銀白實驗室)
+   與 injection-report.html 相同
+   ══════════════════════════════════════════════════════════════════ */
+:root {
+  --bg: #eef2f6;
+  --bg-grid: rgba(15, 23, 42, 0.045);
+  --panel: rgba(255, 255, 255, 0.86);
+  --panel-alt: rgba(241, 245, 249, 0.92);
+  --field-bg: #ffffff;
+  --border: rgba(148, 163, 184, 0.35);
+  --border-up: rgba(100, 116, 139, 0.45);
+  --hud-corner: #0284c7;
+  --fg: #0f172a;
+  --fg-mute: #475569;
+  --fg-dim: #64748b;
+  --accent: #0284c7;
+  --accent-2: #2563eb;
+  --accent-hover: #0369a1;
+  --accent-fg: #ffffff;
+  --accent-ring: rgba(2, 132, 199, 0.22);
+  --big: #0284c7;
+  --big-glow: rgba(2, 132, 199, 0.18);
+  --ok: #10b981;
+  --ok-fill: rgba(16, 185, 129, 0.14);
+  --warn: #f59e0b;
+  --warn-fill: rgba(245, 158, 11, 0.16);
+  --crit: #ef4444;
+  --crit-fill: rgba(239, 68, 68, 0.15);
+  --shadow: 0 10px 30px -5px rgba(15, 23, 42, 0.07), 0 4px 12px rgba(15, 23, 42, 0.04);
+  --card-glow: inset 0 1px 0 0 rgba(255, 255, 255, 0.8);
+  --overlay: rgba(15, 23, 42, 0.55);
+  --orb-1: rgba(56, 189, 248, 0.18);
+  --orb-2: rgba(59, 130, 246, 0.14);
+  --font-ui: 'Inter', 'Noto Sans TC', -apple-system, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
+  --font-display: 'Orbitron', 'JetBrains Mono', sans-serif;
+  color-scheme: light;
+}
+
+html[data-theme="dark"] {
+  --bg: #060b14;
+  --bg-grid: rgba(56, 189, 248, 0.055);
+  --panel: rgba(13, 22, 38, 0.78);
+  --panel-alt: rgba(18, 30, 52, 0.85);
+  --field-bg: rgba(9, 15, 28, 0.85);
+  --border: rgba(56, 189, 248, 0.16);
+  --border-up: rgba(56, 189, 248, 0.34);
+  --hud-corner: #38bdf8;
+  --fg: #f1f5f9;
+  --fg-mute: #94a3b8;
+  --fg-dim: #64748b;
+  --accent: #0ea5e9;
+  --accent-2: #2563eb;
+  --accent-hover: #38bdf8;
+  --accent-fg: #ffffff;
+  --accent-ring: rgba(56, 189, 248, 0.32);
+  --big: #38bdf8;
+  --big-glow: rgba(56, 189, 248, 0.42);
+  --ok: #10b981;
+  --ok-fill: rgba(16, 185, 129, 0.2);
+  --warn: #f59e0b;
+  --warn-fill: rgba(245, 158, 11, 0.2);
+  --crit: #ef4444;
+  --crit-fill: rgba(239, 68, 68, 0.2);
+  --shadow: 0 14px 36px -6px rgba(0, 0, 0, 0.65), 0 0 24px rgba(14, 165, 233, 0.06);
+  --card-glow: inset 0 1px 0 0 rgba(255, 255, 255, 0.07);
+  --overlay: rgba(3, 7, 18, 0.78);
+  --orb-1: rgba(14, 165, 233, 0.16);
+  --orb-2: rgba(37, 99, 235, 0.14);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background-color: var(--bg);
+  color: var(--fg);
+  font: 15pt/1.45 var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+  position: relative;
+  overflow-x: hidden;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* ── 科技感動態透視網格與環境光暈背景 ── */
+.cyber-bg {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+.cyber-bg::before {
+  content: "";
+  position: absolute;
+  inset: -100px;
+  background-image:
+    linear-gradient(to right, var(--bg-grid) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--bg-grid) 1px, transparent 1px);
+  background-size: 40px 40px;
+  transform: perspective(900px) rotateX(22deg) scale(1.15);
+  transform-origin: center top;
+  animation: gridMove 24s linear infinite;
+}
+@keyframes gridMove {
+  0% { background-position: 0 0; }
+  100% { background-position: 0 40px; }
+}
+.orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(85px);
+  animation: orbFloat 14s ease-in-out infinite alternate;
+}
+.orb-1 { width: 520px; height: 520px; top: -160px; left: -120px; background: var(--orb-1); }
+.orb-2 { width: 600px; height: 600px; bottom: -220px; right: -140px; background: var(--orb-2); animation-delay: -7s; }
+@keyframes orbFloat {
+  0% { transform: translate(0, 0) scale(1); }
+  100% { transform: translate(45px, 30px) scale(1.12); }
+}
+
+/* 頂部流光光束線 */
+.top-laser {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, transparent 0%, var(--accent) 30%, #38bdf8 50%, var(--accent-2) 70%, transparent 100%);
+  background-size: 200% 100%;
+  animation: laserFlow 5s linear infinite;
+  z-index: 90;
+  box-shadow: 0 0 12px var(--accent);
+}
+@keyframes laserFlow {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.wrap {
+  position: relative;
+  z-index: 1;
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 6px 16px 44px;
+}
+
+/* ── 錯誤 Banner ── */
+#err-banner {
+  display: none;
+  position: relative;
+  z-index: 95;
+  background: linear-gradient(90deg, #b91c1c, #ef4444, #b91c1c);
+  color: #fff;
+  padding: 10px 16px;
+  font-weight: 700;
+  text-align: center;
+  font-size: 12.5pt;
+  letter-spacing: 0.04em;
+  box-shadow: 0 4px 20px rgba(239, 68, 68, 0.45);
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   頂部導覽列 Header
+   ══════════════════════════════════════════════════════════════════ */
+header {
+  display: flex;
+  align-items: center;
+  gap: 10px 12px;
+  flex-wrap: wrap;
+  padding: 14px 18px;
+  margin: 14px 0 16px;
+  background: var(--panel);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow), var(--card-glow);
+  position: relative;
+}
+header::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 18%; bottom: 18%;
+  width: 4px;
+  border-radius: 0 4px 4px 0;
+  background: linear-gradient(180deg, #38bdf8, #2563eb);
+  box-shadow: 0 0 10px #38bdf8;
+}
+.brand-group { display: flex; flex-direction: column; gap: 2px; }
+.brand-sub {
+  font-family: var(--font-display);
+  font-size: 8.5pt;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  color: var(--big);
+  text-transform: uppercase;
+}
+header h1 {
+  margin: 0;
+  font-size: 17pt;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+header .spacer { flex: 1; }
+.hdr-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+/* 戰情室即時數位時鐘 */
+.cyber-clock {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 48px;
+  padding: 0 13px;
+  border-radius: 9px;
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  font-family: var(--font-display);
+  font-size: 12pt;
+  font-weight: 700;
+  color: var(--big);
+  letter-spacing: 0.06em;
+}
+.cyber-clock .clock-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--big);
+  box-shadow: 0 0 8px var(--big);
+  animation: blinkDot 1s steps(2, start) infinite;
+}
+@keyframes blinkDot { to { opacity: 0.25; } }
+
+.small-btn {
+  height: 48px;
+  padding: 0 14px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--panel-alt);
+  color: var(--fg);
+  font: 600 11.5pt var(--font-ui);
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+.small-btn:hover {
+  border-color: var(--hud-corner);
+  box-shadow: 0 0 12px var(--accent-ring);
+}
+#conn {
+  display: inline-flex;
+  align-items: center;
+  height: 48px;
+  padding: 0 13px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--panel-alt);
+  font-size: 11.5pt;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* ── 點檢項目頁籤 ── */
+.tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.tabs::-webkit-scrollbar { display: none; }
+.tab-btn {
+  flex: 1 0 auto;
+  min-height: 56px;
+  padding: 6px 18px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: var(--fg-mute);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  transition: all 0.18s ease;
+  font-family: var(--font-ui);
+}
+.tab-btn .zh { font-size: 14pt; font-weight: 800; }
+.tab-btn .en { font-size: 8.5pt; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--fg-dim); }
+.tab-btn:hover { border-color: var(--border-up); color: var(--fg); }
+.tab-btn.active {
+  color: var(--big);
+  border-color: var(--big);
+  background: radial-gradient(circle at 50% 0%, var(--accent-ring), transparent 80%), var(--panel);
+  box-shadow: 0 0 14px var(--accent-ring), inset 0 -3px 0 var(--big);
+}
+.tab-btn.active .en { color: var(--big); opacity: 0.8; }
+
+/* ══════════════════════════════════════════════════════════════════
+   HUD 面板卡片 (.card)
+   ══════════════════════════════════════════════════════════════════ */
+.card {
+  position: relative;
+  background: var(--panel);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow), var(--card-glow);
+  padding: 22px;
+  margin-bottom: 18px;
+  transition: border-color 0.25s ease;
+}
+.card:hover { border-color: var(--border-up); }
+.card::before,
+.card::after {
+  content: "";
+  position: absolute;
+  width: 14px; height: 14px;
+  pointer-events: none;
+  border-color: var(--hud-corner);
+  border-style: solid;
+  opacity: 0.75;
+  z-index: 2;
+}
+.card::before { top: 7px; left: 7px; border-width: 2px 0 0 2px; border-top-left-radius: 4px; }
+.card::after { bottom: 7px; right: 7px; border-width: 0 2px 2px 0; border-bottom-right-radius: 4px; }
+
+.card-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-bottom: 18px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.card-head h2 {
+  margin: 0;
+  font-size: 16pt;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+}
+.card-head h2 small {
+  display: block;
+  font-size: 9pt;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+  margin-top: 3px;
+}
+.card-head .meta {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.tech-tag {
+  font-family: var(--font-display);
+  font-size: 8.5pt;
+  font-weight: 700;
+  padding: 4px 9px;
+  border-radius: 6px;
+  background: var(--accent-ring);
+  color: var(--big);
+  border: 1px solid var(--border-up);
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   表單欄位（由設定檔 fields 動態產生）
+   ══════════════════════════════════════════════════════════════════ */
+.fields {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px 18px;
+}
+@media (min-width: 700px) {
+  .fields { grid-template-columns: 1fr 1fr; }
+  .f-item.wide { grid-column: 1 / -1; }
+}
+.f-item { min-width: 0; }
+.f-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.f-label { display: flex; flex-direction: column; cursor: default; }
+.f-label .zh { font-size: 14pt; font-weight: 700; color: var(--fg); line-height: 1.25; }
+.f-label .en {
+  font-size: 8.5pt;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+}
+.req { color: var(--crit); font-style: normal; margin-left: 3px; }
+.req.when-ng { display: none; }
+.f-item.need .req.when-ng { display: inline; }
+
+.spec-chip {
+  font-family: var(--font-display);
+  font-size: 10pt;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--accent-ring);
+  color: var(--big);
+  border: 1px solid var(--border-up);
+  white-space: nowrap;
+  letter-spacing: 0.04em;
+}
+.f-item.ng .spec-chip {
+  background: var(--crit-fill);
+  color: var(--crit);
+  border-color: var(--crit);
+}
+
+input, select {
+  height: 52px;
+  font: 600 14.5pt var(--font-ui);
+  color: var(--fg);
+  background: var(--field-bg);
+  border: 1px solid var(--border-up);
+  border-radius: 10px;
+  padding: 0 14px;
+  width: 100%;
+  min-width: 0;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, background-color 0.16s ease;
+}
+input[type="date"], input[type="time"] { font-family: var(--font-mono); }
+input.num {
+  font-family: var(--font-display);
+  font-size: 17pt;
+  letter-spacing: 0.04em;
+}
+input:hover, select:hover { border-color: var(--hud-corner); }
+input:focus, select:focus {
+  outline: none;
+  border-color: var(--big);
+  box-shadow: 0 0 0 3px var(--accent-ring), 0 0 14px var(--accent-ring);
+}
+input#f-employeeId {
+  font-family: var(--font-display);
+  font-size: 17pt;
+  letter-spacing: 0.18em;
+}
+
+/* 超規：紅框 */
+.f-item.ng input {
+  border-color: var(--crit);
+  background: var(--crit-fill);
+  color: var(--crit);
+  box-shadow: 0 0 0 3px var(--crit-fill);
+}
+/* 必填未填 */
+.f-item.invalid input,
+.f-item.invalid select,
+.f-item.invalid .toggle-group {
+  border-color: var(--crit);
+  box-shadow: 0 0 0 3px var(--crit-fill);
+  animation: shake 0.3s;
+}
+@keyframes shake {
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}
+
+/* 自動帶入欄位（唯讀顯示框） */
+.readout {
+  height: 52px;
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  border-radius: 10px;
+  background: var(--panel-alt);
+  border: 1px dashed var(--border-up);
+  color: var(--fg);
+  font-weight: 700;
+  font-size: 14.5pt;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.readout .sub { margin-left: 8px; font-size: 9.5pt; font-weight: 600; color: var(--fg-dim); letter-spacing: 0.06em; }
+.readout.empty { color: var(--fg-dim); font-weight: 500; }
+/* 查無工號：灰色提示（仍可提交） */
+.readout.unknown { color: var(--fg-mute); font-weight: 600; font-size: 12.5pt; }
+.readout.named {
+  background: var(--ok-fill);
+  color: var(--ok);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+}
+.readout.result {
+  font-family: var(--font-display);
+  font-size: 18pt;
+  letter-spacing: 0.12em;
+  justify-content: center;
+}
+.readout.result.ok {
+  background: var(--ok-fill);
+  color: var(--ok);
+  border: 1px solid rgba(16, 185, 129, 0.5);
+  text-shadow: 0 0 10px var(--ok-fill);
+}
+.readout.result.ng {
+  background: var(--crit-fill);
+  color: var(--crit);
+  border: 1px solid var(--crit);
+  text-shadow: 0 0 10px var(--crit-fill);
+  animation: pulseCrit 1.6s infinite;
+}
+@keyframes pulseCrit {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5); }
+  50% { box-shadow: 0 0 0 7px rgba(239, 68, 68, 0); }
+}
+
+/* 大按鈕單選（有 / 無） */
+.toggle-group {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 10px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+}
+.toggle-btn {
+  min-height: 64px;
+  border-radius: 12px;
+  border: 1px solid var(--border-up);
+  background: var(--field-bg);
+  color: var(--fg-mute);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  font-family: var(--font-ui);
+  transition: all 0.15s ease;
+}
+.toggle-btn .zh { font-size: 17pt; font-weight: 800; }
+.toggle-btn .en { font-size: 9pt; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
+.toggle-btn:hover { border-color: var(--hud-corner); color: var(--fg); }
+.toggle-btn[aria-pressed="true"] {
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
+  border-color: rgba(255, 255, 255, 0.22);
+  color: var(--accent-fg);
+  box-shadow: 0 6px 18px rgba(14, 165, 233, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+/* ── 送出區 ── */
+.submit-zone {
+  margin-top: 22px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+#spec-warn {
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--crit-fill);
+  border: 1px solid var(--crit);
+  color: var(--crit);
+  font-weight: 800;
+  font-size: 13.5pt;
+  line-height: 1.35;
+}
+#spec-warn[hidden] { display: none; }
+.big-btn {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  height: 60px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
+  color: var(--accent-fg);
+  font: 800 17pt var(--font-ui);
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  box-shadow: 0 6px 20px rgba(14, 165, 233, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  transition: transform 0.15s ease, box-shadow 0.2s ease, filter 0.2s ease;
+}
+.big-btn::after {
+  content: "";
+  position: absolute;
+  top: 0; left: -120%;
+  width: 65%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.28), transparent);
+  transform: skewX(-25deg);
+  transition: left 0.55s ease;
+}
+.big-btn:hover:not(:disabled)::after { left: 140%; }
+.big-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 26px rgba(14, 165, 233, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  filter: brightness(1.06);
+}
+.big-btn:active:not(:disabled) { transform: translateY(0); }
+.big-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.big-btn small { font-size: 10pt; font-weight: 700; letter-spacing: 0.12em; opacity: 0.85; margin-left: 6px; }
+
+#msg {
+  min-height: 30px;
+  margin-top: 10px;
+  font-size: 13.5pt;
+  font-weight: 700;
+  transition: opacity 0.5s;
+}
+#msg.ok { color: var(--ok); text-shadow: 0 0 10px var(--ok-fill); }
+#msg.err { color: var(--crit); text-shadow: 0 0 10px var(--crit-fill); }
+#msg.fade { opacity: 0; }
+
+.loading {
+  padding: 26px 0;
+  text-align: center;
+  color: var(--fg-mute);
+  font-weight: 600;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   最近紀錄表
+   ══════════════════════════════════════════════════════════════════ */
+.table-wrap {
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-alt);
+}
+table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 12.5pt;
+}
+th, td {
+  height: 46px;
+  padding: 0 14px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--panel);
+  backdrop-filter: blur(12px);
+  color: var(--big);
+  font-size: 11pt;
+  font-weight: 800;
+  border-bottom: 2px solid var(--border-up);
+  line-height: 1.2;
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+th small {
+  display: block;
+  font-size: 7.5pt;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+}
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover td { background: var(--accent-ring); }
+td.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+td.ng { color: var(--crit); font-weight: 800; }
+.res-badge {
+  display: inline-block;
+  min-width: 46px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  text-align: center;
+  font-family: var(--font-display);
+  font-size: 10pt;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+.res-badge.ok { background: var(--ok-fill); color: var(--ok); border: 1px solid rgba(16, 185, 129, 0.45); }
+.res-badge.ng { background: var(--crit-fill); color: var(--crit); border: 1px solid var(--crit); }
+.empty-note {
+  padding: 26px 14px;
+  text-align: center;
+  color: var(--fg-mute);
+  font-weight: 600;
+}
+.empty-note small { display: block; font-size: 9pt; letter-spacing: 0.1em; text-transform: uppercase; color: var(--fg-dim); }
+
+/* ── 確認對話框 ── */
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: var(--overlay);
+  backdrop-filter: blur(4px);
+}
+.modal.open { display: flex; }
+.modal-box {
+  width: 100%;
+  max-width: 420px;
+  background: linear-gradient(var(--panel), var(--panel)), var(--bg);
+  border: 1px solid var(--border-up);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  padding: 22px;
+}
+.modal-text { font-size: 15pt; font-weight: 700; line-height: 1.45; margin-bottom: 18px; }
+.modal-text small { display: block; font-size: 10pt; font-weight: 600; color: var(--fg-mute); margin-top: 4px; }
+.modal-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.modal-btns .small-btn { height: 52px; font-size: 13pt; }
+.modal-btns .big-btn { height: 52px; font-size: 13.5pt; }
+
+/* ── 手機 ── */
+@media (max-width: 560px) {
+  body { font-size: 14pt; }
+  .wrap { padding: 4px 12px 36px; }
+  header { padding: 12px 14px; }
+  header h1 { font-size: 15pt; }
+  header .spacer { display: none; }
+  .hdr-tools { width: 100%; }
+  .hdr-tools > * { flex: 1; justify-content: center; }
+  .card { padding: 18px 16px; }
+  .cyber-clock { font-size: 11pt; }
+}
+</style>
+</head>
+<body>
+<div class="top-laser"></div>
+<div class="cyber-bg" aria-hidden="true">
+  <div class="orb orb-1"></div>
+  <div class="orb orb-2"></div>
+</div>
+
+<div id="err-banner">⚠ 資料來源異常，請檢查網路連線狀態</div>
+
+<div class="wrap">
+  <header>
+    <div class="brand-group">
+      <span class="brand-sub">SMART FACTORY // C-BLOCK INSPECTION</span>
+      <h1>🧪 C 棟點檢電子表單</h1>
+    </div>
+    <span class="spacer"></span>
+    <div class="hdr-tools">
+      <div class="cyber-clock" title="系統即時時間">
+        <span class="clock-dot"></span>
+        <span id="sys-clock">--:--:--</span>
+      </div>
+      <button class="small-btn" id="theme-toggle" type="button">☀️ 淺色主題</button>
+      <span id="conn">⚪ 連線中…</span>
+    </div>
+  </header>
+
+  <nav class="tabs" id="tabs" role="tablist"></nav>
+
+  <section class="card" id="form-card">
+    <div class="card-head">
+      <h2 id="item-title">讀取設定中…</h2>
+      <div class="meta" id="item-meta"></div>
+    </div>
+    <div class="fields" id="fields"><div class="loading">讀取設定中… Loading</div></div>
+    <div class="submit-zone">
+      <div id="spec-warn" hidden>⚠ 超出規格，請通知主管 Out of spec, notify supervisor</div>
+      <button class="big-btn" id="btn-submit" type="button">送出<small>SUBMIT</small></button>
+      <div id="msg"></div>
+    </div>
+  </section>
+
+  <section class="card" id="recent-card">
+    <div class="card-head">
+      <h2>最近 7 筆紀錄<small>Recent 7 Records</small></h2>
+      <div class="meta"><span class="tech-tag" id="recent-meta">—</span></div>
+    </div>
+    <div id="recent"><div class="loading">讀取中… Loading</div></div>
+  </section>
+</div>
+
+<div class="modal" id="confirm-modal" role="dialog" aria-modal="true">
+  <div class="modal-box">
+    <div class="modal-text" id="confirm-text"></div>
+    <div class="modal-btns">
+      <button class="small-btn" id="confirm-no" type="button">取消 Cancel</button>
+      <button class="big-btn" id="confirm-yes" type="button">再新增一筆</button>
+    </div>
+  </div>
+</div>
+
+<script src="c-inspection-config.js"></script>
+<script>
+(function(){
+  const C = window.C_INSPECTION;
+  const ITEMS = C.ITEMS.filter(it => it.source === 'script');
+  const TEXT_TYPES = ['date', 'time', 'employee'];          // 以文字格式寫入（避免 Sheet 自動轉格式）
+  const INPUT_TYPES = ['date', 'time', 'number', 'select', 'text', 'employee'];
+  const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六'];
+  const WEEKDAYS_EN = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+  const LS_PID = 'cInspPid';
+  const LS_THEME = 'cInspTheme';
+
+  const $ = id => document.getElementById(id);
+  function lsGet(k) { try { return localStorage.getItem(k); } catch(e) { return null; } }
+  function lsSet(k, v) { try { localStorage.setItem(k, v); } catch(e) {} }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+  function pad(n) { return String(n).padStart(2, '0'); }
+  function hhmm(d) { return pad(d.getHours()) + ':' + pad(d.getMinutes()); }
+  function hhmmss(d) { return hhmm(d) + ':' + pad(d.getSeconds()); }
+  function ymd(d) { return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
+  function weekdayIdx(s) {
+    const m = String(s || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    return m ? new Date(+m[1], +m[2] - 1, +m[3]).getDay() : -1;
+  }
+  function optValue(o) { return typeof o === 'string' ? o : o.value; }
+  function optEn(o) { return typeof o === 'string' ? '' : (o.en || ''); }
+  function fieldEl(f) { return $('f-' + f.key); }
+  function itemEl(f) { return $('fi-' + f.key); }
+
+  // ── 頂部即時電子鐘 ──
+  function tickClock() { $('sys-clock').textContent = hhmmss(new Date()); }
+  tickClock();
+  setInterval(tickClock, 1000);
+
+  // ── 狀態 ──
+  let settings = Object.assign({}, C.DEFAULTS);
+  let workers = {};
+  let current = null;          // 目前項目
+  let recentSeq = 0;           // 切換項目時丟棄舊請求的結果
+  let sending = false;
+
+  function setConn(ok) {
+    $('conn').textContent = ok ? '🟢 連線正常' : '🔴 連線異常';
+    $('err-banner').style.display = ok ? 'none' : 'block';
+  }
+
+  // ── 員工表 ──
+  async function loadWorkers() {
+    try { workers = await C.loadWorkers(); }
+    catch(e) { console.warn('員工表讀取失敗，使用純工號顯示', e); }
+    if (current) update();
+  }
+  function workerName(id) {
+    const info = workers[String(id == null ? '' : id).trim()];
+    return info && info.name ? info.name : '';
+  }
+
+  // ── 頁籤 ──
+  function renderTabs() {
+    $('tabs').innerHTML = ITEMS.map(it =>
+      `<button class="tab-btn" type="button" role="tab" data-id="${esc(it.id)}">
+         <span class="zh">${esc(it.nameZh)}</span><span class="en">${esc(it.nameEn)}</span>
+       </button>`).join('');
+    $('tabs').addEventListener('click', e => {
+      const b = e.target.closest('.tab-btn');
+      if (b && (!current || b.dataset.id !== current.id)) selectItem(b.dataset.id, true);
+    });
+  }
+
+  function selectItem(id, pushUrl) {
+    current = ITEMS.find(it => it.id === id) || ITEMS[0];
+    document.querySelectorAll('.tab-btn').forEach(b => {
+      const on = b.dataset.id === current.id;
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-selected', on);
+    });
+    if (pushUrl) {
+      const url = new URL(location.href);
+      url.searchParams.set('item', current.id);
+      history.replaceState(null, '', url);
+    }
+    document.title = `${current.nameZh}｜C 棟點檢`;
+    showMsg('', '', false);
+    renderForm();
+    loadRecent();
+  }
+
+  // ── 表單（完全由 fields 產生）──
+  function labelHtml(f) {
+    const req = f.required ? '<em class="req">*</em>' : (f.requiredWhenNG ? '<em class="req when-ng">*</em>' : '');
+    const forAttr = INPUT_TYPES.includes(f.type) ? ` for="f-${esc(f.key)}"` : '';
+    const chip = f.specParam ? `<span class="spec-chip" id="spec-${esc(f.key)}"></span>` : '';
+    return `<div class="f-head">
+      <label class="f-label"${forAttr}><span class="zh">${esc(f.nameZh)}${req}</span><span class="en">${esc(f.nameEn)}</span></label>
+      ${chip}
+    </div>`;
+  }
+  function controlHtml(f) {
+    const id = `f-${esc(f.key)}`;
+    switch (f.type) {
+      case 'date':   return `<input id="${id}" type="date">`;
+      case 'time':   return `<input id="${id}" type="time">`;
+      case 'number': return `<input id="${id}" class="num" type="number" step="any" inputmode="${esc(f.inputmode || 'decimal')}" autocomplete="off">`;
+      case 'text':   return `<input id="${id}" type="text" autocomplete="off">`;
+      case 'employee':
+        return `<input id="${id}" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="4" data-digits autocomplete="off" placeholder="4 碼">`;
+      case 'select':
+        return `<select id="${id}"><option value="">請選擇 Select</option>${
+          (f.options || []).map(o => `<option value="${esc(optValue(o))}">${esc(optValue(o))}${optEn(o) ? ' ' + esc(optEn(o)) : ''}</option>`).join('')
+        }</select>`;
+      case 'toggle':
+        return `<div class="toggle-group" id="${id}" role="radiogroup" data-value="">${
+          (f.options || []).map(o => `<button type="button" class="toggle-btn" aria-pressed="false" data-value="${esc(optValue(o))}">
+            <span class="zh">${esc(optValue(o))}</span>${optEn(o) ? `<span class="en">${esc(optEn(o))}</span>` : ''}</button>`).join('')
+        }</div>`;
+      case 'weekday':
+      case 'employeeName':
+      case 'result':
+        return `<div class="readout${f.type === 'result' ? ' result' : ''}" id="${id}"></div>`;
+      default:
+        return `<input id="${id}" type="text" autocomplete="off">`;
+    }
+  }
+  function defaultValue(f) {
+    if (f.type === 'date' && f.default === 'today') return ymd(new Date());
+    if (f.type === 'time' && f.default === 'now') return hhmm(new Date());
+    if (f.type === 'employee') return lsGet(LS_PID) || '';
+    return f.default == null ? '' : String(f.default);
+  }
+  function setToggle(el, value) {
+    el.dataset.value = value;
+    el.querySelectorAll('.toggle-btn').forEach(b => b.setAttribute('aria-pressed', b.dataset.value === value));
+  }
+
+  function renderForm() {
+    const it = current;
+    $('item-title').innerHTML = `${esc(it.nameZh)}<small>${esc(it.nameEn)}</small>`;
+    const tags = [`每日 ${it.dailyCount || 1} 次`];
+    (it.deadlineParams || []).forEach(p => { if (settings[p]) tags.push(`截止 ${settings[p]}`); });
+    $('item-meta').innerHTML = tags.map(t => `<span class="tech-tag">${esc(t)}</span>`).join('');
+
+    $('fields').innerHTML = it.fields.map(f => {
+      const wide = ['toggle', 'text', 'result'].includes(f.type) ? ' wide' : '';
+      return `<div class="f-item${wide}" id="fi-${esc(f.key)}">${labelHtml(f)}${controlHtml(f)}</div>`;
+    }).join('');
+    resetValues();
+  }
+  function resetValues() {
+    current.fields.forEach(f => {
+      const el = fieldEl(f);
+      if (f.type === 'toggle') setToggle(el, defaultValue(f));
+      else if (INPUT_TYPES.includes(f.type)) el.value = defaultValue(f);
+      itemEl(f).classList.remove('invalid');
+    });
+    update();
+  }
+
+  // 收集目前輸入值 { key: 值 }（含自動欄位）
+  function collectValues() {
+    const v = {};
+    current.fields.forEach(f => {
+      const el = fieldEl(f);
+      if (f.type === 'toggle') v[f.key] = el.dataset.value || '';
+      else if (INPUT_TYPES.includes(f.type)) v[f.key] = el.value.trim();
+    });
+    current.fields.forEach(f => {
+      if (f.type === 'weekday') { const i = weekdayIdx(v[f.from]); v[f.key] = i < 0 ? '' : WEEKDAYS[i]; }
+      if (f.type === 'employeeName') v[f.key] = workerName(v[f.from]);
+    });
+    current.fields.forEach(f => { if (f.type === 'result') v[f.key] = C.judge(current, v, settings); });
+    return v;
+  }
+
+  // 有上下限的規格欄位是否都已輸入（未輸入完前判定顯示「—」）
+  function specFieldsFilled(v) {
+    return current.fields.every(f => {
+      const s = C.getSpec(f, settings);
+      return !s || (s.min === null && s.max === null) || v[f.key] !== '';
+    });
+  }
+
+  function update() {
+    const v = collectValues();
+    let anyNG = false;
+    current.fields.forEach(f => {
+      const el = fieldEl(f), box = itemEl(f);
+      if (f.specParam) {
+        const spec = C.getSpec(f, settings);
+        const txt = C.specText(spec);
+        const chip = $('spec-' + f.key);
+        chip.textContent = txt;
+        chip.style.display = txt ? '' : 'none';
+        const ng = C.isOutOfSpec(v[f.key], spec);
+        box.classList.toggle('ng', ng);
+        if (ng) anyNG = true;
+      }
+      if (f.type === 'weekday') {
+        const i = weekdayIdx(v[f.from]);
+        el.innerHTML = i < 0 ? '—' : `${WEEKDAYS[i]}<span class="sub">${WEEKDAYS_EN[i]}</span>`;
+        el.className = 'readout' + (i < 0 ? ' empty' : '');
+      }
+      if (f.type === 'employeeName') {
+        const pid = v[f.from] || '';
+        const name = v[f.key];
+        if (name) { el.textContent = name; el.className = 'readout named'; }
+        else if (pid.length >= 4) { el.textContent = '(查無工號)'; el.className = 'readout unknown'; }
+        else { el.textContent = '—'; el.className = 'readout empty'; }
+      }
+      if (f.type === 'result') {
+        const r = v[f.key];
+        if (r === '') { el.textContent = '不判定'; el.className = 'readout result empty'; }
+        else if (r === 'OK' && !specFieldsFilled(v)) { el.textContent = '—'; el.className = 'readout result empty'; }
+        else { el.textContent = r; el.className = 'readout result ' + r.toLowerCase(); }
+      }
+    });
+    current.fields.forEach(f => { if (f.requiredWhenNG) itemEl(f).classList.toggle('need', anyNG); });
+    $('spec-warn').hidden = !anyNG;
+    return v;
+  }
+
+  // 欄位事件（委派）
+  $('fields').addEventListener('input', e => {
+    const box = e.target.closest('.f-item');
+    if (box) box.classList.remove('invalid');
+    if ('digits' in e.target.dataset && /\D/.test(e.target.value)) e.target.value = e.target.value.replace(/\D/g, '');
+    update();
+  });
+  $('fields').addEventListener('change', update);
+  $('fields').addEventListener('click', e => {
+    const b = e.target.closest('.toggle-btn');
+    if (!b) return;
+    const group = b.closest('.toggle-group');
+    setToggle(group, b.dataset.value);
+    group.closest('.f-item').classList.remove('invalid');
+    update();
+  });
+  // 數字欄位：滾輪不要改值
+  $('fields').addEventListener('wheel', e => { if (e.target.type === 'number' && document.activeElement === e.target) e.target.blur(); }, { passive: true });
+
+  // ── 驗證 ──
+  function validate(v) {
+    const bad = [];
+    const ng = v[(current.fields.find(f => f.type === 'result') || {}).key] === 'NG'
+      || current.fields.some(f => C.isOutOfSpec(v[f.key], C.getSpec(f, settings)));
+    current.fields.forEach(f => {
+      if (!INPUT_TYPES.includes(f.type) && f.type !== 'toggle') return;
+      const val = v[f.key];
+      const need = f.required || (f.requiredWhenNG && ng);
+      if (need && val === '') { bad.push([f, f.requiredWhenNG && !f.required ? `${f.nameZh}（超規必填）` : f.nameZh]); return; }
+      if (val === '') return;
+      if (f.type === 'employee' && !/^\d{4}$/.test(val)) bad.push([f, `${f.nameZh}（4 位數字）`]);
+      else if (f.type === 'number' && !isFinite(parseFloat(val))) bad.push([f, `${f.nameZh}（數字）`]);
+      else if (f.type === 'date' && weekdayIdx(val) < 0) bad.push([f, f.nameZh]);
+      else if (f.type === 'time' && !C.toHHmm(val)) bad.push([f, f.nameZh]);
+    });
+    if (!bad.length) return true;
+    bad.forEach(([f]) => {
+      const box = itemEl(f);
+      box.classList.remove('invalid');
+      void box.offsetWidth;  // 重新觸發抖動動畫
+      box.classList.add('invalid');
+    });
+    const first = bad[0][0];
+    itemEl(first).scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const el = fieldEl(first);
+    if (el && INPUT_TYPES.includes(first.type)) el.focus({ preventScroll: true });
+    showMsg('請填寫：' + bad.map(b => b[1]).join('、'), 'err', false);
+    return false;
+  }
+
+  // 依 fields 順序組出 headers / row / textCols
+  function buildPayload(v) {
+    const headers = [], row = [], textCols = [];
+    current.fields.forEach((f, i) => {
+      headers.push(f.nameZh);
+      let val = v[f.key];
+      if (f.type === 'time' && val) val = C.toHHmm(val);
+      else if (f.type === 'number' && val !== '') val = parseFloat(val);
+      row.push(val == null ? '' : val);
+      if (TEXT_TYPES.includes(f.type)) textCols.push(i);
+    });
+    return { action: 'submit', tab: current.tab, headers, row, textCols };
+  }
+
+  // ── 同日重複檢查 ──
+  async function countSameDate(date) {
+    const dateField = current.fields.find(f => f.type === 'date');
+    if (!dateField) return 0;
+    const rows = await C.readTab(current.tab);
+    if (!rows || rows.length < 2) return 0;
+    let col = rows[0].map(h => String(h).trim()).indexOf(dateField.nameZh);
+    if (col < 0) col = current.fields.indexOf(dateField);
+    return rows.slice(1).filter(r => C.toYMD(r[col]) === date).length;
+  }
+
+  // ── 確認對話框 ──
+  function confirmBox(html) {
+    return new Promise(resolve => {
+      const modal = $('confirm-modal');
+      $('confirm-text').innerHTML = html;
+      modal.classList.add('open');
+      const done = ok => {
+        modal.classList.remove('open');
+        $('confirm-yes').onclick = $('confirm-no').onclick = modal.onclick = null;
+        resolve(ok);
+      };
+      $('confirm-yes').onclick = () => done(true);
+      $('confirm-no').onclick = () => done(false);
+      modal.onclick = e => { if (e.target === modal) done(false); };
+      $('confirm-no').focus();
+    });
+  }
+
+  // ── 送出 ──
+  async function postRecord(params) {
+    if (!navigator.onLine) throw new Error('離線中，請恢復網路後重試');
+    if (!C.SCRIPT_URL || /^TODO/.test(C.SCRIPT_URL)) throw new Error('尚未設定 SCRIPT_URL（c-inspection-config.js）');
+    // 不設 Content-Type（預設 text/plain）→ 簡單請求，不觸發 CORS preflight，Apps Script 才收得到
+    const res = await fetch(C.SCRIPT_URL, { method: 'POST', body: JSON.stringify(params) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json().catch(() => null);
+    if (json && json.ok === false) throw new Error(json.message || json.error || '伺服器拒絕');
+    return json;
+  }
+
+  async function submit() {
+    if (sending || !current) return;
+    const v = update();
+    if (!validate(v)) return;
+
+    const btn = $('btn-submit');
+    sending = true;
+    btn.disabled = true;
+    try {
+      const dateField = current.fields.find(f => f.type === 'date');
+      const date = dateField ? v[dateField.key] : '';
+      if (date) {
+        showMsg('檢查是否已填寫…', '', false);
+        let count = 0;
+        try { count = await countSameDate(date); }
+        catch(e) { console.warn('[c-inspection] 重複檢查讀取失敗，略過', e); }
+        if (count >= (current.dailyCount || 1)) {
+          const head = date === ymd(new Date()) ? '今日已填寫' : `${esc(date)} 已填寫`;
+          showMsg('', '', false);
+          const ok = await confirmBox(`${head}，是否再新增一筆？<small>Already submitted ${count} record(s) for this date. Add another?</small>`);
+          if (!ok) return;
+        }
+      }
+      showMsg('上傳中… Uploading', '', false);
+      const payload = buildPayload(v);
+      await postRecord(payload);
+
+      const empField = current.fields.find(f => f.type === 'employee');
+      if (empField && v[empField.key]) lsSet(LS_PID, v[empField.key]);
+      showMsg('✅ 已上傳 ' + hhmmss(new Date()), 'ok', true);
+      resetValues();
+      loadRecent();
+    } catch(e) {
+      console.error('[c-inspection] 送出失敗', e);
+      showMsg('❌ 送出失敗：' + e.message, 'err', false);
+    } finally {
+      sending = false;
+      btn.disabled = false;
+    }
+  }
+  $('btn-submit').addEventListener('click', submit);
+
+  // ── 訊息區 ──
+  let msgTimer = null;
+  function showMsg(text, type, autoFade) {
+    const el = $('msg');
+    clearTimeout(msgTimer);
+    el.textContent = text;
+    el.className = type;
+    if (autoFade) msgTimer = setTimeout(() => { el.classList.add('fade'); }, 3000);
+  }
+
+  // ── 最近 7 筆 ──
+  function emptyNote(zh, en) {
+    return `<div class="empty-note">${esc(zh)}<small>${esc(en)}</small></div>`;
+  }
+  async function loadRecent() {
+    const seq = ++recentSeq;
+    const it = current;
+    $('recent').innerHTML = '<div class="loading">讀取中… Loading</div>';
+    $('recent-meta').textContent = it.tab;
+    let rows;
+    try {
+      rows = await C.readTab(it.tab);
+      if (seq !== recentSeq) return;
+      setConn(true);
+    } catch(e) {
+      if (seq !== recentSeq) return;
+      console.error('[c-inspection] 紀錄讀取失敗', e);
+      setConn(false);
+      $('recent').innerHTML = emptyNote('紀錄讀取失敗，請稍後重試', 'Failed to load records');
+      return;
+    }
+    const header = rows && rows.length ? rows[0].map(h => String(h == null ? '' : h).trim()) : [];
+    const body = (rows || []).slice(1).filter(r => r.some(c => String(c == null ? '' : c).trim() !== ''));
+    if (!header.length || !body.length) {
+      $('recent').innerHTML = emptyNote('尚無資料', 'No records yet');
+      return;
+    }
+    const byName = {};
+    it.fields.forEach(f => { byName[f.nameZh] = f; });
+    const last = body.slice(-7).reverse();
+    const th = header.map(h => {
+      const f = byName[h];
+      return `<th>${esc(h)}${f ? `<small>${esc(f.nameEn)}</small>` : ''}</th>`;
+    }).join('');
+    const tr = last.map(r => '<tr>' + header.map((h, i) => {
+      const f = byName[h];
+      let val = r[i] == null ? '' : String(r[i]);
+      if (!f) return `<td>${esc(val)}</td>`;
+      if (f.type === 'date') return `<td class="mono">${esc(C.toYMD(val) || val)}</td>`;
+      if (f.type === 'time') return `<td class="mono">${esc(C.toHHmm(val) || val)}</td>`;
+      if (f.type === 'employee') return `<td class="mono">${esc(val)}</td>`;
+      if (f.type === 'result') {
+        const r2 = val.trim().toUpperCase();
+        return `<td>${r2 === 'OK' || r2 === 'NG' ? `<span class="res-badge ${r2.toLowerCase()}">${r2}</span>` : esc(val)}</td>`;
+      }
+      if (f.type === 'number') {
+        const ng = C.isOutOfSpec(val, C.getSpec(f, settings));
+        return `<td class="mono${ng ? ' ng' : ''}">${esc(val)}</td>`;
+      }
+      return `<td>${esc(val)}</td>`;
+    }).join('') + '</tr>').join('');
+    $('recent').innerHTML = `<div class="table-wrap"><table><thead><tr>${th}</tr></thead><tbody>${tr}</tbody></table></div>`;
+  }
+
+  // ── 離線 / 恢復 ──
+  window.addEventListener('offline', () => { showMsg('離線中，請恢復網路後重試', 'err', false); setConn(false); });
+  window.addEventListener('online',  () => { showMsg('', '', false); if (current) loadRecent(); });
+
+  // ── 主題（預設為深色科技主題 dark）──
+  function applyTheme(t) {
+    document.documentElement.setAttribute('data-theme', t);
+    $('theme-toggle').textContent = t === 'dark' ? '☀️ 淺色主題' : '🌙 深色主題';
+  }
+  applyTheme(lsGet(LS_THEME) === 'light' ? 'light' : 'dark');
+  $('theme-toggle').addEventListener('click', () => {
+    const next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    applyTheme(next);
+    lsSet(LS_THEME, next);
+  });
+
+  // ── 初始化：先讀系統設定，再產生表單 ──
+  renderTabs();
+  loadWorkers();
+  if (!navigator.onLine) showMsg('離線中，請恢復網路後重試', 'err', false);
+  C.loadSettings().then(s => { settings = s; }).finally(() => {
+    const want = new URLSearchParams(location.search).get('item');
+    selectItem(ITEMS.some(it => it.id === want) ? want : (ITEMS[0] && ITEMS[0].id), false);
+  });
+})();
+</script>
+</body>
+</html>
