@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Orbitron:wght@700;800&family=JetBrains+Mono:wght@500;600;700;800&family=Noto+Sans+TC:wght@400;500;700&display=swap">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="c-inspection-config.js"></script>
   <style>
     :root {
       --bg-grad-1: #f1f6fd;
@@ -409,6 +410,43 @@
     .imm-panel .ip-msg { font-size: 11px; min-height: 14px; }
     .imm-panel .ip-msg.err { color: var(--crit); }
     .imm-panel .ip-msg.ok { color: var(--ok); }
+    /* C 棟今日點檢：C 棟標題上方狀態燈 + 點檢面板（沿用 .imm-panel） */
+    .cinsp-light {
+      --st: #94a3b8;
+      position: absolute; left: 50%; bottom: calc(100% + 6px); transform: translateX(-50%);
+      display: flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px 0 6px;
+      background: var(--imm-bg); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+      border: 1px solid var(--imm-border); border-left: 3px solid var(--st); border-radius: 6px;
+      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.18);
+      font-size: 11px; font-weight: 700; color: var(--imm-fg); white-space: nowrap; line-height: 1;
+    }
+    .cinsp-light .cl-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--st); box-shadow: 0 0 6px var(--st); flex-shrink: 0; }
+    .cinsp-light.ok { --st: #10b981; }
+    .cinsp-light.ok b { color: #10b981; }
+    .cinsp-light.crit { --st: #ef4444; }
+    .cinsp-light.crit b { color: #ef4444; }
+    .cinsp-light.crit .cl-dot { animation: cinspBlink 1.2s ease-in-out infinite; }
+    @keyframes cinspBlink { 50% { opacity: 0.25; } }
+    .imm-panel.cinsp-panel { width: 340px; max-height: calc(100vh - 96px); overflow-y: auto; }
+    .cinsp-panel h3 small { font-size: 10px; font-weight: 600; color: var(--fg-mute); letter-spacing: 0.06em; margin-left: 4px; }
+    .cinsp-panel .ci-day { font-size: 11.5px; color: var(--fg-mute); margin-bottom: 8px; }
+    .cinsp-panel .ci-item {
+      border: 1px solid var(--card-border); border-left: 3px solid #94a3b8; border-radius: 10px;
+      padding: 8px 10px; margin-bottom: 8px;
+    }
+    .cinsp-panel .ci-item.ok { border-left-color: #10b981; }
+    .cinsp-panel .ci-item.crit { border-left-color: #ef4444; background: var(--crit-bg); }
+    .cinsp-panel .ci-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 4px; }
+    .cinsp-panel .ci-name b { font-size: 13px; }
+    .cinsp-panel .ci-name small { display: block; font-size: 9.5px; color: var(--fg-mute); letter-spacing: 0.06em; text-transform: uppercase; }
+    .cinsp-panel .ci-head .status-badge { white-space: nowrap; }
+    .cinsp-panel .ci-ng { color: var(--crit); }
+    .cinsp-panel .ci-link { display: inline-block; margin-top: 6px; font-size: 11px; color: var(--info); text-decoration: none; font-weight: 700; }
+    .cinsp-panel .ci-link:hover { text-decoration: underline; }
+    .cinsp-panel .ci-act { display: flex; gap: 6px; margin-top: 6px; align-items: center; }
+    .cinsp-panel .ci-act input { flex: 1; min-width: 0; }
+    .cinsp-panel .ci-act .ip-btn { padding: 5px 10px; white-space: nowrap; }
+    .cinsp-panel .ci-upd { font-size: 10px; color: var(--fg-mute); font-family: var(--font-mono); margin-bottom: 4px; }
     .mock-badge {
       display: none; position: absolute; top: 62px; right: 16px; z-index: 40;
       background: #a855f7; color: #fff; font-weight: 900; font-size: 12px; letter-spacing: 2px;
@@ -431,6 +469,8 @@
 
   <!-- A棟射出機狀態面板（點機台開啟） -->
   <div class="imm-panel" id="imm-panel"></div>
+  <!-- C 棟今日點檢面板（點 C 棟開啟） -->
+  <div class="imm-panel cinsp-panel" id="cinsp-panel"></div>
   <div class="mock-badge" id="mock-badge">MOCK</div>
 
   <!-- 360度建構展演狀態提示橫幅 -->
@@ -2098,6 +2138,7 @@
           ['已送B棟', unloadInitial - unloadCount, Math.round((unloadInitial - unloadCount) / Math.max(1, unloadInitial) * 100), 'ok'],
         ])) +
         section('C 棟 · 設備保養與日常點檢 (預留模組)', getCBuildingEquipHtml());
+      openCInspPanel();
     }
   }
 
@@ -2532,6 +2573,7 @@
 
   function openImmPanel(label) {
     if (!immState[label]) return;
+    closeCInspPanel(); // 與 C 棟點檢面板同位置，互斥顯示
     const s = immState[label];
     immPanelLabel = label;
     immDraft = { status: immStatusKey(s.status) || (immIsRunning(s.effective) ? s.effective : '待機'), mode: s.mode || '自動' };
@@ -2685,6 +2727,428 @@
   loadWorkerMap().then(refresh);
   setInterval(refresh, REFRESH_MS);
   setInterval(() => { loadWorkerMap().then(refresh); }, WORKER_MAP_REFRESH_MS);
+
+  // ============================================================================
+  // 5. C 棟今日點檢：c-inspection-config.js 的 ITEMS × 各分頁今日資料 × 管理員設定 → 燈號與面板
+  //    與塗裝區、A 棟各自輪詢，互不影響；所有日期 / 時間一律以台北時間比對
+  // ============================================================================
+  const CI = window.C_INSPECTION || null;
+  const CINSP_ROUND_SPLIT_MIN = 12 * 60;      // 巡檢（有 areas 的項目）：12:00 前算第一輪、之後算第二輪
+  const CINSP_SETTINGS_TTL = 5 * 60 * 1000;   // 系統設定每 5 分鐘重讀一次（省 API 配額）
+  const CINSP_WEEKDAY = ['日', '一', '二', '三', '四', '五', '六'];
+  const CINSP_BADGE = { ok: ['ok', '✅'], pending: ['none', '⚪'], off: ['none', '⚪'], crit: ['crit', '❌'] };
+  const CINSP_LIGHT_TEXT = { ok: '✅ 完成', crit: '❌ 異常', pending: '待填', off: '停產' };
+  let cinspSettings = null, cinspSettingsAt = 0;
+  let cinspState = null;      // 最近一次成功計算的結果（讀取失敗時保留）
+  let cinspLastOk = 0;
+  let cinspErr = '';
+  let cinspPw = '';           // 管理者密碼只存在記憶體（POST 用）；重新整理頁面後送出時需再輸入
+  let cinspLoginOpen = false;
+  let cinspBusy = false;
+  let cinspMsgState = { text: '', type: '' };
+
+  function cinspPad(n) { return String(n).padStart(2, '0'); }
+  // 台北時間（UTC+8，無日光節約）
+  function cinspTpe(ms) {
+    const d = new Date(ms + 8 * 3600 * 1000);
+    return {
+      ymd: `${d.getUTCFullYear()}-${cinspPad(d.getUTCMonth() + 1)}-${cinspPad(d.getUTCDate())}`,
+      min: d.getUTCHours() * 60 + d.getUTCMinutes(),
+      dow: d.getUTCDay(),
+    };
+  }
+  // 試算表序列值（1899-12-30 起算天數，數值即試算表時區＝台北的牆上時間）→ 台北日期 / 分鐘
+  function cinspSerial(serial) { return cinspTpe(Math.round((serial - 25569) * 86400000) - 8 * 3600 * 1000); }
+  function cinspHmToMin(hm) { const m = /^(\d{1,2}):(\d{2})$/.exec(String(hm || '')); return m ? +m[1] * 60 + +m[2] : null; }
+  function cinspMinToHm(min) { return min == null ? '' : `${cinspPad(Math.floor(min / 60))}:${cinspPad(min % 60)}`; }
+  function cinspCell(r, i) { return i == null || i < 0 ? '' : String(r[i] == null ? '' : r[i]).trim(); }
+  function cinspHeader(rows) { return (rows[0] || []).map(h => String(h == null ? '' : h).trim()); }
+  // 表單選項可能是簡體字（「第 1 张表单回复」），比對區域前統一成繁體並去空白
+  function cinspNorm(s) { return String(s == null ? '' : s).replace(/\s+/g, '').replace(/静/g, '靜').replace(/喷/g, '噴'); }
+
+  // 讀整個分頁；分頁不存在回傳 null。serial=true 時時間戳記以序列值讀回（不解析顯示字串）
+  async function cinspReadTab(tab, serial) {
+    let url = `https://sheets.googleapis.com/v4/spreadsheets/${CI.SHEET_ID}/values/${encodeURIComponent(`'${String(tab).replace(/'/g, "''")}'!A:Z`)}?key=${DEFAULT_CONFIG.apiKey}`;
+    if (serial) url += '&valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER';
+    const res = await fetch(url, { cache: 'no-store' });
+    if (!res.ok) {
+      const j = await res.json().catch(() => null);
+      const msg = (j && j.error && j.error.message) || `HTTP ${res.status}`;
+      if (res.status === 400 && /Unable to parse range|not found/i.test(msg)) return null;
+      throw new Error(msg);
+    }
+    return (await res.json()).values || [];
+  }
+
+  // 管理員設定：日期 | 項目 | 狀態 | 備註 | 更新時間（依標題找欄；同日同項目以最後一列為準）
+  function cinspParseAdmin(rows, today) {
+    const out = { all: null, items: {} };
+    if (!rows || !rows.length) return out;
+    const header = cinspHeader(rows);
+    const hasHeader = header.includes('日期') || header.includes('項目');
+    const col = (name, fb) => { const i = header.indexOf(name); return hasHeader && i >= 0 ? i : fb; };
+    const c = { date: col('日期', 0), item: col('項目', 1), status: col('狀態', 2), note: col('備註', 3), time: col('更新時間', 4) };
+    (hasHeader ? rows.slice(1) : rows).forEach(r => {
+      const raw = cinspCell(r, c.date);
+      if ((CI.toYMD(raw) || raw) !== today) return;
+      const item = cinspCell(r, c.item);
+      if (!item) return;
+      const rec = { status: cinspCell(r, c.status), note: cinspCell(r, c.note), time: cinspCell(r, c.time) };
+      if (item === 'ALL') out.all = rec; else out.items[item] = rec;
+    });
+    return out;
+  }
+
+  // source 'script'：日期欄為 YYYY-MM-DD 文字，直接字串比對；欄位依 fields 的中文名找欄
+  function cinspScriptRecords(it, rows) {
+    if (!rows || rows.length < 2) return [];
+    const header = cinspHeader(rows);
+    const find = pred => it.fields.find(pred);
+    const colOf = f => { if (!f) return -1; const i = header.indexOf(f.nameZh); return i >= 0 ? i : it.fields.indexOf(f); };
+    const dateCol = colOf(find(f => f.type === 'date'));
+    const timeCol = colOf(find(f => f.type === 'time' && f.default === 'now') || find(f => f.type === 'time'));
+    const nameCol = colOf(find(f => f.type === 'employeeName'));
+    const pidCol = colOf(find(f => f.type === 'employee'));
+    const resultCol = colOf(find(f => f.type === 'result'));
+    const specCols = it.fields.filter(f => f.specParam).map(f => ({ f, col: colOf(f) }));
+    return rows.slice(1).map(r => {
+      const hm = CI.toHHmm(cinspCell(r, timeCol)) || '';
+      return {
+        ymd: cinspCell(r, dateCol), min: cinspHmToMin(hm), hm,
+        who: cinspCell(r, nameCol) || cinspCell(r, pidCol),
+        ng: cinspCell(r, resultCol).toUpperCase() === 'NG',
+        specVals: specCols.map(({ f, col }) => ({ f, val: cinspCell(r, col) })),
+        area: '',
+      };
+    });
+  }
+
+  // source 'form'：A 欄時間戳記為序列值；填寫人取姓名 → 工號 → Email 欄；區域以儲存格值比對 areas
+  function cinspFormRecords(it, rows) {
+    if (!rows || rows.length < 2) return [];
+    const header = cinspHeader(rows);
+    const whoCol = [/姓名|名字|填寫人|填写人/, /工號|工号/, /電子郵件|电子邮件|email/i]
+      .map(re => header.findIndex((h, i) => i > 0 && re.test(h))).find(i => i >= 0);
+    const areas = (it.areas || []).map(a => ({ a, n: cinspNorm(a) }));
+    return rows.slice(1).filter(r => typeof r[0] === 'number').map(r => {
+      const t = cinspSerial(r[0]);
+      const cells = r.slice(1).map(cinspNorm);
+      const hit = areas.find(x => cells.includes(x.n)) || areas.find(x => cells.some(c => c.includes(x.n)));
+      return { ymd: t.ymd, min: t.min, hm: cinspMinToHm(t.min), who: cinspCell(r, whoCol), ng: false, specVals: [], area: hit ? hit.a : '' };
+    });
+  }
+
+  function cinspEvaluate(tabs, adminRows, settings) {
+    const now = cinspTpe(Date.now());
+    const admin = cinspParseAdmin(adminRows, now.ymd);
+    const allSt = admin.all ? admin.all.status : '';
+    // 是否為生產日：管理員設定當天 ALL 優先，否則週一～五生產、週六日停產
+    const production = allSt === '停產' ? { on: false, byAdmin: true, note: admin.all.note }
+      : allSt === '生產' ? { on: true, byAdmin: true, note: admin.all.note }
+      : { on: now.dow >= 1 && now.dow <= 5, byAdmin: false, note: '' };
+
+    const items = CI.ITEMS.map((it, i) => {
+      const recs = (it.source === 'form' ? cinspFormRecords(it, tabs[i]) : cinspScriptRecords(it, tabs[i]))
+        .filter(r => r.ymd === now.ymd);
+      const target = it.dailyCount || 1;
+      const deadlines = (it.deadlineParams || []).map(p => settings[p] || null); // 'HH:mm'；null＝不判定逾期
+      const conf = admin.items[it.id];
+      const confirmed = conf && conf.status === '主管確認' ? conf : null;
+      const last = recs.slice().sort((a, b) => (a.min == null ? -1 : a.min) - (b.min == null ? -1 : b.min)).pop() || null;
+      const ngRecs = recs.filter(r => r.ng);
+      const x = { it, recs, count: recs.length, target, deadlines, last, ngRecs, confirmed, rounds: null };
+
+      if (it.areas && it.areas.length) {
+        // 分輪：每輪對應一個截止時間，每輪各區至少 1 筆（目前支援 1～2 輪，以 12:00 切分）
+        const nR = Math.max(1, deadlines.length);
+        x.rounds = Array.from({ length: nR }, (_, k) => {
+          const inRound = recs.filter(r => nR === 1 || ((r.min == null ? 0 : r.min) < CINSP_ROUND_SPLIT_MIN ? 0 : 1) === Math.min(k, 1));
+          const got = new Set(inRound.map(r => r.area).filter(Boolean));
+          const missing = it.areas.filter(a => !got.has(a));
+          const dl = cinspHmToMin(deadlines[k]);
+          return { deadline: deadlines[k], missing, overdue: dl != null && now.min > dl && missing.length > 0 };
+        });
+        x.overdue = x.rounds.some(r => r.overdue);
+        x.done = x.rounds.every(r => !r.missing.length);
+      } else {
+        // 第 k 個截止時間前應累計 ceil(dailyCount × k / 截止數) 筆
+        const n = deadlines.length;
+        x.overdue = deadlines.some((hm, k) => {
+          const dl = cinspHmToMin(hm);
+          return dl != null && now.min > dl && recs.length < Math.ceil(target * (k + 1) / n);
+        });
+        x.done = recs.length >= target;
+      }
+      x.ngOpen = ngRecs.length > 0 && !confirmed;
+      x.status = !production.on ? 'off' : (x.overdue || x.ngOpen) ? 'crit' : x.done ? 'ok' : 'pending';
+      return x;
+    });
+
+    // 總燈號取最差：紅 > 灰（待填）> 綠；非生產日為灰「停產」
+    let overall = 'ok';
+    if (!production.on) overall = 'off';
+    else if (items.some(x => x.status === 'crit')) overall = 'crit';
+    else if (items.some(x => x.status === 'pending')) overall = 'pending';
+    return { now, production, items, overall };
+  }
+
+  async function refreshCInsp() {
+    if (!CI) return;
+    try {
+      if (!cinspSettings || Date.now() - cinspSettingsAt > CINSP_SETTINGS_TTL) {
+        cinspSettings = await CI.loadSettings(); // 讀取失敗時內部已退回 DEFAULTS
+        cinspSettingsAt = Date.now();
+      }
+      const [adminRows, ...tabs] = await Promise.all([
+        cinspReadTab(CI.ADMIN_TAB, false),
+        ...CI.ITEMS.map(it => cinspReadTab(it.tab, it.source === 'form')),
+      ]);
+      cinspState = cinspEvaluate(tabs, adminRows, cinspSettings);
+      cinspLastOk = Date.now();
+      cinspErr = '';
+    } catch (e) {
+      console.warn('[C 棟點檢] 讀取失敗，保留上次狀態', e);
+      cinspErr = e.message || String(e);
+    }
+    renderCInspLight();
+    renderCInspPanel();
+  }
+
+  // ── C 棟標題上方狀態燈（掛在 C 棟標題膠囊內，跟著標題投影位置移動；點擊冒泡到標題 → 開面板）──
+  const cinspLightEl = document.createElement('div');
+  const cinspBannerC = document.querySelector('.bldg-banner.c-bldg');
+  if (CI && cinspBannerC) {
+    cinspLightEl.title = 'C 棟今日點檢（點擊查看）';
+    cinspBannerC.appendChild(cinspLightEl);
+  }
+  function renderCInspLight() {
+    const st = cinspState ? cinspState.overall : 'pending';
+    cinspLightEl.className = 'cinsp-light ' + st;
+    cinspLightEl.innerHTML = `<span class="cl-dot"></span><span>今日點檢</span><b>${cinspState ? CINSP_LIGHT_TEXT[st] : '讀取中'}</b>`;
+  }
+
+  // ── 點檢面板 ──
+  const cinspPanelEl = document.getElementById('cinsp-panel');
+  let cinspPanelOpen = false;
+  function openCInspPanel() {
+    if (!CI) return;
+    closeImmPanel();
+    cinspPanelOpen = true;
+    cinspLoginOpen = false;
+    cinspMsgState = { text: '', type: '' };
+    cinspPanelEl.innerHTML = '';
+    renderCInspPanel();
+    cinspPanelEl.classList.add('open');
+  }
+  function closeCInspPanel() {
+    cinspPanelOpen = false;
+    if (cinspPanelEl) cinspPanelEl.classList.remove('open');
+  }
+  function cinspStatusText(x) {
+    if (x.status === 'off') return '今日停產 No Production';
+    if (x.status === 'pending') return '待填 Pending';
+    if (x.status === 'crit') {
+      if (x.ngOpen && x.overdue) return '逾期 · NG 待確認';
+      return x.ngOpen ? 'NG 待主管確認' : '逾期未達標 Overdue';
+    }
+    return x.confirmed && x.ngRecs.length ? '主管已確認 Confirmed' : '已完成 Done';
+  }
+  function cinspNgHtml(rec) {
+    const specs = [...new Set(rec.specVals.map(({ f }) => CI.specText(CI.getSpec(f, cinspSettings))).filter(Boolean))];
+    const vals = rec.specVals.map(({ f, val }) => {
+      const bad = CI.isOutOfSpec(val, CI.getSpec(f, cinspSettings));
+      return `${esc(f.nameZh)} <b class="${bad ? 'ci-ng' : ''}">${esc(val || '—')}</b>`;
+    }).join(' · ');
+    return (vals || 'NG') + (specs.length ? `<br><span style="color:var(--fg-mute)">目前規格 ${esc(specs.join(' / '))}</span>` : '');
+  }
+  function cinspItemHtml(x, isAdmin) {
+    const it = x.it;
+    const [badgeCls, icon] = CINSP_BADGE[x.status];
+    let rows = immRow('今日筆數', `<b>${x.count}</b> / ${x.target}`);
+    if (x.rounds) {
+      x.rounds.forEach((r, k) => {
+        const v = r.missing.length
+          ? `<span style="color:${r.overdue ? 'var(--crit)' : 'var(--fg-mute)'}">缺 ${esc(r.missing.join('、'))}</span>`
+          : '<span style="color:var(--ok)">已齊</span>';
+        rows += immRow(`第 ${k + 1} 輪 · 截止 ${r.deadline || '—'}`, v);
+      });
+    } else {
+      rows += immRow('截止時間', esc(x.deadlines.filter(Boolean).join(' / ') || '—'));
+    }
+    rows += immRow('最後填寫', x.last ? esc([x.last.hm, x.last.who].filter(Boolean).join(' · ') || '—') : '尚未填寫');
+    x.ngRecs.forEach(rec => { rows += immRow('NG' + (rec.hm ? ' ' + rec.hm : ''), cinspNgHtml(rec)); });
+    if (x.confirmed) {
+      rows += immRow('主管已確認 Confirmed', esc(x.confirmed.note || '—') + (x.confirmed.time ? `<br><span style="color:var(--fg-mute)">${esc(x.confirmed.time)}</span>` : ''));
+    }
+    let act = '';
+    if (isAdmin && x.status === 'crit' && x.ngOpen) {
+      act = `<div class="ci-act"><input id="ci-note-${esc(it.id)}" maxlength="100" placeholder="主管確認備註（必填）">
+        <button type="button" class="ip-btn" data-act="confirm" data-item="${esc(it.id)}">主管確認</button></div>`;
+    } else if (isAdmin && x.confirmed) {
+      act = `<div class="ci-act"><button type="button" class="ip-link" data-act="unconfirm" data-item="${esc(it.id)}">↩ 取消確認</button></div>`;
+    }
+    const link = it.source === 'script'
+      ? `<a class="ci-link" href="c-inspection.html?item=${encodeURIComponent(it.id)}" target="_blank" rel="noopener">📝 開啟填寫表單 →</a>` : '';
+    return `<div class="ci-item ${x.status}">
+      <div class="ci-head"><div class="ci-name"><b>${esc(it.nameZh)}</b><small>${esc(it.nameEn)}</small></div>
+        <span class="status-badge ${badgeCls}">${icon} ${esc(cinspStatusText(x))}</span></div>
+      ${rows}${act}${link}
+    </div>`;
+  }
+  function cinspAdminHtml() {
+    const msg = `<div class="ip-msg ${cinspMsgState.type}" id="ci-msg">${esc(cinspMsgState.text)}</div>`;
+    if (immIsAdmin()) {
+      const cur = cinspState && cinspState.production.byAdmin ? (cinspState.production.on ? '生產' : '停產') : '';
+      const seg = [['停產', '今日停產', 'var(--crit)'], ['生產', '恢復生產', 'var(--ok-bright)'], ['', '清除設定', 'var(--info-bright)']]
+        .map(([v, t, c]) => `<button type="button" data-act="day" data-val="${v}" class="${cur === v ? 'on' : ''}" style="${cur === v ? 'background:' + c : ''}">${t}</button>`).join('');
+      return `
+        <div style="color:var(--fg-mute)">今日生產設定（清除＝依星期：週一～五生產）</div>
+        ${cinspPw ? '' : '<input type="password" id="ci-pw" placeholder="管理者密碼（送出時驗證）">'}
+        <input id="ci-day-note" maxlength="100" placeholder="停產／恢復生產備註（選填）">
+        <div class="ip-seg">${seg}</div>
+        ${msg}
+        <button type="button" class="ip-link" data-act="logout">🔓 登出管理者</button>`;
+    }
+    if (cinspLoginOpen) {
+      return `<input type="password" id="ci-login-pw" placeholder="請輸入管理者密碼">
+        <button type="button" class="ip-btn" data-act="login">登入</button>${msg}`;
+    }
+    return `<button type="button" class="ip-link" data-act="login-open">🔑 管理者登入（停產設定／主管確認）</button>`;
+  }
+  function renderCInspPanel() {
+    if (!cinspPanelOpen || !cinspPanelEl) return;
+    // 每 30 秒重繪時保留輸入中的備註 / 密碼與游標位置
+    const keep = {};
+    cinspPanelEl.querySelectorAll('input[id]').forEach(el => { keep[el.id] = el.value; });
+    const focusId = cinspPanelEl.contains(document.activeElement) ? document.activeElement.id : '';
+
+    const s = cinspState;
+    let body;
+    if (!s) {
+      body = `<div class="ci-day">${cinspErr ? '❌ 讀取失敗：' + esc(cinspErr) : '讀取中…'}</div>`;
+    } else {
+      const p = s.production;
+      const day = p.on ? (p.byAdmin ? '生產日（管理員設定）' : '生產日') : (p.byAdmin ? '今日停產（管理員設定）' : '非生產日（週六日）');
+      body = `<div class="ci-day">📅 ${esc(s.now.ymd)}（${CINSP_WEEKDAY[s.now.dow]}）· <b>${day}</b>${p.note ? ' · ' + esc(p.note) : ''}</div>` +
+        s.items.map(x => cinspItemHtml(x, immIsAdmin())).join('');
+    }
+    const upd = cinspLastOk
+      ? '更新 ' + immHms(new Date(cinspLastOk)) + (cinspErr ? ' · 最近一次讀取失敗，顯示上次資料' : '')
+      : '';
+    cinspPanelEl.innerHTML = `
+      <h3><span>🧪 C 棟今日點檢<small>DAILY INSPECTION</small></span><button type="button" class="ip-close" data-act="close" title="關閉">✕</button></h3>
+      ${body}
+      ${upd ? `<div class="ci-upd">${upd}</div>` : ''}
+      <div class="ip-admin">${cinspAdminHtml()}</div>`;
+
+    Object.entries(keep).forEach(([id, v]) => { const el = document.getElementById(id); if (el) el.value = v; });
+    const f = focusId && document.getElementById(focusId);
+    if (f) f.focus();
+    else if (cinspLoginOpen && !immIsAdmin()) setTimeout(() => { const pw = document.getElementById('ci-login-pw'); if (pw) pw.focus(); }, 0);
+  }
+  function cinspMsg(text, type) {
+    cinspMsgState = { text, type: type || '' };
+    const el = document.getElementById('ci-msg');
+    if (el) { el.textContent = text; el.className = 'ip-msg ' + (type || ''); }
+  }
+
+  async function cinspLogin() {
+    const el = document.getElementById('ci-login-pw');
+    if (!el) return;
+    if (await immSha256(el.value) === ADMIN_PASSWORD_HASH) {
+      immLsSet(ADMIN_SESSION_KEY, String(Date.now() + 24 * 3600 * 1000)); // 與 A 棟同一組登入狀態
+      cinspPw = el.value;
+      cinspLoginOpen = false;
+      cinspMsgState = { text: '', type: '' };
+      renderCInspPanel();
+    } else {
+      cinspMsg('密碼錯誤', 'err');
+    }
+  }
+  // 已登入（可能在 A 棟或其他頁面登入）但記憶體沒有密碼時，從面板密碼欄取得並驗證
+  async function cinspGetPw() {
+    if (cinspPw) return cinspPw;
+    const el = document.getElementById('ci-pw');
+    const pw = el ? el.value : '';
+    if (!pw) { if (el) el.focus(); throw new Error('請輸入管理者密碼'); }
+    if (await immSha256(pw) !== ADMIN_PASSWORD_HASH) throw new Error('密碼錯誤');
+    cinspPw = pw;
+    return pw;
+  }
+
+  // 不設 Content-Type（text/plain）→ 簡單請求，不觸發 CORS preflight（同 postImmStatus）
+  async function cinspPost(params) {
+    if (!navigator.onLine) throw new Error('離線中，請恢復網路後重試');
+    if (!CI.SCRIPT_URL || /^TODO/.test(CI.SCRIPT_URL)) throw new Error('尚未設定 SCRIPT_URL（c-inspection-config.js）');
+    const res = await fetch(CI.SCRIPT_URL, { method: 'POST', body: JSON.stringify(params) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json().catch(() => null);
+    if (json && json.ok === false) throw new Error(json.message || json.error || '伺服器拒絕');
+    return json;
+  }
+
+  async function cinspSetAdmin(btn, item, status, note, clearInputId) {
+    if (!immIsAdmin()) { renderCInspPanel(); return; }
+    if (cinspBusy) return;
+    cinspBusy = true;
+    btn.disabled = true;
+    cinspMsg('送出中…');
+    try {
+      const pw = await cinspGetPw();
+      await cinspPost({ action: 'setAdmin', pw, date: cinspTpe(Date.now()).ymd, item, status, note });
+      const clr = clearInputId && document.getElementById(clearInputId);
+      if (clr) clr.value = '';
+      cinspMsg('✅ 已更新 ' + immHms(new Date()), 'ok');
+      await refreshCInsp(); // 送出成功立即重讀，不等下一輪輪詢
+    } catch (e) {
+      if (/密碼|password/i.test(e.message)) cinspPw = '';
+      cinspMsg('❌ 送出失敗：' + e.message, 'err');
+      renderCInspPanel();
+    } finally {
+      cinspBusy = false;
+      btn.disabled = false;
+    }
+  }
+
+  if (cinspPanelEl) {
+    cinspPanelEl.addEventListener('click', (e) => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      const act = b.dataset.act;
+      if (act === 'close') closeCInspPanel();
+      else if (act === 'login-open') { cinspLoginOpen = true; renderCInspPanel(); }
+      else if (act === 'login') cinspLogin();
+      else if (act === 'logout') {
+        try { localStorage.removeItem(ADMIN_SESSION_KEY); } catch(err) {}
+        cinspPw = '';
+        cinspMsgState = { text: '', type: '' };
+        renderCInspPanel();
+      }
+      else if (act === 'day') {
+        const note = (document.getElementById('ci-day-note') || {}).value || '';
+        cinspSetAdmin(b, 'ALL', b.dataset.val, note.trim(), 'ci-day-note');
+      }
+      else if (act === 'confirm') {
+        const id = 'ci-note-' + b.dataset.item;
+        const el = document.getElementById(id);
+        const note = el ? el.value.trim() : '';
+        if (!note) { cinspMsg('請填寫主管確認備註', 'err'); if (el) el.focus(); return; }
+        cinspSetAdmin(b, b.dataset.item, '主管確認', note, id);
+      }
+      else if (act === 'unconfirm') cinspSetAdmin(b, b.dataset.item, '', '');
+    });
+    cinspPanelEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && e.target.id === 'ci-login-pw') { e.preventDefault(); cinspLogin(); }
+      if (e.key === 'Escape') closeCInspPanel();
+    });
+  }
+
+  // 跟著塗裝區同一個 30 秒週期重新整理
+  if (CI) {
+    renderCInspLight();
+    refreshCInsp();
+    setInterval(refreshCInsp, REFRESH_MS);
+  }
 
   document.getElementById('theme-toggle').addEventListener('click', () => {
     const root = document.documentElement;
