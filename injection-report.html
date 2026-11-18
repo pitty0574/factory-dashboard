@@ -1279,6 +1279,80 @@ tbody td.empty { font-family: var(--font-ui); }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* ── 履歷標籤：列印開關 / 補印 / 待上傳 ── */
+.label-ctrl {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+.label-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--panel-alt);
+  color: var(--fg-mute);
+  font: 600 11.5pt var(--font-ui);
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.18s ease;
+}
+.label-toggle input { width: 18px; height: 18px; padding: 0; margin: 0; accent-color: var(--accent); cursor: pointer; }
+.label-toggle.on { color: var(--fg); border-color: var(--ok); box-shadow: 0 0 10px var(--ok-fill); }
+.small-btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; box-shadow: none; }
+#retry-badge {
+  display: none;
+  align-items: center;
+  height: 36px;
+  padding: 0 13px;
+  border-radius: 9px;
+  border: 1px solid var(--warn);
+  background: var(--warn-fill);
+  color: var(--warn);
+  font: 700 11.5pt var(--font-ui);
+}
+#retry-badge.show { display: inline-flex; }
+html[data-theme="light"] #retry-badge { color: #b45309; }
+#msg.warn { color: var(--warn); text-shadow: 0 0 10px var(--warn-fill); }
+
+/* ── 履歷標籤列印區（平常隱藏；尺寸由 LABEL_W_MM / LABEL_H_MM 寫入 #label-page-style）── */
+#label-print-area { display: none; }
+.lbl {
+  width: var(--lbl-w);
+  height: var(--lbl-h);
+  box-sizing: border-box;
+  padding: 1.5mm 2mm;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8mm;
+  overflow: hidden;
+  background: #fff;
+  color: #000;
+  font-family: system-ui, Arial, 'Microsoft JhengHei', sans-serif;
+  break-after: page;
+  page-break-after: always;
+}
+.lbl:last-child { break-after: auto; page-break-after: auto; }
+.lbl-top { display: flex; align-items: center; gap: 2.5mm; height: 15mm; flex: none; }
+.lbl-qr, .lbl-qr svg { width: 15mm; height: 15mm; display: block; flex: none; }
+.lbl-pid { font-size: 8pt; line-height: 1.2; }
+.lbl-pid b { display: block; font-size: 15pt; letter-spacing: 0.04em; }
+.lbl-bar { flex: 1; min-height: 0; }
+.lbl-bar svg { width: 100%; height: 100%; display: block; }
+.lbl-sn { flex: none; text-align: center; font-size: 10pt; font-weight: 800; line-height: 1.1; letter-spacing: 0.06em; }
+@media print {
+  html, body { background: #fff !important; margin: 0 !important; padding: 0 !important; min-height: 0 !important; }
+  body::before, body::after { display: none !important; }
+  body > *:not(#label-print-area) { display: none !important; }
+  #label-print-area { display: block; }
+}
+
 /* ── 響應式斷點 ── */
 @media (max-width: 1024px) {
   .grid { grid-template-columns: 1fr; }
@@ -1407,12 +1481,17 @@ tbody td.empty { font-family: var(--font-ui); }
           </div>
         </div>
 
-        <div class="f-item span-2">
+        <div class="f-item">
           <label for="f-pid">👤 作業員工號 <span class="lbl-code">OPERATOR ID</span></label>
           <div class="field">
             <input id="f-pid" type="text" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="輸入 4 碼">
             <span id="pid-name"></span>
           </div>
+        </div>
+
+        <div class="f-item">
+          <label for="f-prod-date">📅 生產日期 <span class="lbl-code">PROD DATE</span></label>
+          <div class="field"><input id="f-prod-date" type="date"></div>
         </div>
 
         <div class="f-item">
@@ -1505,6 +1584,11 @@ tbody td.empty { font-family: var(--font-ui); }
       <div class="submit-row">
         <button class="big-btn" id="btn-submit" type="button">📤 送出登錄資料 (Enter)</button>
         <div class="hint">Enter → 確認彈窗 → Enter 送出　｜　Ctrl+Enter 直接送出　｜　Esc 取消</div>
+        <div class="label-ctrl">
+          <label class="label-toggle" id="label-toggle"><input type="checkbox" id="f-label-print"> 🏷️ 列印標籤</label>
+          <button class="small-btn" id="btn-reprint" type="button" title="補印上一次送出的標籤（序號不變、不重新寫入）">🖨️ 補印上一張</button>
+          <span id="retry-badge" title="寫入失敗的資料，每 15 秒自動重送"></span>
+        </div>
         <div id="msg"></div>
       </div>
     </section>
@@ -1540,6 +1624,12 @@ tbody td.empty { font-family: var(--font-ui); }
   </div>
 </div>
 
+<!-- 履歷標籤列印區（@media print 時只顯示這裡）-->
+<div id="label-print-area" aria-hidden="true"></div>
+<style id="label-page-style"></style>
+
+<script src="js/vendor/qrcode.js"></script>
+<script src="js/vendor/JsBarcode.all.min.js"></script>
 <script>
 (function(){
   const CONFIG = {
@@ -1903,14 +1993,15 @@ tbody td.empty { font-family: var(--font-ui); }
   // 標題找不到時的預設欄序：時間戳記, 日期, 機台, 工號, 姓名, 車型, 件號, 料號, 模具編號, 模次, 產出數量, 班別, 狀態, 備註
   function parseMachineRows(rows) {
     if (!rows.length) return [];
-    const col = { ts: 0, date: 1, pid: 3, model: 5, part: 6, material: 7, mold: 8, shots: 9, qty: 10, shift: 11, status: 12, note: 13 };
+    const col = { ts: 0, date: 1, pid: 3, model: 5, part: 6, material: 7, mold: 8, shots: 9, qty: 10, shift: 11, status: 12, note: 13, serial: -1 };
     const header = rows[0].map(h => String(h || '').trim());
     const isHeader = header.some(h => /工號|車型|時間/.test(h));
     if (isHeader) {
       const found = {};
       header.forEach((h, i) => {
         const set = k => { if (!(k in found)) { found[k] = i; } };
-        if (/時間戳記|時間/.test(h))        set('ts');
+        if (/序號/.test(h))                 set('serial');   // 履歷序號（放第一個，避免被其他規則吃掉）
+        else if (/時間戳記|時間/.test(h))   set('ts');
         else if (/日期/.test(h))            set('date');
         else if (/工號/.test(h))            set('pid');
         else if (/車型/.test(h))            set('model');
@@ -1936,6 +2027,7 @@ tbody td.empty { font-family: var(--font-ui); }
         pid: g(r, 'pid'), model: g(r, 'model'), part: g(r, 'part'), material: g(r, 'material'),
         // H 欄留白（舊資料）→ null，仍計入今日模次；只有明確 0（兩穴件號2 列）才排除
         shots: g(r, 'shots') === '' ? null : num(g(r, 'shots')), qty: num(g(r, 'qty')),
+        serial: g(r, 'serial'),
       });
     });
     return out;
@@ -1947,6 +2039,7 @@ tbody td.empty { font-family: var(--font-ui); }
   let statusMap = {};
   let refreshSeq = 0;       // 機台切換時丟棄舊請求的結果
   let newRowFlag = false;
+  let sheetRowsCache = null; // { machine, rows } 本機台分頁全部資料（算流水號用）
 
   function setConn(ok) {
     $('conn').textContent = ok ? '🟢 連線正常' : '🔴 連線異常';
@@ -1960,7 +2053,10 @@ tbody td.empty { font-family: var(--font-ui); }
       const [machineRows, statusRows] = await sheetsBatchGet(CONFIG.sheetsId, [q(machine) + '!A:Z', q(STATUS_SHEET) + '!A:Z']);
       if (seq !== refreshSeq) return;
       const t = dateSlash(new Date());
-      todayRows = parseMachineRows(machineRows)
+      const allRows = parseMachineRows(machineRows);
+      sheetRowsCache = { machine, rows: allRows };
+      syncSeq();
+      todayRows = allRows
         .filter(r => r.date === t)
         .sort((a, b) => (b.ts ? b.ts.getTime() : 0) - (a.ts ? a.ts.getTime() : 0));
       statusMap = parseStatusSheet(statusRows);
@@ -2051,13 +2147,17 @@ tbody td.empty { font-family: var(--font-ui); }
   // ── 模具編號 = 件號對應車型 + "-" + 件號中段（自動生成，唯讀）──
   // 例：YCQ-85022-0440S（Sheet 車型 CQ）→ CQ-85022
   // 未建檔件號才退回用畫面上「生產車型」欄位的值
-  function calcMoldId(partNo) {
+  // 履歷序號 makeSerial 也用 parsePart，兩邊車型／中段規則一致
+  function parsePart(partNo) {
     partNo = String(partNo || '').trim();
-    if (!partNo) return '';
     const segments = partNo.split('-');
-    if (segments.length < 2 || !segments[1]) return '';
-    const model = partToModel[partNo] || $('f-model').value.trim() || '??';
-    return `${model}-${segments[1]}`;
+    const mid = partNo && segments.length >= 2 ? segments[1] : '';
+    if (!mid) return { model: '', mid: '' };
+    return { model: partToModel[partNo] || $('f-model').value.trim() || '??', mid };
+  }
+  function calcMoldId(partNo) {
+    const { model, mid } = parsePart(partNo);
+    return mid ? `${model}-${mid}` : '';
   }
   function moldNo() { return calcMoldId($('f-part').value); }
   function updateMold() {
@@ -2283,6 +2383,235 @@ tbody td.empty { font-family: var(--font-ui); }
   $('f-status').addEventListener('change', updateStatusColor);
   updateStatusColor();
 
+  // ── 履歷序號 ──
+  // 格式：{車型}{件號中段}{YY}{月碼}{DD}{流水3碼}
+  // 例：TZS-85022-0440、2026/11/18、第 76 件 → ZS8502226B18076
+  // 車型／中段沿用模具編號的 parsePart；月碼 1~9＝數字、10~12＝A~C；流水號補足 3 碼（超過 999 自然變 4 碼）
+  // seq 不給 → 只回傳前綴（讀 Sheet 比對最大流水號用）
+  function makeSerial(partNo, date, seq) {
+    const { model, mid } = parsePart(partNo);
+    const head = model + mid + String(date.getFullYear()).slice(-2) + '123456789ABC'[date.getMonth()] + pad(date.getDate());
+    return seq == null ? head : head + String(seq).padStart(3, '0');
+  }
+
+  // 生產日期：序號日期與流水號「當天」都以此欄為準（晚班跨午夜不跳號）
+  function ymdDash(d) { return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
+  function prodDate() {
+    const m = $('f-prod-date').value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    return m ? new Date(+m[1], +m[2] - 1, +m[3]) : new Date();
+  }
+
+  // 流水號：同機台、同生產日期、同件號累計，跨批次不歸零
+  // 記憶體 seqMem 與 localStorage 各存一份，配號時取兩者較大值（Sheet 的最大值由 syncSeq 併入 seqMem）
+  const seqMem = {};
+  const seqKey = (machine, d, part) => `injSeq_${machine}_${ymdDash(d).replace(/-/g, '')}_${part}`;
+  // 一筆多件時 Sheet 存「首~尾」
+  function serialTail(cell, prefix) {
+    return String(cell || '').split('~').reduce((mx, s) => {
+      s = s.trim();
+      const n = s.startsWith(prefix) ? s.slice(prefix.length) : '';
+      return /^\d+$/.test(n) ? Math.max(mx, +n) : mx;
+    }, 0);
+  }
+  // 由快取的本機台分頁資料，把目前生產日期各件號的最大流水號併入記憶體
+  function syncSeq() {
+    const c = sheetRowsCache;
+    if (!c || c.machine !== currentMachine) return;
+    const d = prodDate();
+    const prefixes = {};
+    c.rows.forEach(r => {
+      if (!r.part || !r.serial) return;
+      const n = serialTail(r.serial, prefixes[r.part] = prefixes[r.part] || makeSerial(r.part, d));
+      if (!n) return;
+      const k = seqKey(c.machine, d, r.part);
+      seqMem[k] = Math.max(seqMem[k] || 0, n);
+    });
+  }
+  function takeSerials(machine, part, d, count) {
+    const k = seqKey(machine, d, part);
+    const cur = Math.max(seqMem[k] || 0, Number(lsGet(k)) || 0);
+    seqMem[k] = cur + count;
+    lsSet(k, String(cur + count));
+    return Array.from({ length: count }, (_, i) => makeSerial(part, d, cur + 1 + i));
+  }
+  // localStorage 流水號備份只留 7 天
+  function purgeOldSeq() {
+    try {
+      const limit = ymdDash(new Date(Date.now() - 7 * 864e5)).replace(/-/g, '');
+      Object.keys(localStorage).forEach(k => {
+        const m = k.match(/^injSeq_[^_]+_(\d{8})_/);
+        if (m && m[1] < limit) localStorage.removeItem(k);
+      });
+    } catch (e) {}
+  }
+  // 送出前配號：每個件號 qty 件 → qty 個序號（兩穴時兩件號各自累計）
+  // 寫入 params.serial（件號1）/ params.serial2（件號2），回傳要印的標籤（兩穴時依模次交錯）
+  function assignSerials(params) {
+    const d = prodDate();
+    const parts = (params.cavity === 2 ? [params.partNo, params.partNo2] : [params.partNo]).map(p => String(p).trim());
+    const lists = parts.map(p => takeSerials(params.machine, p, d, params.qty));
+    const range = l => l.length > 1 ? `${l[0]}~${l[l.length - 1]}` : l[0];
+    params.serial = range(lists[0]);
+    params.serial2 = lists[1] ? range(lists[1]) : '';
+    const labels = [];
+    for (let i = 0; i < params.qty; i++) {
+      lists.forEach((l, j) => labels.push({ serial: l[i], partNo: parts[j], pid: params.pid, prodDate: ymdDash(d) }));
+    }
+    return labels;
+  }
+
+  // ── 履歷標籤列印 ──
+  const LABEL_W_MM = 50, LABEL_H_MM = 30;   // 確認標籤機與標籤尺寸後再調
+  $('label-page-style').textContent =
+    `@page { size: ${LABEL_W_MM}mm ${LABEL_H_MM}mm; margin: 0; }\n` +
+    `#label-print-area { --lbl-w: ${LABEL_W_MM}mm; --lbl-h: ${LABEL_H_MM}mm; }`;
+
+  // QR 內容（格式之後再討論，先只放序號）
+  function buildQrContent(record) {
+    return record.serial;
+  }
+
+  // QR、CODE128 都同步產生 SVG，window.print() 前就已畫好
+  function renderLabels(records) {
+    const area = $('label-print-area');
+    area.innerHTML = records.map(rec => {
+      const qr = qrcode(0, 'M');
+      qr.addData(buildQrContent(rec));
+      qr.make();
+      return `<div class="lbl">
+        <div class="lbl-top">
+          <div class="lbl-qr">${qr.createSvgTag({ cellSize: 1, margin: 0, scalable: true })}</div>
+          <div class="lbl-pid">工號<b>${esc(rec.pid)}</b></div>
+        </div>
+        <div class="lbl-bar"></div>
+        <div class="lbl-sn">${esc(rec.serial)}</div>
+      </div>`;
+    }).join('');
+    area.querySelectorAll('.lbl-bar').forEach((box, i) => {
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      JsBarcode(svg, records[i].serial, { format: 'CODE128', displayValue: false, margin: 0, width: 2, height: 60, background: '#ffffff', lineColor: '#000000' });
+      ['width', 'height', 'style'].forEach(a => svg.removeAttribute(a));
+      svg.setAttribute('preserveAspectRatio', 'none');   // 橫向等比拉伸填滿標籤寬度
+      box.appendChild(svg);
+    });
+  }
+
+  let printFocus = null;
+  // 回傳 false 表示沒印（呼叫端自己把焦點還回去）
+  function printLabels(records, focusEl) {
+    if (!records || !records.length) return false;
+    if (typeof qrcode !== 'function' || typeof JsBarcode !== 'function') {
+      showMsg('❌ 標籤函式庫載入失敗（js/vendor），無法列印', 'err', false);
+      return false;
+    }
+    try {
+      renderLabels(records);
+    } catch (e) {
+      console.error('[injection-report] 標籤產生失敗', e);
+      showMsg('❌ 標籤產生失敗：' + e.message, 'err', false);
+      return false;
+    }
+    printFocus = focusEl || null;
+    window.print();
+    return true;
+  }
+  // 列印完成 → 清空列印區，焦點回到原本按 Enter 的位置
+  window.addEventListener('afterprint', () => {
+    $('label-print-area').innerHTML = '';
+    focusBack(printFocus);
+    printFocus = null;
+  });
+  function focusBack(el) {
+    const usable = el && el.isConnected && !el.disabled && el.offsetParent !== null && el !== $('btn-reprint');
+    const t = usable ? el : $('f-qty');
+    t.focus();
+    if (t === $('f-qty')) t.select();
+  }
+
+  // 列印開關（預設關閉：沒接標籤機的電腦不受影響）
+  const labelPrintOn = () => $('f-label-print').checked;
+  function applyLabelToggle() { $('label-toggle').classList.toggle('on', labelPrintOn()); }
+  $('f-label-print').addEventListener('change', () => {
+    lsSet('injLabelPrint', labelPrintOn() ? '1' : '0');
+    applyLabelToggle();
+  });
+
+  // 補印上一張：序號不變、不重新寫入（一次送出多張時整組補印）
+  function lastLabels() {
+    try { const r = JSON.parse(lsGet('injLastLabel') || 'null'); return Array.isArray(r) && r.length ? r : null; } catch (e) { return null; }
+  }
+  function updateReprintBtn() { $('btn-reprint').disabled = !lastLabels(); }
+  $('btn-reprint').addEventListener('click', () => {
+    const recs = lastLabels();
+    if (!recs) return;
+    if (printLabels(recs, null)) showMsg('🖨️ 已補印 ' + recs.map(r => r.serial).join('、'), 'ok', true);
+    else focusBack(null);
+  });
+
+  // ── 寫入失敗重送佇列（localStorage，每 15 秒重送）──
+  const RETRY_KEY = 'injRetryQueue';
+  const RETRY_MS = 15000;
+  function getQueue() {
+    try { const q = JSON.parse(lsGet(RETRY_KEY) || '[]'); return Array.isArray(q) ? q : []; } catch (e) { return []; }
+  }
+  function setQueue(q) { lsSet(RETRY_KEY, JSON.stringify(q)); renderRetryBadge(q.length); }
+  function renderRetryBadge(n = getQueue().length) {
+    $('retry-badge').textContent = `⏳ 待上傳 ${n} 筆`;
+    $('retry-badge').classList.toggle('show', n > 0);
+  }
+  let flushing = false;
+  async function flushRetryQueue() {
+    if (flushing || !navigator.onLine) return;
+    flushing = true;
+    let sent = 0;
+    try {
+      for (let q = getQueue(); q.length; q = getQueue()) {
+        const item = q[0];
+        try {
+          await postRecord(item);
+          sent++;
+        } catch (e) {
+          if (!e.rejected) break;   // 網路問題 → 下一輪再送
+          console.error('[injection-report] 重送被伺服器拒絕，移出佇列', item, e);
+          showMsg(`❌ 待上傳資料被拒絕（${item.serial}）：${e.message}`, 'err', false);
+        }
+        setQueue(getQueue().filter(x => x.qid !== item.qid));
+      }
+    } finally {
+      flushing = false;
+    }
+    if (sent) refresh();
+  }
+
+  // 寫入（不等結果）：成功 → 校正批次進度；網路失敗 → 進佇列；伺服器拒絕 → 紅字，不重送
+  function uploadRecord(params) {
+    postRecord(params).then(() => {
+      if (params.batchId && activeBatch && activeBatch.batchId === params.batchId) loadBatchProgress(params.batchId);
+      if (getQueue().length) flushRetryQueue();
+    }).catch(e => {
+      if (e.rejected) {
+        showMsg(`❌ 寫入被拒絕（${params.serial}）：${e.message}`, 'err', false);
+        return;
+      }
+      // retry: true → doPost 遇到 Sheet 已有同序號時略過（第一次其實寫成功、只是沒收到回應）
+      const q = getQueue();
+      q.push(Object.assign({}, params, { retry: true, qid: Date.now().toString(36) + Math.random().toString(36).slice(2, 6) }));
+      setQueue(q);
+      showMsg('⚠️ 上傳失敗，已加入待上傳佇列：' + friendlyErr(e), 'warn', false);
+    });
+  }
+
+  // 送出：配號 → 印標 → 寫入；不等寫入結果，現場節奏優先
+  function submitRecord(params, focusEl) {
+    const labels = assignSerials(params);
+    lsSet('injLastLabel', JSON.stringify(labels));
+    updateReprintBtn();
+    afterSubmit(params);
+    // 先發出請求再叫列印視窗（Chrome 的 print() 會卡住 JS，請求要先送出去）
+    uploadRecord(params);
+    if (!(labelPrintOn() && printLabels(labels, focusEl))) focusBack(focusEl);
+  }
+
   // ── 訊息區 ──
   let msgTimer = null;
   function showMsg(text, type, autoFade) {
@@ -2329,6 +2658,7 @@ tbody td.empty { font-family: var(--font-ui); }
     const bad = [];
     if (!$('f-machine').value) bad.push(['f-machine', '機台']);
     if (!$('f-pid').value.trim()) bad.push(['f-pid', '工號']);
+    if (!$('f-prod-date').value) bad.push(['f-prod-date', '生產日期']);
     if (isDual()) {
       const p2 = $('f-part2').value.trim();
       if (!p2) bad.push(['f-part2', '件號2']);
@@ -2346,13 +2676,18 @@ tbody td.empty { font-family: var(--font-ui); }
     const res = await fetch(CONFIG.webAppUrl, { method: 'POST', body: JSON.stringify(params) });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const json = await res.json().catch(() => null);
-    if (json && json.ok === false) throw new Error(json.message || json.error || '伺服器拒絕');
+    if (json && json.ok === false) {
+      const err = new Error(json.message || json.error || '伺服器拒絕');
+      err.rejected = true;   // 資料本身有問題，重送也沒用
+      throw err;
+    }
     return json;
   }
 
-  function afterSuccess(params) {
+  // 送出後立即更新畫面（不等寫入結果；30 秒刷新會以 Sheet 實際資料為準）
+  function afterSubmit(params) {
     const now = new Date();
-    showMsg('✅ 已上傳 ' + hhmmss(now), 'ok', true);
+    showMsg('✅ 已送出 ' + hhmmss(now) + '　序號 ' + params.serial + (params.serial2 ? '、' + params.serial2 : ''), 'ok', true);
     $('f-note').value = '';
     $('f-qty').value = 1;
     lsSet('lastMachine', params.machine);
@@ -2367,15 +2702,12 @@ tbody td.empty { font-family: var(--font-ui); }
       newRowFlag = true;
       renderToday();
     }
-    // 批次進度：先 +N 即時顯示，再用 Sheet 校正
+    // 批次進度：先 +N 即時顯示，寫入成功後再用 Sheet 校正（uploadRecord）
     if (params.batchId && activeBatch && activeBatch.batchId === params.batchId) {
       parts.forEach(p => { batchProgress[p] = (batchProgress[p] || 0) + params.qty; });
       renderBatch();
-      loadBatchProgress(params.batchId);
     }
     renderMachineStatus(params.status);
-    $('f-qty').focus();
-    $('f-qty').select();
   }
 
   // ── 彈窗 ──
@@ -2383,6 +2715,7 @@ tbody td.empty { font-family: var(--font-ui); }
   let sending = false;
   let modalOpenedAt = 0;
   let pending = null;
+  let enterOrigin = null;   // 按 Enter 開彈窗時的焦點位置，送出後還回去
 
   function openModal() {
     if (modalOpen || sending) return;
@@ -2405,12 +2738,14 @@ tbody td.empty { font-family: var(--font-ui); }
         ? row(['模次', `${p.qty}（每件號各 ${p.qty} 件，共 ${p.qty * 2} 件）`])
         : row(['產出', p.qty])) +
       row(['班別', esc(p.shift)], ['狀態', `${STATUS_ICON[p.status] || ''} ${esc(p.status)}`]) +
-      row(['備註', dash(p.note)]);
+      row(['備註', dash(p.note)]) +
+      row(['標籤', labelPrintOn() ? `🏷️ 列印 ${p.qty * p.cavity} 張` : '不列印']);
     $('modal-err').textContent = '';
     setConfirmBusy(false);
     $('overlay').classList.add('open');
     modalOpen = true;
     modalOpenedAt = Date.now();
+    enterOrigin = document.activeElement;
     $('btn-confirm').focus();
   }
 
@@ -2429,51 +2764,22 @@ tbody td.empty { font-family: var(--font-ui); }
     $('btn-cancel').disabled = busy;
   }
 
-  async function confirmSend() {
+  function confirmSend() {
     if (!modalOpen || sending || !pending) return;
-    sending = true;
-    const startedAt = Date.now();
-    setConfirmBusy(true);
-    $('modal-err').textContent = '';
-    try {
-      await postRecord(pending);
-      const params = pending;
-      sending = false;
-      closeModal();
-      afterSuccess(params);
-    } catch (e) {
-      // 至少鎖 500ms，防止連按重送
-      const wait = Math.max(0, 500 - (Date.now() - startedAt));
-      setTimeout(() => {
-        sending = false;
-        setConfirmBusy(false);
-        $('btn-confirm').focus();
-      }, wait);
-      $('modal-err').textContent = '❌ 錯誤：' + friendlyErr(e);
-    }
+    const params = pending;
+    closeModal();
+    submitRecord(params, enterOrigin);
   }
 
   // Ctrl+Enter：不開彈窗直接送出
-  async function quickSend() {
+  function quickSend() {
     if (modalOpen || sending) return;
     if (!validate()) return;
-    const params = collect();
-    sending = true;
-    $('btn-submit').disabled = true;
-    $('btn-submit').innerHTML = '<span class="spinner"></span>送出中...';
+    const origin = document.activeElement;
+    sending = true;   // 500ms 內不重複送出
+    setTimeout(() => { sending = false; }, 500);
     showMsg('', '', false);
-    try {
-      await postRecord(params);
-      afterSuccess(params);
-    } catch (e) {
-      showMsg('❌ 錯誤：' + friendlyErr(e), 'err', false);
-    } finally {
-      setTimeout(() => {
-        sending = false;
-        $('btn-submit').disabled = false;
-        $('btn-submit').textContent = '📤 送出登錄資料 (Enter)';
-      }, 500);
-    }
+    submitRecord(collect(), origin);
   }
 
   function friendlyErr(e) {
@@ -2517,7 +2823,7 @@ tbody td.empty { font-family: var(--font-ui); }
 
   // ── 離線 / 恢復 ──
   window.addEventListener('offline', () => { showMsg('離線中，請恢復網路後重試', 'err', false); setConn(false); });
-  window.addEventListener('online',  () => { showMsg('', '', false); refresh(); });
+  window.addEventListener('online',  () => { showMsg('', '', false); refresh(); flushRetryQueue(); });
 
   // ── 主題（預設為深色科技主題 dark）──
   function applyTheme(t) {
@@ -2539,13 +2845,22 @@ tbody td.empty { font-family: var(--font-ui); }
   const lastShift = SHIFT_LEGACY[lsGet('lastShift')] || lsGet('lastShift');
   if (['早班', '中班', '晚班'].includes(lastShift)) $('f-shift').value = lastShift;
   $('totals-machine').textContent = currentMachine;
+  $('f-prod-date').value = ymdDash(new Date());
+  $('f-prod-date').addEventListener('change', syncSeq);
+  // 切換件號 → 重讀本機台分頁，更新該件號今天的最大流水號
+  ['f-part', 'f-part2'].forEach(id => $(id).addEventListener('change', () => refresh()));
+  $('f-label-print').checked = lsGet('injLabelPrint') === '1';
+  applyLabelToggle();
+  updateReprintBtn();
+  renderRetryBadge();
+  purgeOldSeq();
   if (!navigator.onLine) showMsg('離線中，請恢復網路後重試', 'err', false);
 
   loadDropdowns().catch(e => {
     console.error('[injection-report] 下拉選單讀取失敗', e);
     setConn(false);
     ['f-model', 'f-part', 'f-part2', 'f-material'].forEach(id => COMBOS[id].setOptions([]));
-  }).then(() => { updateMold(); updateLive(); });
+  }).then(() => { updateMold(); updateLive(); syncSeq(); });
   loadWorkerMap();
   refresh({ applyStatusToForm: true });
   applyCavity();
@@ -2554,7 +2869,9 @@ tbody td.empty { font-family: var(--font-ui); }
 
   // 批次也跟著輪詢：其他裝置開始 / 結束批次時同步
   setInterval(() => { if (!sending) { refresh(); if (!batchBusy) loadActiveBatch(); } }, REFRESH_MS);
-  setInterval(() => { loadWorkerMap(); loadDropdowns().catch(() => {}).then(() => { updateMold(); updateLive(); }); }, SLOW_REFRESH_MS);
+  setInterval(() => { loadWorkerMap(); loadDropdowns().catch(() => {}).then(() => { updateMold(); updateLive(); syncSeq(); }); }, SLOW_REFRESH_MS);
+  setInterval(flushRetryQueue, RETRY_MS);
+  flushRetryQueue();
 })();
 </script>
 </body>

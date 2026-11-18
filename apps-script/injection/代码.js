@@ -232,6 +232,9 @@ function doPost(e) {
     // 舊版前端沒帶 cavity → 留白；新版帶 1 或 2
     const cavityRaw  = params.cavity;
     const cavity     = Number(cavityRaw) === 2 ? 2 : 1;
+    // 履歷序號：件號1 → serial、件號2 → serial2；舊版前端沒帶 → 留白
+    const serial     = String(params.serial || '').trim();
+    const serial2    = String(params.serial2 || '').trim();
 
     // 基本驗證
     if (!machine || !pid) return json({ ok: false, error: '缺少機台或工號' });
@@ -247,13 +250,13 @@ function doPost(e) {
     const sheet = ss.getSheetByName(machine);
     if (!sheet) return json({ ok: false, error: '找不到分頁: ' + machine });
 
-    // 寫入機台分頁（A~L 固定 12 欄；批次ID／模穴數依標題名稱找欄，沒跑過 setupBatchSchema 就不寫）
+    // 寫入機台分頁（A~L 固定 12 欄；批次ID／模穴數／履歷序號依標題名稱找欄，表頭沒有該欄就不寫）
     const now = new Date();
     const today = Utilities.formatDate(now, 'Asia/Taipei', 'yyyy-MM-dd');
     const hmap = headerMap_(sheet);
-    const cBatch = hmap['批次ID'], cCavity = hmap['模穴數'];
-    const width = Math.max(12, (cBatch == null ? 0 : cBatch + 1), (cCavity == null ? 0 : cCavity + 1));
-    const makeRow = (part, h) => {
+    const cBatch = hmap['批次ID'], cCavity = hmap['模穴數'], cSerial = hmap['履歷序號'];
+    const width = Math.max(12, ...[cBatch, cCavity, cSerial].map(c => c == null ? 0 : c + 1));
+    const makeRow = (part, h, sn) => {
       const row = [
         now,                          // A 時間戳記
         today,                        // B 記錄日期
@@ -271,17 +274,26 @@ function doPost(e) {
       while (row.length < width) row.push('');
       if (cBatch != null) row[cBatch] = batchId;
       if (cCavity != null) row[cCavity] = cavityRaw == null || cavityRaw === '' ? '' : cavity;
+      if (cSerial != null) row[cSerial] = sn || '';
       return row;
     };
     // 一模一穴：H=輸入數量；一模兩穴：件號1 那列 H=模次數 N、件號2 那列 H=0
     // → 今日模次＝H≠0 的列的 I 欄加總（件號2 那列不重複計）
     const rows = cavity === 2
-      ? [makeRow(partNo, qty), makeRow(partNo2, 0)]
-      : [makeRow(partNo, qty)];
+      ? [makeRow(partNo, qty, serial), makeRow(partNo2, 0, serial2)]
+      : [makeRow(partNo, qty, serial)];
 
     const lock = LockService.getScriptLock();
     lock.waitLock(10000);
     try {
+      // 前端重送佇列（retry）：第一次其實已寫入、只是沒收到回應 → Sheet 已有同序號就略過，不重複寫
+      // 同模兩穴的兩件號可能是同一串序號，所以要件號＋序號都相同才算重複
+      if (params.retry && serial && cSerial != null && sheet.getLastRow() > 1) {
+        const cPart = 4;  // E 件號
+        const exists = sheet.getRange(2, 1, sheet.getLastRow() - 1, Math.max(cSerial, cPart) + 1).getDisplayValues()
+          .some(r => String(r[cSerial]).trim() === serial && String(r[cPart]).trim() === String(partNo).trim());
+        if (exists) return json({ ok: true, machine, pid, batchId, rows: 0, duplicate: true });
+      }
       sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, width).setValues(rows);
     } finally {
       lock.releaseLock();
