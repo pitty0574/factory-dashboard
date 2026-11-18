@@ -198,6 +198,8 @@
   .fpy-kpi-val.accent { color: #2563eb; }
   .fpy-kpi-sub { font-size: 10px; font-weight: 500; color: var(--fg-mute); margin-left: 4px; }
   .fpy-trend-note { font-size: 10.5px; color: #94a3b8; margin-top: 6px; font-variant-numeric: tabular-nums; }
+  .fpy-kpi-val.na { color: #94a3b8; cursor: help; }
+  .fpy-kpi-excl { flex-basis: 100%; font-size: 10.5px; color: var(--fg-mute); }
 
   /* 各車型直行率明細（沿用 .trend-section 容器；狀態色/等寬字變數僅在此區塊定義）*/
   .model-section { --crit: #B91C1C; --warn: #B45309; --ok: #15803D; --font-mono: ui-monospace, "Cascadia Mono", Consolas, monospace; }
@@ -207,7 +209,7 @@
   .model-table th.num { text-align: right; }
   .model-table td { padding: 8px 10px; border-bottom: 1px solid var(--border); }
   .model-table .num { font-family: var(--font-mono); text-align: right; font-variant-numeric: tabular-nums; }
-  .model-table .fpy-neg { color: var(--crit); font-weight: 600; }
+  .model-table .fpy-na { color: #94a3b8; cursor: help; }
   .model-table .fpy-low { color: var(--warn); }
   .model-table .fpy-ok { color: var(--ok); }
   .model-table .fpy-high { color: var(--ok); font-weight: 600; }
@@ -1462,7 +1464,8 @@ async function fetchFromSheets(id, key, sheet) {
       const partType = (row[4] || '').trim();                        // col4 = 種類
       const rawPts   = row[ptsCol] !== undefined ? parseFloat(row[ptsCol]) : NaN;
       const points   = isNaN(rawPts) ? null : rawPts;
-      records.push([date, pid, type, tsMin, carModel, partType, code, points]);
+      const tsMs     = parseTimestampMs((row[0] || '').trim());        // col0 完整時間（含秒），直行率合併同件用
+      records.push([date, pid, type, tsMin, carModel, partType, code, points, tsMs]);
     });
 
     console.log('[Sheets] 顏色代號分類統計:');
@@ -2413,6 +2416,17 @@ const SHIFT_START = 8*60, SHIFT_END = 21*60;
 function nowMin() {
   const d = new Date();
   return d.getHours()*60 + d.getMinutes();
+}
+
+// 時間戳記 → 毫秒（含日期與秒；「2026/11/04 下午1:22:16」「2026-11-04 13:22:16」），無法解析回傳 null
+function parseTimestampMs(raw) {
+  const m = String(raw || '').match(/(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})[\sT]*(上午|下午|AM|PM)?\s*(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?/i);
+  if (!m) return null;
+  let h = parseInt(m[5], 10);
+  const ap = (m[4] || m[8] || '').toUpperCase();
+  if ((ap === '下午' || ap === 'PM') && h < 12) h += 12;
+  if ((ap === '上午' || ap === 'AM') && h === 12) h = 0;
+  return new Date(+m[1], +m[2] - 1, +m[3], h, +m[6], +(m[7] || 0)).getTime();
 }
 
 function parseTimestampMinutes(rawTs) {
@@ -3436,10 +3450,14 @@ function buildQualityView() {
 }
 
 // ── 直行率推移（FPY Trend）─────────────────────────────────────────────────────
-// 公式與 2D/3D 看板（factory-flow.html paintNet）一致：直行率 = (終檢 − 淨補漆) ÷ 終檢，
-// 淨補漆 = 補漆 − RV/PU 必經 BL（以 min(補漆 RV/PU, 終檢 RV/PU) 反推）
+// 公式與 2D/3D 看板（factory-flow.html／factory-flow-3d.html）一致：直行率 =（終檢 − 補漆淨）÷ 終檢，
+// 補漆淨 = 點數 > 0 的補漆登錄，同工號同車型同部件 2 分鐘內多筆合併為 1 件（calcPaintNet）
+// 補漆淨 > 終檢 → 直行率 null：歷史區間顯示「資料不足」，只看當天時顯示「累積中」
 const FINAL_SHEET = '終檢階段';
-const FPY_RVPU_MODELS = ['RV', 'PU'];
+const FPY_NA = {
+  insufficient: { text: '資料不足', tip: '補漆件數多於終檢，終檢可能未完整登錄' },
+  pending:      { text: '累積中',   tip: '終檢尚未完成登錄，下班前再看' },
+};
 const FPY_COLOR = '#2563eb';     // 主色（>= 平均）
 const FPY_LOW_COLOR = '#f59e0b'; // 低於平均
 const FPY_AVG_COLOR = '#6366f1'; // 平均線
@@ -3509,29 +3527,81 @@ function updateFPYModelOptions(paintRecs, finalRecs) {
   sel.value = fpyTrendModel;
 }
 
-// paintRecs: [{date, model}]，finalRecs: [{date, model}]；回傳每日結果（依日期排序，含終檢 0 件的日期，fpy 為 null）
-function computeDailyFPY(paintRecs, finalRecs, modelFilter) {
-  const days = {};
-  const day = d => days[d] || (days[d] = { paint_count: 0, final_count: 0, paint_RVPU: 0, final_RVPU: 0 });
-  const isRVPU = m => FPY_RVPU_MODELS.includes(String(m || '').trim().toUpperCase());
-  paintRecs.forEach(r => {
-    if (!fpyModelMatch(r.model, modelFilter)) return;
-    const d = day(r.date); d.paint_count++; if (isRVPU(r.model)) d.paint_RVPU++;
+// ── 補漆淨件數（與 person_part_analysis.html／factory-flow.html／factory-flow-3d.html 同步修改）──
+// rows：[{ pid, model, part, ts, pts }]；ts＝Date 或毫秒（無則 null），pts＝補漆總點數（空白／非數字＝null）
+// 1. 排除點數 ≤ 0 的列（任何車型的必經 BL 都是 0 點，自動排除）；點數空白視為有補漆
+// 2. 剩下的列依 工號＋車型＋部件 分組、按時間排序，與同組前一筆間隔 ≤ PAINT_MERGE_SEC 視為同一件（連鎖判斷）
+//    無時間戳記的列各算一件
+const PAINT_MERGE_SEC = 120;
+function calcPaintNet(rows) {
+  const groups = {};
+  let net = 0;
+  rows.forEach(r => {
+    if (r.pts != null && r.pts <= 0) return;
+    if (!r.ts) { net++; return; }
+    const k = [r.pid, r.model, r.part].map(v => String(v == null ? '' : v).trim().toUpperCase()).join('|');
+    (groups[k] = groups[k] || []).push(+r.ts);
   });
-  finalRecs.forEach(r => {
-    if (!fpyModelMatch(r.model, modelFilter)) return;
-    const d = day(r.date); d.final_count++; if (isRVPU(r.model)) d.final_RVPU++;
+  Object.values(groups).forEach(ts => {
+    ts.sort((a, b) => a - b);
+    ts.forEach((t, i) => { if (i === 0 || t - ts[i - 1] > PAINT_MERGE_SEC * 1000) net++; });
   });
-  // JJ / TF / 其他 不含 RV/PU，paint_RVPU 恆為 0 → BL 自然為 0
-  return Object.keys(days).sort().map(date => {
-    const d = days[date];
-    const RVPU_BL = Math.min(d.paint_RVPU, d.final_RVPU);
-    const paintNet = d.paint_count - RVPU_BL;
-    const fpy = d.final_count > 0 ? Math.max(0, Math.min(1, (d.final_count - paintNet) / d.final_count)) : null;
-    return { date, fpy, paintNet, paintCount: d.paint_count, finalCount: d.final_count, RVPU_BL };
-  });
+  return net;
+}
+// 直行率 = (終檢 − 補漆淨) ÷ 終檢；補漆淨 > 終檢 → fpy = null、over = true（顯示方式由各頁決定）
+function calcFPY(finalCount, net) {
+  if (net > finalCount) return { fpy: null, over: true };
+  return { fpy: finalCount > 0 ? (finalCount - net) / finalCount : null, over: false };
 }
 
+// paintRecs: [{date, pid, model, part, ts, pts}]，finalRecs: [{date, model}]
+// excluded：期間判定補漆淨 > 終檢的車型（Set），選「全部」時每天都不計入
+// 回傳每日結果（依日期排序）；fpy = null 且 over = true 表示當天補漆淨 > 終檢
+function computeDailyFPY(paintRecs, finalRecs, modelFilter, excluded) {
+  const keep = m => fpyModelMatch(m, modelFilter) && !(modelFilter === 'all' && excluded.has(fpyModelKey(m)));
+  const days = {};
+  const day = d => days[d] || (days[d] = { paint: [], finalCount: 0 });
+  paintRecs.forEach(r => { if (keep(r.model)) day(r.date).paint.push(r); });
+  finalRecs.forEach(r => { if (keep(r.model)) day(r.date).finalCount++; });
+  return Object.keys(days).sort().map(date => {
+    const d = days[date];
+    const paintNet = calcPaintNet(d.paint);
+    return { date, paintNet, paintCount: d.paint.length, finalCount: d.finalCount, ...calcFPY(d.finalCount, paintNet) };
+  });
+}
+// 期間各車型合計：補漆淨／終檢／直行率；over = 補漆淨 > 終檢（不列入全廠合計）
+function fpyModelStats(paintRecs, finalRecs) {
+  const by = {};
+  const m = k => by[k] || (by[k] = { model: k, paint: [], finalCount: 0 });
+  paintRecs.forEach(r => m(fpyModelKey(r.model)).paint.push(r));
+  finalRecs.forEach(r => m(fpyModelKey(r.model)).finalCount++);
+  return Object.values(by).map(d => {
+    const paintNet = calcPaintNet(d.paint);
+    return { model: d.model, paintCount: d.paint.length, finalCount: d.finalCount, paintNet, ...calcFPY(d.finalCount, paintNet) };
+  });
+}
+// 補漆／終檢資料（兩個區塊共用）：補漆 allRecords（已排除離職，不套用異常過濾）、終檢排除離職
+function fpyInputs(s, e) {
+  const inRange = date => { const iso = dateToISO(date); return !((s && iso < s) || (e && iso > e)); };
+  return {
+    paintRecs: allRecords.filter(r => inRange(r[0]))
+      .map(r => ({ date: r[0], pid: r[1], model: r[4], part: r[5], ts: r[8] == null ? null : r[8], pts: r[7] })),
+    finalRecs: rawFinalRecords.filter(r => inRange(r.date) && isActiveWorker(r.pid)),
+  };
+}
+// 只看當天（起迄都是今天）→「累積中」，其餘歷史區間 →「資料不足」
+function fpyNaOf(s, e) {
+  const t = dateToISO(localTodaySlash());
+  return s === t && e === t ? FPY_NA.pending : FPY_NA.insufficient;
+}
+// 補漆淨 > 終檢的車型：有終檢 → 資料不足；完全沒終檢 → 只有補漆
+function fpyExcludedText(stats, na) {
+  const sorted = stats.slice().sort((a, b) => b.finalCount - a.finalCount || b.paintCount - a.paintCount || a.model.localeCompare(b.model));
+  const over = sorted.filter(r => r.over && r.finalCount > 0).map(r => fpyModelLabel(r.model));
+  const noFinal = sorted.filter(r => r.over && r.finalCount === 0).map(r => fpyModelLabel(r.model));
+  return [over.length ? `已排除${na.text}車型：${over.join('、')}` : '',
+          noFinal.length ? `無終檢資料（補漆未計入）：${noFinal.join('、')}` : ''].filter(Boolean).join('；');
+}
 // 面積漸層：主色由上往下 alpha 0.30 → 0.05 → 0
 function fpyAreaGradient(ctx, area) {
   const g = ctx.createLinearGradient(0, area.top, 0, area.bottom);
@@ -3613,18 +3683,20 @@ function fpyExtremesPlugin(marks) {
   };
 }
 
-// 標題列 KPI 卡；k = null 時顯示「—」
+// 標題列 KPI 卡；k = null 時顯示「—」；k.na（{text, tip}）時期間 FPY 顯示灰色資料不足／累積中；k.excl 為下方小字
 function renderFPYKpis(k) {
   const box = document.getElementById('fpy-trend-kpis');
   if (!box) return;
   const num = v => (v == null ? '—' : v.toLocaleString('en-US'));
-  const card = (label, val, cls = '', sub = '') =>
+  const card = (label, val, cls = '', title = '') =>
     `<div class="fpy-kpi"><div class="fpy-kpi-label">${label}</div>` +
-    `<div class="fpy-kpi-val${cls ? ' ' + cls : ''}">${val}${sub ? `<span class="fpy-kpi-sub">${sub}</span>` : ''}</div></div>`;
+    `<div class="fpy-kpi-val${cls ? ' ' + cls : ''}"${title ? ` title="${escapeHtml(title)}"` : ''}>${val}</div></div>`;
   box.innerHTML =
     card('終檢總數', num(k && k.final)) +
-    card('淨補漆', num(k && k.net), '', k && k.bl > 0 ? `已扣 BL ${num(k.bl)}` : '') +
-    card('期間平均 FPY', k ? k.avgPct.toFixed(1) + '%' : '—', 'accent');
+    card('補漆淨', num(k && k.net)) +
+    (k && k.na ? card('期間平均 FPY', k.na.text, 'na', k.na.tip)
+               : card('期間平均 FPY', k && k.avgPct != null ? k.avgPct.toFixed(1) + '%' : '—', 'accent')) +
+    (k && k.excl ? `<div class="fpy-kpi-excl">${escapeHtml(k.excl)}</div>` : '');
 }
 
 function renderFPYTrend() {
@@ -3638,30 +3710,47 @@ function renderFPYTrend() {
 
   const s = document.getElementById('startDate').value;
   const e = document.getElementById('endDate').value;
-  const inRange = date => { const iso = dateToISO(date); return !((s && iso < s) || (e && iso > e)); };
-  // 補漆：allRecords（原始資料、已排除離職，不套用品質分頁的異常過濾），與 2D/3D 看板一致
-  const paintRecs = allRecords.filter(r => inRange(r[0])).map(r => ({ date: r[0], model: r[4] }));
-  const finalRecs = rawFinalRecords.filter(r => inRange(r.date) && isActiveWorker(r.pid));
+  const { paintRecs, finalRecs } = fpyInputs(s, e);
   updateFPYModelOptions(paintRecs, finalRecs);
 
   if (finalLoadState === 'loading' || finalLoadState === 'idle') { msg('終檢資料讀取中…'); return; }
   if (finalLoadState === 'err') { msg('終檢資料讀取失敗，無法計算直行率'); return; }
 
-  const points = computeDailyFPY(paintRecs, finalRecs, fpyTrendModel).filter(p => p.fpy !== null);
+  // 期間判定：補漆淨 > 終檢的車型不列入「全部」（每天都排除，避免跨日資料讓曲線忽上忽下）
+  const stats = fpyModelStats(paintRecs, finalRecs);
+  const excluded = new Set(stats.filter(r => r.over).map(r => r.model));
+  const na = fpyNaOf(s, e);
+  // 只畫有終檢的日子；當天補漆淨 > 終檢 → 值 null（點不畫、線用虛線跨過）
+  const points = computeDailyFPY(paintRecs, finalRecs, fpyTrendModel, excluded).filter(p => p.finalCount > 0);
   if (!points.length) { msg('此期間無終檢資料'); return; }
 
   const n = points.length;
-  const values = points.map(p => p.fpy * 100);
-  const avgPct = values.reduce((a, v) => a + v, 0) / n; // 每日直行率的平均
+  const values = points.map(p => (p.fpy == null ? null : p.fpy * 100));
+  const valid = values.map((v, i) => i).filter(i => values[i] != null);
   const todayStr = localTodaySlash();
   const isToday = i => !!points[i] && points[i].date === todayStr;
+  const naOfPoint = i => (isToday(i) ? FPY_NA.pending : FPY_NA.insufficient);
+
+  // 期間 KPI：「全部」只加總有效車型；單一車型時該車型補漆淨 > 終檢 → 灰色資料不足／累積中
+  const sel = fpyTrendModel === 'all' ? stats.filter(r => !r.over) : stats.filter(r => r.model === fpyTrendModel);
+  const kFinal = sel.reduce((a, r) => a + r.finalCount, 0);
+  const kNet = sel.reduce((a, r) => a + r.paintNet, 0);
+  const selOver = fpyTrendModel !== 'all' && sel.some(r => r.over);
+  const avgPct = valid.length ? valid.reduce((a, i) => a + values[i], 0) / valid.length : null; // 每日直行率的平均（不含 null 日）
+  const kpi = { final: kFinal, net: kNet, avgPct, na: selOver || avgPct == null ? na : null,
+                excl: fpyTrendModel === 'all' ? fpyExcludedText(stats, na) : '' };
+  if (!valid.length) {
+    msg(`此期間每天補漆淨都多於終檢（${na.text}）`);
+    renderFPYKpis(kpi);
+    return;
+  }
   const ptColor = i => (values[i] >= avgPct ? FPY_COLOR : FPY_LOW_COLOR);
 
   // Y 軸：0 起跳，上限 = 最大值 + 5 後進位到 10 的倍數（最少 20%，最多 100%）
-  const yMax = Math.min(100, Math.max(20, Math.ceil((Math.max(...values) + 5) / 10) * 10));
+  const yMax = Math.min(100, Math.max(20, Math.ceil((Math.max(...valid.map(i => values[i])) + 5) / 10) * 10));
 
-  // 極值（排除今天）；只有一天或全部相同時不標最低點
-  const cand = values.map((v, i) => i).filter(i => !isToday(i));
+  // 極值（排除今天、null 日）；只有一天或全部相同時不標最低點
+  const cand = valid.filter(i => !isToday(i));
   let maxIdx = -1, minIdx = -1;
   cand.forEach(i => {
     if (maxIdx < 0 || values[i] > values[maxIdx]) maxIdx = i;
@@ -3689,7 +3778,8 @@ function renderFPYTrend() {
         pointBorderColor: c => (isToday(c.dataIndex) ? ptColor(c.dataIndex) : '#ffffff'),
         pointHoverBackgroundColor: c => (isToday(c.dataIndex) ? '#ffffff' : ptColor(c.dataIndex)),
         pointHoverBorderColor: c => (isToday(c.dataIndex) ? ptColor(c.dataIndex) : '#ffffff'),
-        segment: { borderDash: c => (isToday(c.p1DataIndex) ? [6, 4] : undefined) },
+        spanGaps: true,   // null 日（補漆淨 > 終檢）不畫點，前後兩點以虛線相連
+        segment: { borderDash: c => (isToday(c.p1DataIndex) || c.p0.skip || c.p1.skip ? [6, 4] : undefined) },
         clip: 8, // 0% 的點不被圖表區裁掉一半
       }],
     },
@@ -3706,10 +3796,11 @@ function renderFPYTrend() {
             title: items => points[items[0].dataIndex].date,
             label: c => {
               const p = points[c.dataIndex];
+              const v = values[c.dataIndex];
               return [
-                `直行率 ${c.parsed.y.toFixed(1)}%`,
+                v == null ? `直行率 ${naOfPoint(c.dataIndex).text}（${naOfPoint(c.dataIndex).tip}）` : `直行率 ${v.toFixed(1)}%`,
                 `終檢數 ${fmt(p.finalCount)}`,
-                `淨補漆數 ${fmt(p.paintNet)}` + (p.RVPU_BL > 0 ? `（已扣 RV/PU BL ${fmt(p.RVPU_BL)}）` : ''),
+                `補漆淨 ${fmt(p.paintNet)}（登錄 ${fmt(p.paintCount)} 筆）`,
               ];
             },
             footer: items => (isToday(items[0].dataIndex) ? '⚠ 今日資料未完整' : ''),
@@ -3736,21 +3827,21 @@ function renderFPYTrend() {
     ],
   });
 
-  const sumFinal = points.reduce((a, p) => a + p.finalCount, 0);
-  const sumNet = points.reduce((a, p) => a + p.paintNet, 0);
-  const sumBL = points.reduce((a, p) => a + p.RVPU_BL, 0);
-  renderFPYKpis({ final: sumFinal, net: sumNet, bl: sumBL, avgPct });
-  legend.textContent = `${fpyModelLabel(fpyTrendModel)}・${n} 天有終檢資料・直行率 = (終檢 − 淨補漆) ÷ 終檢，淨補漆已扣 RV/PU 必經 BL，平均為每日直行率的平均` +
+  renderFPYKpis(kpi);
+  const naDays = n - valid.length;
+  legend.textContent = FPY_FORMULA_TEXT +
+    `・${fpyModelLabel(fpyTrendModel)}・${n} 天有終檢資料，平均為每日直行率的平均` +
+    (naDays ? `・${naDays} 天補漆淨多於終檢（不畫點，虛線跨過）` : '') +
     (points.some((p, i) => isToday(i)) ? '・今日資料未完整（空心點），不列入極值' : '');
 }
 
 // ── 各車型直行率明細 ─────────────────────────────────────────────────────────
-// 每個車型整段期間合計：RV/PU 扣 min(補漆, 終檢) 的必經 BL；不夾 0，負值代表補漆比終檢多
+// 每個車型整段期間合計；補漆淨 > 終檢的車型顯示資料不足（只看當天時為累積中），不列入合計
+const FPY_FORMULA_TEXT = '直行率 =（終檢 − 補漆淨）÷ 終檢；補漆淨 = 點數 > 0 的補漆登錄，同工號同車型同部件 2 分鐘內多筆合併為 1 件';
 function judgeFPY(finalCount, fpy, isTopFinal) {
   if (finalCount === 0) return '當期無終檢資料';
   if (finalCount < 20) return '樣本少，僅供參考';
   if (fpy == null) return '—';
-  if (fpy < 0) return '補漆比終檢多（跨日作業？多部位記錄？）';
   if (fpy < 0.05) return '幾乎每件都進補漆';
   if (fpy < 0.20) return isTopFinal ? '量大車型中直行率最低 ⚠️' : '直行率偏低';
   if (fpy < 0.50) return '直行率普通';
@@ -3760,7 +3851,6 @@ function judgeFPY(finalCount, fpy, isTopFinal) {
 
 function fpyClass(fpy) {
   if (fpy == null) return '';
-  if (fpy < 0) return 'fpy-neg';
   if (fpy < 0.20) return 'fpy-low';
   if (fpy < 0.80) return 'fpy-ok';
   return 'fpy-high';
@@ -3778,45 +3868,37 @@ function renderModelTable() {
   if (finalLoadState === 'loading' || finalLoadState === 'idle') return msg('終檢資料讀取中…');
   if (finalLoadState === 'err') return msg('終檢資料讀取失敗，無法計算直行率');
 
-  const inRange = date => { const iso = dateToISO(date); return !((s && iso < s) || (e && iso > e)); };
-  const byModel = {};
-  const m = k => byModel[k] || (byModel[k] = { model: k, paintCount: 0, finalCount: 0 });
-  // 資料來源與推移圖相同：補漆 allRecords（已排除離職）、終檢 rawFinalRecords 排除離職
-  allRecords.forEach(r => { if (inRange(r[0])) m(fpyModelKey(r[4])).paintCount++; });
-  rawFinalRecords.forEach(r => { if (inRange(r.date) && isActiveWorker(r.pid)) m(fpyModelKey(r.model)).finalCount++; });
-
-  const rows = Object.values(byModel).map(d => {
-    const isRVPU = FPY_RVPU_MODELS.includes(d.model);
-    const paint_RVPU = isRVPU ? d.paintCount : 0;
-    const final_RVPU = isRVPU ? d.finalCount : 0;
-    const RVPU_BL = Math.min(paint_RVPU, final_RVPU);
-    const paintNet = d.paintCount - RVPU_BL;
-    const fpy = d.finalCount > 0 ? (d.finalCount - paintNet) / d.finalCount : null;
-    return { ...d, RVPU_BL, paintNet, fpy };
-  }).sort((a, b) => b.finalCount - a.finalCount || b.paintCount - a.paintCount || a.model.localeCompare(b.model));
+  const { paintRecs, finalRecs } = fpyInputs(s, e);
+  const na = fpyNaOf(s, e);
+  const stats = fpyModelStats(paintRecs, finalRecs);
+  const rows = stats.sort((a, b) => b.finalCount - a.finalCount || b.paintCount - a.paintCount || a.model.localeCompare(b.model));
   if (!rows.length) return msg('此期間無補漆或終檢資料');
 
-  // 終檢量前 3 名中 FPY 最低者
-  const top3 = rows.filter(r => r.finalCount > 0).slice(0, 3);
+  // 終檢量前 3 名（有效車型）中 FPY 最低者
+  const top3 = rows.filter(r => r.finalCount > 0 && !r.over).slice(0, 3);
   const topLow = top3.length ? top3.reduce((a, b) => (b.fpy < a.fpy ? b : a)) : null;
 
   const pct = v => v == null ? '—' : Math.round(v * 100) + '%';
   const tr = (cells, cls = '') => `<tr${cls ? ` class="${cls}"` : ''}>${cells}</tr>`;
   let body = rows.map(r => {
-    const judge = r.finalCount > 0 && r.paintNet === 0
-      ? '完全直行 ✓' + (r.finalCount < 20 ? '（樣本少）' : '')
-      : judgeFPY(r.finalCount, r.fpy, r === topLow);
+    const naRow = r.over && r.finalCount > 0;
+    const judge = naRow ? na.tip
+      : r.finalCount > 0 && r.paintNet === 0 ? '完全直行 ✓' + (r.finalCount < 20 ? '（樣本少）' : '')
+      : judgeFPY(r.finalCount, r.fpy, r === topLow) + (r.finalCount === 0 && r.paintNet > 0 ? '（補漆未計入合計）' : '');
     return tr(
       `<td>${escapeHtml(fpyModelLabel(r.model))}</td>` +
       `<td class="num">${r.finalCount}</td>` +
-      `<td class="num">${r.paintNet}${r.RVPU_BL > 0 ? ` <span class="judge">(扣 BL ${r.RVPU_BL})</span>` : ''}</td>` +
-      `<td class="num ${fpyClass(r.fpy)}">${pct(r.fpy)}</td>` +
+      `<td class="num">${r.paintNet}${r.paintCount !== r.paintNet ? ` <span class="judge">(登錄 ${r.paintCount})</span>` : ''}</td>` +
+      (naRow ? `<td class="num fpy-na" title="${escapeHtml(na.tip)}">${na.text}</td>`
+             : `<td class="num ${fpyClass(r.fpy)}">${pct(r.fpy)}</td>`) +
       `<td class="judge">${judge}</td>`);
   }).join('');
 
-  const totalFinal = rows.reduce((a, r) => a + r.finalCount, 0);
-  const totalNet = rows.reduce((a, r) => a + r.paintNet, 0);
-  const totalFpy = totalFinal > 0 ? (totalFinal - totalNet) / totalFinal : null;
+  // 合計只加總有效車型（有終檢、補漆淨 ≤ 終檢）
+  const valid = rows.filter(r => r.finalCount > 0 && !r.over);
+  const totalFinal = valid.reduce((a, r) => a + r.finalCount, 0);
+  const totalNet = valid.reduce((a, r) => a + r.paintNet, 0);
+  const totalFpy = calcFPY(totalFinal, totalNet).fpy;
   body += tr(
     `<td>合計</td><td class="num">${totalFinal}</td><td class="num">${totalNet}</td>` +
     `<td class="num ${fpyClass(totalFpy)}">${pct(totalFpy)}</td>` +
@@ -3824,11 +3906,10 @@ function renderModelTable() {
 
   box.innerHTML = `<table class="model-table"><thead><tr><th>車型</th><th class="num">終檢</th><th class="num">補漆（淨）</th><th class="num">直行率</th><th>判讀</th></tr></thead><tbody>${body}</tbody></table>`;
 
-  const blOf = k => (rows.find(r => r.model === k) || {}).RVPU_BL || 0;
-  const RV_BL = blOf('RV'), PU_BL = blOf('PU');
+  const excl = fpyExcludedText(rows, na);
   note.innerHTML =
-    `<div>補漆淨值已扣除 RV/PU 必經 BL ${RV_BL + PU_BL} 筆（${RV_BL} RV + ${PU_BL} PU）</div>` +
-    `<div>直行率 = (終檢 − 補漆淨) ÷ 終檢，負值代表補漆比終檢多（可能跨日作業或補漆記錄多部位）</div>`;
+    `<div>${FPY_FORMULA_TEXT}</div>` +
+    (excl ? `<div>合計${excl}</div>` : '');
 }
 
 document.getElementById('fpy-trend-model').addEventListener('change', ev => {

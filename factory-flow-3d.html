@@ -288,6 +288,7 @@
     .kpi-val-wrap { display: flex; flex-direction: column; min-width: 0; }
     .kpi-lbl { font-size: 11px; color: var(--fg-mute); font-weight: 700; }
     .kpi-val { font-size: 20px; font-weight: 800; font-family: var(--font-mono); line-height: 1.15; }
+    .kpi-val.pending { color: var(--fg-mute) !important; cursor: help; }  /* 當日補漆淨 > 終檢：累積中（覆蓋 inline 顏色）*/
     .kpi-delta { font-size: 10px; color: var(--fg-mute); font-family: var(--font-mono); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
     /* 右側視角控制與面板 */
@@ -527,7 +528,7 @@
       <div class="kpi-val-wrap">
         <span class="kpi-lbl">B棟 · 直行率 FPY</span>
         <span class="kpi-val" id="kpi-fpy" style="color:var(--info);">—</span>
-        <span class="kpi-delta" id="kpi-fpy-delta">(終檢 − 淨補漆) ÷ 終檢</span>
+        <span class="kpi-delta" id="kpi-fpy-delta">(終檢 − 補漆淨) ÷ 終檢</span>
       </div>
     </div>
     <div class="kpi-card warn-accent">
@@ -535,7 +536,7 @@
       <div class="kpi-val-wrap">
         <span class="kpi-lbl">B棟 · 需補漆比例</span>
         <span class="kpi-val" id="kpi-repaint" style="color:var(--warn);">—</span>
-        <span class="kpi-delta" id="kpi-repaint-delta">淨補漆 ÷ 終檢</span>
+        <span class="kpi-delta" id="kpi-repaint-delta">補漆淨 ÷ 終檢</span>
       </div>
     </div>
     <div class="kpi-card purple-accent">
@@ -2212,7 +2213,7 @@
     content.innerHTML =
       section('今日作業員實績', workersHtml) +
       section('今日車型 × 顏色組合', comboHtml(s.byModelColor)) +
-      `<div class="net-note">今日補漆 ${s.count} 筆。扣 RV/PU 必經 BL ${net.RVPU_BL} 筆，淨 ${net.paintNetCount} 筆（用於 FPY 計算）</div>`;
+      `<div class="net-note">今日補漆 ${s.count} 筆，補漆淨 ${net.net} 件（排除 0 點、同工號同車型同部件 2 分鐘內合併；用於 FPY 計算）${net.pendingModels.length ? '；' + pendingNote(net) : ''}</div>`;
     const btn = document.getElementById('combo-toggle');
     if (btn) btn.addEventListener('click', () => { comboExpanded = !comboExpanded; renderDetail('paint'); });
   }
@@ -2273,12 +2274,13 @@
   }
   function parseRows(values) {
     if (!values || !values.length) return [];
-    const col = { ts: 0, date: 1, pid: 2, model: 3, part: 4, color: 5 };
+    const col = { ts: 0, date: 1, pid: 2, model: 3, part: 4, color: 5, pts: -1 };   // pts：補漆總點數（只有補漆分頁有）
     const header = values[0].map(h => (h || '').trim());
     const isHeader = header[1] && !/^\d/.test(header[1]);
     if (isHeader) {
       header.forEach((h, i) => {
-        if (/時間戳記/.test(h))            col.ts = i;
+        if (/點數/.test(h))                col.pts = i;
+        else if (/時間戳記/.test(h))       col.ts = i;
         else if (/記錄日期|日期/.test(h))  col.date = i;
         else if (/工號|員工|人員/.test(h)) col.pid = i;
         else if (/車型/.test(h))           col.model = i;
@@ -2297,6 +2299,7 @@
         model: (row[col.model] || '').trim(),
         part:  (row[col.part]  || '').trim(),
         color: (row[col.color] || '').trim().toUpperCase(),
+        pts:   col.pts >= 0 && !isNaN(parseFloat(row[col.pts])) ? parseFloat(row[col.pts]) : null,
       });
     });
     return out;
@@ -2319,22 +2322,65 @@
     return { count: recs.length, workers, activeCount: workers.filter(w => w.active).length, byModel, byModelColor, last, recs };
   }
 
-  // RV / PU 每隻必經 BL 補漆（製程工序，非品質問題）→ 以終檢 RV/PU 件數反推 BL 筆數，從補漆扣除
-  const RVPU_MODELS = ['RV', 'PU'];
-  function paintNet(paint, final) {
-    const paint_RVPU = RVPU_MODELS.reduce((sum, m) => sum + (paint.byModel[m] || 0), 0);
-    const final_RVPU = RVPU_MODELS.reduce((sum, m) => sum + (final.byModel[m] || 0), 0);
-    const RVPU_BL = Math.min(paint_RVPU, final_RVPU); // 安全閥：防止跨日資料不同步導致超扣
-    const paintNetCount = paint.count - RVPU_BL;
-    const fpy     = final.count > 0 ? Math.max(0, Math.min(1, (final.count - paintNetCount) / final.count)) : null;
-    const repaint = final.count > 0 ? Math.max(0, Math.min(1, paintNetCount / final.count)) : null;
-    return { RVPU_BL, paintNetCount, fpy, repaint };
+  // ── 補漆淨件數（與 person_part_analysis.html／factory-flow.html／factory-flow-3d.html 同步修改）──
+  // rows：[{ pid, model, part, ts, pts }]；ts＝Date 或毫秒（無則 null），pts＝補漆總點數（空白／非數字＝null）
+  // 1. 排除點數 ≤ 0 的列（任何車型的必經 BL 都是 0 點，自動排除）；點數空白視為有補漆
+  // 2. 剩下的列依 工號＋車型＋部件 分組、按時間排序，與同組前一筆間隔 ≤ PAINT_MERGE_SEC 視為同一件（連鎖判斷）
+  //    無時間戳記的列各算一件
+  const PAINT_MERGE_SEC = 120;
+  function calcPaintNet(rows) {
+    const groups = {};
+    let net = 0;
+    rows.forEach(r => {
+      if (r.pts != null && r.pts <= 0) return;
+      if (!r.ts) { net++; return; }
+      const k = [r.pid, r.model, r.part].map(v => String(v == null ? '' : v).trim().toUpperCase()).join('|');
+      (groups[k] = groups[k] || []).push(+r.ts);
+    });
+    Object.values(groups).forEach(ts => {
+      ts.sort((a, b) => a - b);
+      ts.forEach((t, i) => { if (i === 0 || t - ts[i - 1] > PAINT_MERGE_SEC * 1000) net++; });
+    });
+    return net;
+  }
+  // 直行率 = (終檢 − 補漆淨) ÷ 終檢；補漆淨 > 終檢 → fpy = null、over = true（顯示方式由各頁決定）
+  function calcFPY(finalCount, net) {
+    if (net > finalCount) return { fpy: null, over: true };
+    return { fpy: finalCount > 0 ? (finalCount - net) / finalCount : null, over: false };
   }
   function pct(n) { return n == null ? '—' : Math.round(n * 100) + '%'; }
 
+  // 今日補漆淨／直行率／需補漆率：逐車型計算，當日補漆淨 > 終檢的車型（早班補漆常先於終檢登錄）列為累積中、不列入全廠合計
+  // 全廠沒有任何有效車型（例如一早只有補漆、還沒有終檢）→ pending，顯示「累積中」
+  function paintNet(paint, final) {
+    const key = r => r.model || '（未填）';
+    const models = new Set([...paint.recs.map(key), ...final.recs.map(key)]);
+    let net = 0, fin = 0;
+    const pendingModels = [];
+    models.forEach(m => {
+      const n = calcPaintNet(paint.recs.filter(r => key(r) === m));
+      const f = final.recs.filter(r => key(r) === m).length;
+      if (calcFPY(f, n).over) pendingModels.push(m);
+      else { net += n; fin += f; }
+    });
+    const { fpy } = calcFPY(fin, net);
+    const pending = fin === 0 && pendingModels.length > 0;
+    const repaint = !pending && fin > 0 ? net / fin : null;
+    return { net, final: fin, fpy, repaint, pending, pendingModels };
+  }
+  function pendingNote(pn) { return pn.pendingModels.length ? `累積中車型（未計入）：${pn.pendingModels.join('、')}` : ''; }
+  const PENDING_TEXT = '累積中';
+  const PENDING_TIP = '終檢尚未完成登錄，下班前再看';
+  function rateText(v, pending) { return pending ? PENDING_TEXT : pct(v); }
+  function setRate(el, v, pending) {
+    el.textContent = rateText(v, pending);
+    el.classList.toggle('pending', pending);
+    el.title = pending ? PENDING_TIP : '';
+  }
+
   async function fetchAllSheets(sheets) {
     const { id, key } = getConn();
-    const ranges = [SYSTEM_SETTINGS_RANGE, sheets.paint + '!A:F', sheets.rework + '!A:F', sheets.final + '!A:F'];
+    const ranges = [SYSTEM_SETTINGS_RANGE, sheets.paint + '!A:G', sheets.rework + '!A:F', sheets.final + '!A:F'];
     const qs = ranges.map(r => 'ranges=' + encodeURIComponent(r)).join('&');
     const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${id}/values:batchGet?key=${key}&${qs}`);
     if (!res.ok) throw new Error(res.status);
@@ -2388,16 +2434,16 @@
       setStationPin('final', final.count, final.activeCount);
       update3DWorkers('final', final.workers);
 
-      // 直行率 = (終檢 − 淨補漆) / 終檢；淨補漆 = 補漆 − RV/PU 必經 BL
+      // 直行率 =（終檢 − 補漆淨）÷ 終檢；當日補漆淨 > 終檢 → 累積中
       const net = paintNet(paint, final);
-      const fpy = pct(net.fpy);
-      const rep = pct(net.repaint);
+      const fpy = rateText(net.fpy, net.pending);
+      const rep = rateText(net.repaint, net.pending);
       document.getElementById('kpi-pass').textContent = final.count;
-      document.getElementById('kpi-fpy').textContent = fpy;
-      document.getElementById('kpi-fpy-delta').textContent = `(終檢 ${final.count} − 淨補漆 ${net.paintNetCount}) ÷ 終檢`;
-      document.getElementById('kpi-fpy-delta').title = `淨補漆 = 補漆 ${paint.count} − RV/PU 必經 BL ${net.RVPU_BL}`;
-      document.getElementById('kpi-repaint').textContent = rep;
-      document.getElementById('kpi-repaint-delta').textContent = `淨補漆 ${net.paintNetCount} ÷ 終檢 ${final.count}`;
+      setRate(document.getElementById('kpi-fpy'), net.fpy, net.pending);
+      document.getElementById('kpi-fpy-delta').textContent = `(終檢 ${net.final} − 補漆淨 ${net.net}) ÷ 終檢`;
+      document.getElementById('kpi-fpy-delta').title = ['補漆淨 = 點數 > 0 的補漆登錄，同工號同車型同部件 2 分鐘內合併', pendingNote(net)].filter(Boolean).join('；');
+      setRate(document.getElementById('kpi-repaint'), net.repaint, net.pending);
+      document.getElementById('kpi-repaint-delta').textContent = `補漆淨 ${net.net} ÷ 終檢 ${net.final}`;
       document.getElementById('flow-summary').textContent = `直行 ${fpy} ｜ 需補漆 ${rep}`;
       document.getElementById('badge-repaint').textContent = `需補漆 ${rep}`;
       document.getElementById('badge-fpy-val').textContent = fpy;
