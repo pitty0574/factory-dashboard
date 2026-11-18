@@ -1,2 +1,6 @@
 .clasprc.json
 .clasp.json
+
+# tools/fpy_check 驗算腳本的輸出報表與 Python 快取
+tools/fpy_check/*.md
+__pycache__/
