@@ -1327,25 +1327,30 @@ html[data-theme="light"] #retry-badge { color: #b45309; }
   width: var(--lbl-w);
   height: var(--lbl-h);
   box-sizing: border-box;
-  padding: 1.5mm 2mm;
+  padding: var(--lbl-pad);
   display: flex;
   flex-direction: column;
+  justify-content: space-between;
   gap: 0.8mm;
   overflow: hidden;
   background: #fff;
   color: #000;
-  font-family: system-ui, Arial, 'Microsoft JhengHei', sans-serif;
+  font-family: system-ui, Arial, 'Microsoft JhengHei', sans-serif;   /* 與 JS 的 LABEL_FONT 一致 */
   break-after: page;
   page-break-after: always;
 }
 .lbl:last-child { break-after: auto; page-break-after: auto; }
-.lbl-top { display: flex; align-items: center; gap: 2.5mm; height: 15mm; flex: none; }
-.lbl-qr, .lbl-qr svg { width: 15mm; height: 15mm; display: block; flex: none; }
-.lbl-pid { font-size: 8pt; line-height: 1.2; }
-.lbl-pid b { display: block; font-size: 15pt; letter-spacing: 0.04em; }
-.lbl-bar { flex: 1; min-height: 0; }
-.lbl-bar svg { width: 100%; height: 100%; display: block; }
-.lbl-sn { flex: none; text-align: center; font-size: 10pt; font-weight: 800; line-height: 1.1; letter-spacing: 0.06em; }
+.lbl-top { display: flex; align-items: flex-start; gap: 2.5mm; flex: none; }
+.lbl-qr { flex: none; }
+.lbl-qr svg { width: 100%; height: 100%; display: block; shape-rendering: crispEdges; image-rendering: pixelated; }
+.lbl-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1.2mm; line-height: 1.1; }
+.lbl-pid span { display: block; font-size: 7pt; }
+.lbl-pid b { display: block; font-size: 16pt; letter-spacing: 0.04em; }
+.lbl-date { font-size: 9pt; font-weight: 700; white-space: nowrap; }
+.lbl-part { font-weight: 700; letter-spacing: 0.02em; white-space: nowrap; overflow: hidden; }
+.lbl-bar { flex: 1; min-height: 0; display: flex; justify-content: center; margin: 0 calc(-1 * var(--lbl-pad)); }  /* SHOW_BARCODE 時用：抵掉左右留白，條碼可用滿整張寬 */
+.lbl-bar svg { height: 100%; display: block; flex: none; }
+.lbl-sn { flex: none; text-align: center; font-weight: 800; line-height: 1.1; letter-spacing: 0.02em; white-space: nowrap; overflow: hidden; }
 @media print {
   html, body { background: #fff !important; margin: 0 !important; padding: 0 !important; min-height: 0 !important; }
   body::before, body::after { display: none !important; }
@@ -1629,7 +1634,7 @@ html[data-theme="light"] #retry-badge { color: #b45309; }
 <style id="label-page-style"></style>
 
 <script src="js/vendor/qrcode.js"></script>
-<script src="js/vendor/JsBarcode.all.min.js"></script>
+<!-- JsBarcode 只在 SHOW_BARCODE = true 時由程式動態載入 -->
 <script>
 (function(){
   const CONFIG = {
@@ -2384,13 +2389,18 @@ html[data-theme="light"] #retry-badge { color: #b45309; }
   updateStatusColor();
 
   // ── 履歷序號 ──
-  // 格式：{車型}{件號中段}{YY}{月碼}{DD}{流水3碼}
-  // 例：TZS-85022-0440、2026/11/18、第 76 件 → ZS8502226B18076
-  // 車型／中段沿用模具編號的 parsePart；月碼 1~9＝數字、10~12＝A~C；流水號補足 3 碼（超過 999 自然變 4 碼）
+  // 格式：{車型}{件號中段}{件號尾碼}{YY}{月碼}{DD}{流水3碼}
+  // 例（2026/11/18 第 1 件）：TZS-85022-0440  → ZS85022044026B18001
+  //                          TZS-85022-0450  → ZS85022045026B18001（一模兩穴左右件靠尾碼區分）
+  //                          YCQ-85022-0440S → CQ850220440S26B18001
+  // 車型／中段沿用模具編號的 parsePart；尾碼＝件號最後一段，原樣保留（不截短、不轉大小寫；只有兩段時不加）
+  // 月碼 1~9＝數字、10~12＝A~C；流水號補足 3 碼（超過 999 自然變 4 碼）
   // seq 不給 → 只回傳前綴（讀 Sheet 比對最大流水號用）
   function makeSerial(partNo, date, seq) {
     const { model, mid } = parsePart(partNo);
-    const head = model + mid + String(date.getFullYear()).slice(-2) + '123456789ABC'[date.getMonth()] + pad(date.getDate());
+    const segs = String(partNo || '').trim().split('-');
+    const tail = segs.length >= 3 ? segs[segs.length - 1] : '';
+    const head = model + mid + tail + String(date.getFullYear()).slice(-2) + '123456789ABC'[date.getMonth()] + pad(date.getDate());
     return seq == null ? head : head + String(seq).padStart(3, '0');
   }
 
@@ -2461,46 +2471,105 @@ html[data-theme="light"] #retry-badge { color: #b45309; }
   }
 
   // ── 履歷標籤列印 ──
-  const LABEL_W_MM = 50, LABEL_H_MM = 30;   // 確認標籤機與標籤尺寸後再調
+  // Honeywell PC42t Plus（203 dpi）＋ 52×33mm 標籤；QR 模組與留白都對齊整數 dot，避免印出來粗細不均
+  const LABEL_W_MM = 52, LABEL_H_MM = 33;   // 標籤尺寸
+  const LABEL_DPI = 203;                      // 標籤機解析度
+  const DOT_MM = 25.4 / LABEL_DPI;
+  const snapDot = mm => Math.round(mm / DOT_MM) * DOT_MM;   // 對齊到整數 dot
+  const LABEL_PAD_MM = snapDot(2);            // 四周留白（16 dot ≈ 2mm）
+  const QR_TARGET_MM = 22;                    // QR 目標邊長，實際＝模組數 × 整數 dot（不超過此值）
+  const LABEL_FONT = "system-ui, Arial, 'Microsoft JhengHei', sans-serif";
+  // 一維條碼：52mm 寬放不下 2 dot 線寬的 CODE128，先關閉；換大標籤時改 true（會自動載入 JsBarcode）
+  const SHOW_BARCODE = false;
+  const BAR_MIN_MODULE_MM = 0.25;             // 條碼最細線寬下限（203 dpi 的 2 dot），低於此值掃描槍可能讀不到
+  const BAR_QUIET_MODULES = 10;               // CODE128 左右靜區（各 10 個模組寬）
   $('label-page-style').textContent =
-    `@page { size: ${LABEL_W_MM}mm ${LABEL_H_MM}mm; margin: 0; }\n` +
-    `#label-print-area { --lbl-w: ${LABEL_W_MM}mm; --lbl-h: ${LABEL_H_MM}mm; }`;
+    `@page { size: ${LABEL_W_MM}mm ${LABEL_H_MM}mm; margin: 0; }
+` +
+    `#label-print-area { --lbl-w: ${LABEL_W_MM}mm; --lbl-h: ${LABEL_H_MM}mm; --lbl-pad: ${LABEL_PAD_MM.toFixed(3)}mm; }`;
+  if (SHOW_BARCODE) {
+    const sc = document.createElement('script');
+    sc.src = 'js/vendor/JsBarcode.all.min.js';
+    document.head.appendChild(sc);
+  }
 
   // QR 內容（格式之後再討論，先只放序號）
   function buildQrContent(record) {
     return record.serial;
   }
+  // 每個 QR 模組幾 dot：QR_TARGET_MM 內放得下的最大整數
+  function qrModuleDots(modules) {
+    return Math.max(1, Math.floor(QR_TARGET_MM / modules / DOT_MM));
+  }
 
-  // QR、CODE128 都同步產生 SVG，window.print() 前就已畫好
+  // QR（與 CODE128）都同步產生 SVG，window.print() 前就已畫好
   function renderLabels(records) {
     const area = $('label-print-area');
+    const innerW = LABEL_W_MM - 2 * LABEL_PAD_MM;
     area.innerHTML = records.map(rec => {
       const qr = qrcode(0, 'M');
       qr.addData(buildQrContent(rec));
       qr.make();
+      const qrMm = (qr.getModuleCount() * qrModuleDots(qr.getModuleCount()) * DOT_MM).toFixed(3);
+      const svg = qr.createSvgTag({ cellSize: 1, margin: 0, scalable: true })
+        .replace('<svg ', '<svg shape-rendering="crispEdges" ');
+      // 右欄寬＝內寬 − QR − 間距
+      const infoW = innerW - qrMm - snapDot(2.5);
       return `<div class="lbl">
         <div class="lbl-top">
-          <div class="lbl-qr">${qr.createSvgTag({ cellSize: 1, margin: 0, scalable: true })}</div>
-          <div class="lbl-pid">工號<b>${esc(rec.pid)}</b></div>
+          <div class="lbl-qr" style="width:${qrMm}mm;height:${qrMm}mm">${svg}</div>
+          <div class="lbl-info">
+            <div class="lbl-pid"><span>工號</span><b>${esc(rec.pid)}</b></div>
+            <div class="lbl-date">${esc(rec.prodDate || '')}</div>
+            <div class="lbl-part" style="font-size:${fitFontPt(rec.partNo || '', infoW, 9, 700)}pt">${esc(rec.partNo || '')}</div>
+          </div>
         </div>
-        <div class="lbl-bar"></div>
-        <div class="lbl-sn">${esc(rec.serial)}</div>
+        ${SHOW_BARCODE ? '<div class="lbl-bar"></div>' : ''}
+        <div class="lbl-sn" style="font-size:${snFontPt(rec.serial)}pt">${esc(rec.serial)}</div>
       </div>`;
     }).join('');
+    if (SHOW_BARCODE) renderBarcodes(area, records);
+  }
+  function renderBarcodes(area, records) {
+    let thin = 0;
     area.querySelectorAll('.lbl-bar').forEach((box, i) => {
       const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-      JsBarcode(svg, records[i].serial, { format: 'CODE128', displayValue: false, margin: 0, width: 2, height: 60, background: '#ffffff', lineColor: '#000000' });
+      JsBarcode(svg, records[i].serial, { format: 'CODE128', displayValue: false, margin: 0, width: 1, height: 60, background: '#ffffff', lineColor: '#000000' });
+      const modules = parseFloat(svg.getAttribute('width'));   // width:1 → 寬度＝模組數
+      const mm = barModuleMm(modules);
+      if (mm < BAR_MIN_MODULE_MM) thin = Math.max(thin, mm);
       ['width', 'height', 'style'].forEach(a => svg.removeAttribute(a));
-      svg.setAttribute('preserveAspectRatio', 'none');   // 橫向等比拉伸填滿標籤寬度
+      svg.setAttribute('preserveAspectRatio', 'none');   // 只拉高度，寬度固定為整數點距
+      svg.style.width = (modules * mm).toFixed(3) + 'mm';
       box.appendChild(svg);
     });
+    if (thin) showMsg(`⚠️ 條碼線寬 ${thin.toFixed(3)}mm 偏細（序號太長或標籤太窄），掃描槍可能讀不到`, 'warn', false);
+  }
+  // 條碼模組寬：整張標籤寬扣掉左右靜區後能給的最大寬度，向下取整到印字頭點距（避免線條粗細不均）
+  function barModuleMm(modules) {
+    const dots = Math.max(1, Math.floor(LABEL_W_MM / (modules + 2 * BAR_QUIET_MODULES) / DOT_MM));
+    return dots * DOT_MM;
+  }
+  // 量實際字寬，算出單行放得進 widthMm 的字級（不換行）
+  let fitCtx = null;
+  function fitFontPt(text, widthMm, maxPt, weight) {
+    if (!text) return maxPt;
+    fitCtx = fitCtx || document.createElement('canvas').getContext('2d');
+    fitCtx.font = `${weight} 100px ${LABEL_FONT}`;
+    const em = fitCtx.measureText(text).width / 100 + text.length * 0.02;   // 含 letter-spacing 0.02em
+    const pt = widthMm / em / (25.4 / 72);
+    return Math.max(5, Math.min(maxPt, Math.floor(pt * 10) / 10));
+  }
+  // 序號字級：最下方整排，單行放進標籤內寬（最大 12pt）
+  function snFontPt(text) {
+    return fitFontPt(text, LABEL_W_MM - 2 * LABEL_PAD_MM - 0.5, 12, 800);
   }
 
   let printFocus = null;
   // 回傳 false 表示沒印（呼叫端自己把焦點還回去）
   function printLabels(records, focusEl) {
     if (!records || !records.length) return false;
-    if (typeof qrcode !== 'function' || typeof JsBarcode !== 'function') {
+    if (typeof qrcode !== 'function' || (SHOW_BARCODE && typeof JsBarcode !== 'function')) {
       showMsg('❌ 標籤函式庫載入失敗（js/vendor），無法列印', 'err', false);
       return false;
     }
