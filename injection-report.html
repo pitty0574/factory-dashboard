@@ -1327,11 +1327,10 @@ html[data-theme="light"] #retry-badge { color: #b45309; }
   width: var(--lbl-w);
   height: var(--lbl-h);
   box-sizing: border-box;
-  padding: var(--lbl-pad);
+  padding: 0;                       /* QR 白邊從標籤邊緣算起；文字邊距由各區塊自己留 --lbl-pad */
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  gap: 0.8mm;
   overflow: hidden;
   background: #fff;
   color: #000;
@@ -1340,17 +1339,17 @@ html[data-theme="light"] #retry-badge { color: #b45309; }
   page-break-after: always;
 }
 .lbl:last-child { break-after: auto; page-break-after: auto; }
-.lbl-top { display: flex; align-items: flex-start; gap: 2.5mm; flex: none; }
-.lbl-qr { flex: none; }
+.lbl-top { display: flex; align-items: flex-start; flex: none; }
+.lbl-qr { flex: none; box-sizing: border-box; background: #fff; }   /* 尺寸／padding（白邊）由 JS 依 module 寫入 */
 .lbl-qr svg { width: 100%; height: 100%; display: block; shape-rendering: crispEdges; image-rendering: pixelated; }
-.lbl-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1.2mm; line-height: 1.1; }
+.lbl-info { flex: 1; min-width: 0; padding-right: var(--lbl-pad); display: flex; flex-direction: column; gap: 1.2mm; line-height: 1.1; }
 .lbl-pid span { display: block; font-size: 7pt; }
 .lbl-pid b { display: block; font-size: 16pt; letter-spacing: 0.04em; }
 .lbl-date { font-size: 9pt; font-weight: 700; white-space: nowrap; }
 .lbl-part { font-weight: 700; letter-spacing: 0.02em; white-space: nowrap; overflow: hidden; }
-.lbl-bar { flex: 1; min-height: 0; display: flex; justify-content: center; margin: 0 calc(-1 * var(--lbl-pad)); }  /* SHOW_BARCODE 時用：抵掉左右留白，條碼可用滿整張寬 */
+.lbl-bar { flex: 1; min-height: 0; display: flex; justify-content: center; }  /* SHOW_BARCODE 時用：條碼可用滿整張寬 */
 .lbl-bar svg { height: 100%; display: block; flex: none; }
-.lbl-sn { flex: none; text-align: center; font-weight: 800; line-height: 1.1; letter-spacing: 0.02em; white-space: nowrap; overflow: hidden; }
+.lbl-sn { flex: none; padding: 0 var(--lbl-pad) var(--lbl-pad); text-align: center; font-weight: 800; line-height: 1.1; letter-spacing: 0.02em; white-space: nowrap; overflow: hidden; }
 @media print {
   html, body { background: #fff !important; margin: 0 !important; padding: 0 !important; min-height: 0 !important; }
   body::before, body::after { display: none !important; }
@@ -2477,7 +2476,10 @@ html[data-theme="light"] #retry-badge { color: #b45309; }
   const DOT_MM = 25.4 / LABEL_DPI;
   const snapDot = mm => Math.round(mm / DOT_MM) * DOT_MM;   // 對齊到整數 dot
   const LABEL_PAD_MM = snapDot(2);            // 四周留白（16 dot ≈ 2mm）
-  const QR_TARGET_MM = 22;                    // QR 目標邊長，實際＝模組數 × 整數 dot（不超過此值）
+  const QR_QUIET_MODULES = 4;                 // QR 四周白邊（module 數）：貼黑色素材，從 QR 量到標籤邊緣，優先於 LABEL_PAD_MM
+  const QR_EC_LEVEL = 'H';                    // 容錯等級
+  const INFO_MIN_W_MM = 20;                   // 右側文字欄最小寬度（QR 放大時保留給工號／日期／件號）
+  const PT_MM = 25.4 / 72;
   const LABEL_FONT = "system-ui, Arial, 'Microsoft JhengHei', sans-serif";
   // 一維條碼：52mm 寬放不下 2 dot 線寬的 CODE128，先關閉；換大標籤時改 true（會自動載入 JsBarcode）
   const SHOW_BARCODE = false;
@@ -2497,35 +2499,45 @@ html[data-theme="light"] #retry-badge { color: #b45309; }
   function buildQrContent(record) {
     return record.serial;
   }
-  // 每個 QR 模組幾 dot：QR_TARGET_MM 內放得下的最大整數
-  function qrModuleDots(modules) {
-    return Math.max(1, Math.floor(QR_TARGET_MM / modules / DOT_MM));
+  // 只有大寫 A-Z、0-9 → Alphanumeric（較省空間）；含其他字元（小寫等）→ Byte
+  function qrMode(text) {
+    return /^[0-9A-Z]+$/.test(text) ? 'Alphanumeric' : 'Byte';
+  }
+  // 每個 QR 模組幾 dot：「QR 本體 + 兩側各 QR_QUIET_MODULES 白邊」放得進 areaMm 見方的最大整數
+  function qrModuleDots(modules, areaMm) {
+    return Math.max(1, Math.floor(areaMm / (modules + 2 * QR_QUIET_MODULES) / DOT_MM));
   }
 
   // QR（與 CODE128）都同步產生 SVG，window.print() 前就已畫好
   function renderLabels(records) {
     const area = $('label-print-area');
-    const innerW = LABEL_W_MM - 2 * LABEL_PAD_MM;
     area.innerHTML = records.map(rec => {
-      const qr = qrcode(0, 'M');
-      qr.addData(buildQrContent(rec));
+      const text = buildQrContent(rec);
+      const qr = qrcode(0, QR_EC_LEVEL);
+      qr.addData(text, qrMode(text));
       qr.make();
-      const qrMm = (qr.getModuleCount() * qrModuleDots(qr.getModuleCount()) * DOT_MM).toFixed(3);
+      const n = qr.getModuleCount();
+      // QR 區塊（含白邊）貼齊標籤左上角 (0,0)，高度扣掉最下方序號列與下邊距，寬度保留右欄最小寬
+      const snPt = snFontPt(rec.serial);
+      const areaMm = Math.min(LABEL_H_MM - LABEL_PAD_MM - snPt * PT_MM * 1.1, LABEL_W_MM - LABEL_PAD_MM - INFO_MIN_W_MM);
+      const modMm = qrModuleDots(n, areaMm) * DOT_MM;
+      const quietMm = QR_QUIET_MODULES * modMm;
+      const boxMm = (n + 2 * QR_QUIET_MODULES) * modMm;
       const svg = qr.createSvgTag({ cellSize: 1, margin: 0, scalable: true })
         .replace('<svg ', '<svg shape-rendering="crispEdges" ');
-      // 右欄寬＝內寬 − QR − 間距
-      const infoW = innerW - qrMm - snapDot(2.5);
+      // 右欄寬＝標籤寬 − QR 區塊（白邊即間距）− 右邊距
+      const infoW = LABEL_W_MM - boxMm - LABEL_PAD_MM;
       return `<div class="lbl">
         <div class="lbl-top">
-          <div class="lbl-qr" style="width:${qrMm}mm;height:${qrMm}mm">${svg}</div>
-          <div class="lbl-info">
+          <div class="lbl-qr" style="width:${boxMm.toFixed(3)}mm;height:${boxMm.toFixed(3)}mm;padding:${quietMm.toFixed(3)}mm">${svg}</div>
+          <div class="lbl-info" style="padding-top:${quietMm.toFixed(3)}mm">
             <div class="lbl-pid"><span>工號</span><b>${esc(rec.pid)}</b></div>
             <div class="lbl-date">${esc(rec.prodDate || '')}</div>
             <div class="lbl-part" style="font-size:${fitFontPt(rec.partNo || '', infoW, 9, 700)}pt">${esc(rec.partNo || '')}</div>
           </div>
         </div>
         ${SHOW_BARCODE ? '<div class="lbl-bar"></div>' : ''}
-        <div class="lbl-sn" style="font-size:${snFontPt(rec.serial)}pt">${esc(rec.serial)}</div>
+        <div class="lbl-sn" style="font-size:${snPt}pt">${esc(rec.serial)}</div>
       </div>`;
     }).join('');
     if (SHOW_BARCODE) renderBarcodes(area, records);
