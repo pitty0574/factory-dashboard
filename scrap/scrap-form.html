@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>部件報廢申請</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&display=swap" rel="stylesheet">
+<script src="scrap-config.js"></script>
+<style>
+  :root, [data-theme="dark"] {
+    --bg: #0a1120;
+    --panel: #101a2e;
+    --panel-2: #0c1527;
+    --border: #1e3557;
+    --text: #d8e4f5;
+    --muted: #8a9dba;
+    --accent: #00c8ff;
+    --accent-ink: #001a24;
+    --ok: #22c55e;
+    --ok-bg: rgba(34, 197, 94, .14);
+    --err: #f87171;
+    --err-bg: rgba(248, 113, 113, .14);
+    --lock: #f59e0b;
+    --glow: 0 0 10px rgba(0, 200, 255, .25);
+    --font-zh: "Microsoft JhengHei", "PingFang TC", "Noto Sans TC", sans-serif;
+  }
+  [data-theme="light"] {
+    --bg: #e9eef5;
+    --panel: #ffffff;
+    --panel-2: #f5f8fc;
+    --border: #b9c8dc;
+    --text: #12233b;
+    --muted: #55667f;
+    --accent: #0072b5;
+    --accent-ink: #ffffff;
+    --ok: #15803d;
+    --ok-bg: rgba(21, 128, 61, .10);
+    --err: #c62828;
+    --err-bg: rgba(198, 40, 40, .08);
+    --lock: #b45309;
+    --glow: none;
+  }
+  * { box-sizing: border-box; }
+  html { font-size: 18px; -webkit-text-size-adjust: 100%; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-zh);
+    font-size: 1rem;
+    line-height: 1.4;
+  }
+  button, input, select { font-family: var(--font-zh); }
+  .wrap { max-width: 600px; margin: 0 auto; padding: 0 12px 2.5rem; }
+
+  header {
+    position: sticky; top: 0; z-index: 10;
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 10px 12px;
+    background: var(--panel);
+    border-bottom: 2px solid var(--accent);
+    box-shadow: var(--glow);
+  }
+  .page-title {
+    margin: 0;
+    font-family: "Orbitron", var(--font-zh);
+    font-weight: 700; font-size: 1.4rem; letter-spacing: 2px; color: var(--accent);
+  }
+  .theme-btn {
+    min-width: 56px; height: 56px; border-radius: 6px;
+    border: 1px solid var(--border); background: var(--panel-2); color: var(--text);
+    font-size: 1.4rem; cursor: pointer;
+  }
+
+  .panel {
+    margin-top: 0.8rem; padding: 0.8rem;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    border-left: 3px solid var(--accent);
+  }
+  .panel-title {
+    font-size: 1.15rem; font-weight: 700; letter-spacing: 1px;
+    color: var(--accent); margin: 0 0 0.6rem; display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  }
+
+  .grid2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+  .field { margin-bottom: 0.8rem; }
+  .field:last-child { margin-bottom: 0; }
+  .grid2 .field { margin-bottom: 0; }
+  label { display: block; margin-bottom: 0.3rem; font-size: 1.1rem; font-weight: 700; }
+  label .hint { font-weight: 400; color: var(--muted); font-size: 0.9rem; margin-left: 4px; }
+  label .req { color: var(--err); margin-left: 2px; }
+
+  input, select {
+    width: 100%; min-width: 0; min-height: 56px; padding: 0 10px;
+    font-size: 1.25rem;
+    color: var(--text); background: var(--panel-2);
+    border: 1px solid var(--border); border-radius: 6px;
+    outline: none;
+  }
+  input:focus, select:focus { border-color: var(--accent); box-shadow: var(--glow); }
+  .invalid { border-color: var(--err) !important; background: var(--err-bg); }
+  .hidden { display: none !important; }
+
+  /* ── 智慧搜尋 Combobox（車型 / 件號 / 車色），操作手感同射出日報 ── */
+  .combobox { position: relative; }
+  .combobox input { padding-right: 48px; }
+  .combo-toggle {
+    position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+    width: 44px; height: 44px; padding: 0;
+    background: transparent; border: none; border-radius: 4px;
+    color: var(--muted); font-size: 0.9rem; line-height: 1; cursor: pointer;
+    transition: transform 0.15s;
+  }
+  .combobox.open .combo-toggle { transform: translateY(-50%) rotate(180deg); }
+  .combo-dropdown {
+    display: none;
+    position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 50;
+    max-height: 320px; overflow-y: auto;
+    background: var(--panel);
+    border: 1px solid var(--accent); border-radius: 8px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, .35);
+  }
+  .combo-dropdown.open { display: block; }
+  .combo-dropdown.up { top: auto; bottom: calc(100% + 4px); }
+  .combo-option {
+    min-height: 48px; padding: 10px 14px;
+    display: flex; align-items: center;
+    font-size: 1.2rem; cursor: pointer;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    border-bottom: 1px solid var(--border);
+  }
+  .combo-option:last-child { border-bottom: none; }
+  .combo-option:hover, .combo-option.active { background: var(--panel-2); color: var(--accent); }
+  .combo-option.current { box-shadow: inset 3px 0 0 var(--accent); }
+  .combo-option mark { background: rgba(245, 158, 11, .35); color: inherit; padding: 1px 2px; border-radius: 2px; }
+  .combo-option.combo-new { color: var(--lock); font-size: 1.05rem; border-top: 1px dashed var(--border); }
+  .combo-empty { padding: 12px 14px; font-size: 1rem; color: var(--muted); }
+  .combobox input.auto-filled { animation: auto-fill-flash 0.3s ease-out; }
+  @keyframes auto-fill-flash {
+    from { outline: 3px solid var(--accent); outline-offset: 2px; }
+    to   { outline: 3px solid transparent; outline-offset: 2px; }
+  }
+
+  .qty-row { display: grid; grid-template-columns: 64px minmax(0, 1fr) 64px; gap: 8px; }
+  .qty-btn {
+    min-width: 56px; height: 64px; border-radius: 6px; border: 1px solid var(--accent);
+    background: var(--panel-2); color: var(--accent);
+    font-size: 2rem; font-weight: 700; line-height: 1; cursor: pointer;
+  }
+  .qty-row input { height: 64px; text-align: center; font-size: 1.6rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+  .submit-btn {
+    display: block; width: 100%; min-height: 64px; margin-top: 1rem;
+    border: none; border-radius: 8px;
+    background: var(--accent); color: var(--accent-ink);
+    font-size: 1.4rem; font-weight: 700; letter-spacing: 4px; cursor: pointer; box-shadow: var(--glow);
+  }
+  .submit-btn:disabled { opacity: .5; cursor: wait; }
+
+  .msg { margin-top: 0.7rem; padding: 0.7rem; border-radius: 6px; font-size: 1.05rem; }
+  .msg.ok { color: var(--ok); background: var(--ok-bg); border: 1px solid var(--ok); }
+  .msg.err { color: var(--err); background: var(--err-bg); border: 1px solid var(--err); }
+
+  .refresh-btn {
+    min-height: 48px; padding: 0 14px; border-radius: 6px;
+    border: 1px solid var(--border); background: var(--panel-2); color: var(--text);
+    font-size: 1rem; font-weight: 400; letter-spacing: 0; cursor: pointer;
+  }
+  .rec {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px; align-items: center;
+    padding: 0.8rem; margin-top: 0.8rem;
+    font-size: 1.05rem;
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px;
+  }
+  .rec-main { font-weight: 700; word-break: break-all; }
+  .rec-sub { font-size: 0.95rem; color: var(--muted); margin-top: 2px; }
+  .rec-qty { font-size: 1.4rem; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; text-align: right; margin-bottom: 6px; }
+  .rec-status { font-size: 0.95rem; margin-top: 2px; }
+  .rec-status.locked { color: var(--lock); }
+  .rec-status.open { color: var(--muted); }
+  .del-btn {
+    min-width: 72px; min-height: 52px; padding: 0 14px; border-radius: 6px;
+    border: 1px solid var(--err); background: transparent; color: var(--err);
+    font-size: 1.05rem; cursor: pointer;
+  }
+  .lock-tag { min-height: 52px; display: flex; align-items: center; justify-content: flex-end; color: var(--lock); font-size: 1rem; white-space: nowrap; }
+  .empty { color: var(--muted); text-align: center; padding: 0.8rem 0; font-size: 1.05rem; }
+  .summary { font-size: 1rem; color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1 class="page-title">部件報廢申請</h1>
+  <button type="button" class="theme-btn" id="themeBtn" title="切換深淺色">☀</button>
+</header>
+
+<div class="wrap">
+  <div id="loadMsg" class="msg hidden"></div>
+
+  <!-- 表頭區：送出後保留 -->
+  <section class="panel">
+    <h2 class="panel-title">表頭</h2>
+    <div class="grid2">
+      <div class="field">
+        <label for="date">日期<span class="req">*</span></label>
+        <input type="date" id="date">
+      </div>
+      <div class="field">
+        <label for="unit">單位<span class="req">*</span></label>
+        <select id="unit"></select>
+      </div>
+      <div class="field">
+        <label for="shift">班別<span class="req">*</span></label>
+        <select id="shift"></select>
+      </div>
+      <div class="field">
+        <label for="operator">填寫人<span class="req">*</span></label>
+        <input type="text" id="operator" autocomplete="off">
+      </div>
+    </div>
+  </section>
+
+  <!-- 明細區：送出後清空 -->
+  <section class="panel">
+    <h2 class="panel-title">明細</h2>
+
+    <div class="field">
+      <label for="car">車型<span class="req">*</span></label>
+      <div class="combobox">
+        <input type="text" id="car" autocomplete="off" spellcheck="false" autocapitalize="characters" placeholder="（載入中…）" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="combo-car-list">
+        <button type="button" class="combo-toggle" tabindex="-1" aria-label="展開選單">🔽</button>
+        <div class="combo-dropdown" id="combo-car-list" role="listbox"></div>
+      </div>
+    </div>
+    <div class="field">
+      <label for="partNo">件號<span class="req">*</span></label>
+      <div class="combobox">
+        <input type="text" id="partNo" autocomplete="off" spellcheck="false" autocapitalize="characters" placeholder="（載入中…）" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="combo-partNo-list">
+        <button type="button" class="combo-toggle" tabindex="-1" aria-label="展開選單">🔽</button>
+        <div class="combo-dropdown" id="combo-partNo-list" role="listbox"></div>
+      </div>
+    </div>
+    <div class="field">
+      <label for="partName">車色<span class="req">*</span></label>
+      <div class="combobox">
+        <input type="text" id="partName" autocomplete="off" spellcheck="false" placeholder="（載入中…）" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="combo-partName-list">
+        <button type="button" class="combo-toggle" tabindex="-1" aria-label="展開選單">🔽</button>
+        <div class="combo-dropdown" id="combo-partName-list" role="listbox"></div>
+      </div>
+    </div>
+    <div class="field">
+      <label for="qty">報廢數量<span class="req">*</span></label>
+      <div class="qty-row">
+        <button type="button" class="qty-btn" id="qtyMinus" aria-label="減少">−</button>
+        <input type="number" id="qty" inputmode="numeric" min="1" step="1" value="1">
+        <button type="button" class="qty-btn" id="qtyPlus" aria-label="增加">+</button>
+      </div>
+    </div>
+    <div class="field">
+      <label for="defectType">不良類別<span class="req">*</span></label>
+      <select id="defectType"></select>
+    </div>
+    <div class="field">
+      <label for="reason">不良原因<span class="req">*</span></label>
+      <select id="reason"></select>
+      <input type="text" id="reasonOther" class="hidden" style="margin-top:8px" placeholder="請輸入不良原因" autocomplete="off">
+    </div>
+    <div class="field">
+      <label for="respUnit">責任單位<span class="req">*</span></label>
+      <input type="text" id="respUnit" list="respUnitList" autocomplete="off">
+      <datalist id="respUnitList"></datalist>
+    </div>
+    <div class="field">
+      <label for="note">備註<span class="hint">（選填）</span></label>
+      <input type="text" id="note" autocomplete="off">
+    </div>
+
+    <button type="button" class="submit-btn" id="submitBtn">送出</button>
+    <div id="submitMsg" class="msg hidden"></div>
+  </section>
+
+  <!-- 今日已填 -->
+  <section class="panel">
+    <h2 class="panel-title">
+      <span>今日已填</span>
+      <button type="button" class="refresh-btn" id="refreshBtn">↻ 重新整理</button>
+    </h2>
+    <div class="summary" id="recSummary"></div>
+    <div id="recList"><div class="empty">載入中…</div></div>
+  </section>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var LS_OPERATOR = 'scrapOperator';
+  var LS_THEME = 'scrapTheme';
+  var REASON_OTHER = '其他';
+  var PLACEHOLDER = '-- 請選擇 --';
+
+  var $ = function (id) { return document.getElementById(id); };
+  var parts = [];
+  var nameAutoFilled = false;
+  var submitting = false;
+
+  /* ---------- 共用 ---------- */
+  function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+  function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* ignore */ } }
+
+  function todayStr() {
+    var d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function apiReady() {
+    return typeof SCRAP_API_URL === 'string' && /^https:\/\//.test(SCRAP_API_URL);
+  }
+
+  function apiGet(params) {
+    return fetch(SCRAP_API_URL + '?' + new URLSearchParams(params).toString())
+      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function (j) { if (!j.ok) throw new Error(j.error || '未知錯誤'); return j; });
+  }
+
+  function apiPost(body) {
+    return fetch(SCRAP_API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(body)
+    })
+      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function (j) { if (!j.ok) throw new Error(j.error || '未知錯誤'); return j; });
+  }
+
+  function showMsg(el, type, text) {
+    el.className = 'msg ' + type;
+    el.textContent = text;
+  }
+  function hideMsg(el) { el.className = 'msg hidden'; }
+
+  function fillSelect(sel, items, def, placeholder) {
+    var html = placeholder ? '<option value="">' + esc(placeholder) + '</option>' : '';
+    items.forEach(function (v) { html += '<option value="' + esc(v) + '">' + esc(v) + '</option>'; });
+    sel.innerHTML = html;
+    if (def != null && items.indexOf(def) >= 0) sel.value = def;
+  }
+
+  function fillDatalist(dl, items) {
+    dl.innerHTML = items.map(function (v) { return '<option value="' + esc(v) + '">'; }).join('');
+  }
+
+  function uniq(arr) {
+    var seen = {}, out = [];
+    arr.forEach(function (v) { if (v && !seen[v]) { seen[v] = 1; out.push(v); } });
+    return out;
+  }
+
+  /* ---------- 主題 ---------- */
+  function applyTheme(t) {
+    document.documentElement.setAttribute('data-theme', t);
+    $('themeBtn').textContent = t === 'dark' ? '☀' : '☾';
+  }
+  applyTheme(lsGet(LS_THEME) === 'light' ? 'light' : 'dark');
+  $('themeBtn').addEventListener('click', function () {
+    var t = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    applyTheme(t);
+    lsSet(LS_THEME, t);
+  });
+
+  /* ---------- 智慧搜尋 Combobox：模糊搜尋 + 可自由輸入清單外的值（同射出日報）---------- */
+  // 套用值時對 input 發出 change 事件；upper=true 時輸入中即轉大寫並去頭尾空白
+  function createCombobox(root, upper) {
+    var input = root.querySelector('input');
+    var toggle = root.querySelector('.combo-toggle');
+    var list = root.querySelector('.combo-dropdown');
+    var options = [];
+    var items = [];      // 目前顯示的 { value, isNew }
+    var active = -1;
+    var hint = '';
+    var committed = '';  // 上次對外發出 change 時的值
+
+    function normalize(v) {
+      v = String(v == null ? '' : v).trim();
+      return upper ? v.toUpperCase() : v;
+    }
+    function hl(v, q) {
+      var i = q ? v.toLowerCase().indexOf(q.toLowerCase()) : -1;
+      if (i < 0) return esc(v);
+      return esc(v.slice(0, i)) + '<mark>' + esc(v.slice(i, i + q.length)) + '</mark>' + esc(v.slice(i + q.length));
+    }
+    // 優先序：完全符合 > 字首 > 其他位置；同級維持原清單順序
+    function match(q) {
+      var lq = q.toLowerCase();
+      return options
+        .map(function (v, i) {
+          var lv = v.toLowerCase(), p = lv.indexOf(lq);
+          return p < 0 ? null : { v: v, i: i, rank: lv === lq ? 0 : p === 0 ? 1 : 2 };
+        })
+        .filter(Boolean)
+        .sort(function (a, b) { return a.rank - b.rank || a.i - b.i; })
+        .map(function (m) { return m.v; });
+    }
+    function render(q) {
+      items = (q ? match(q) : options).map(function (v) { return { value: v, isNew: false }; });
+      if (q && !options.some(function (v) { return v.toLowerCase() === q.toLowerCase(); })) items.push({ value: q, isNew: true });
+      var cur = input.value.trim();
+      list.innerHTML = items.length ? items.map(function (it, i) {
+        return it.isNew
+          ? '<div class="combo-option combo-new" role="option" id="' + list.id + '-' + i + '" data-i="' + i + '">💡 新增「' + esc(it.value) + '」（未建檔）</div>'
+          : '<div class="combo-option' + (it.value === cur ? ' current' : '') + '" role="option" id="' + list.id + '-' + i + '" data-i="' + i + '">' + hl(it.value, q) + '</div>';
+      }).join('') : '<div class="combo-empty">（清單無資料，可直接輸入）</div>';
+      setActive(-1);
+    }
+    function setActive(i) {
+      active = i;
+      Array.prototype.forEach.call(list.querySelectorAll('.combo-option'), function (el) {
+        el.classList.toggle('active', +el.getAttribute('data-i') === i);
+      });
+      var el = i >= 0 ? list.querySelector('[data-i="' + i + '"]') : null;
+      if (el) { el.scrollIntoView({ block: 'nearest' }); input.setAttribute('aria-activedescendant', el.id); }
+      else input.removeAttribute('aria-activedescendant');
+    }
+    function isOpen() { return list.classList.contains('open'); }
+    function open(q) {
+      render(q);
+      list.classList.add('open');
+      root.classList.add('open');
+      input.setAttribute('aria-expanded', 'true');
+      place();
+    }
+    function close() {
+      list.classList.remove('open', 'up');
+      root.classList.remove('open');
+      input.setAttribute('aria-expanded', 'false');
+      setActive(-1);
+    }
+    // 下方可視空間不足（例如手機鍵盤彈出）時改向上展開
+    function place() {
+      list.classList.remove('up');
+      list.style.maxHeight = '';
+      var vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+      var r = input.getBoundingClientRect();
+      var below = vh - r.bottom - 12, above = r.top - 12;
+      var up = below < Math.min(320, list.scrollHeight) && above > below;
+      list.classList.toggle('up', up);
+      list.style.maxHeight = Math.max(144, Math.min(320, up ? above : below)) + 'px';
+    }
+    function apply(v) {
+      v = normalize(v);
+      var canon = options.filter(function (o) { return o.toLowerCase() === v.toLowerCase(); })[0];  // 只差大小寫 → 用清單正式寫法
+      if (canon) v = canon;
+      input.value = v;
+      close();
+      // 跟 focus 時的值比（不是跟 input.value 比）：打完完整值直接 Enter 也要發 change
+      if (v !== committed) {
+        committed = v;
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    }
+
+    input.addEventListener('focus', function () { committed = input.value; open(''); });
+    // 原生 change 併入 apply，避免同一次變更觸發兩次
+    input.addEventListener('change', function (e) {
+      if (!e.isTrusted) return;
+      e.stopImmediatePropagation();
+      apply(input.value);
+    });
+    input.addEventListener('mousedown', function () { if (document.activeElement === input && !isOpen()) open(''); });
+    input.addEventListener('input', function (e) {
+      if (upper && !e.isComposing) {
+        var v = input.value, n = normalize(v);
+        if (n !== v) {
+          var pos = Math.max(0, (input.selectionStart || 0) - (v.length - v.replace(/^\s+/, '').length));
+          input.value = n;
+          try { input.setSelectionRange(Math.min(pos, n.length), Math.min(pos, n.length)); } catch (err) { /* ignore */ }
+        }
+      }
+      open(input.value.trim());
+    });
+    input.addEventListener('blur', function () { apply(input.value); });
+    toggle.addEventListener('mousedown', function (e) { e.preventDefault(); });  // 焦點留在 input
+    toggle.addEventListener('click', function () {
+      if (isOpen()) close();
+      else if (document.activeElement !== input) input.focus();  // focus 會展開
+      else open('');
+    });
+    list.addEventListener('mousedown', function (e) { e.preventDefault(); });
+    list.addEventListener('click', function (e) {
+      var el = e.target.closest('.combo-option');
+      if (el) apply(items[+el.getAttribute('data-i')].value);
+    });
+    input.addEventListener('keydown', function (e) {
+      if (e.isComposing) return;
+      var n = items.length;
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (!isOpen()) { open(input.value.trim()); return; }
+        if (!n) return;
+        var d = e.key === 'ArrowDown' ? 1 : -1;
+        setActive(active < 0 ? (d > 0 ? 0 : n - 1) : (active + d + n) % n);
+      } else if (e.key === 'Enter') {
+        if (!isOpen()) return;
+        e.preventDefault();
+        e.stopPropagation();
+        apply(active >= 0 ? items[active].value : input.value);
+      } else if (e.key === 'Escape') {
+        if (!isOpen()) return;
+        e.preventDefault();
+        e.stopPropagation();
+        close();
+      } else if (e.key === 'Tab') {
+        if (isOpen() && active >= 0) apply(items[active].value);
+        else close();
+      }
+    });
+    document.addEventListener('mousedown', function (e) { if (!root.contains(e.target)) close(); });
+
+    return {
+      setOptions: function (vals) {
+        options = vals;
+        this.setHint(hint);
+        if (isOpen()) render(document.activeElement === input ? input.value.trim() : '');
+      },
+      // 自訂 placeholder；傳空值還原預設
+      setHint: function (text) {
+        hint = text || '';
+        input.placeholder = hint || (options.length ? '搜尋或直接輸入…' : '（無建議清單，可直接輸入）');
+      }
+    };
+  }
+
+  var COMBOS = {
+    car: createCombobox($('car').closest('.combobox'), true),
+    partNo: createCombobox($('partNo').closest('.combobox'), true),
+    partName: createCombobox($('partName').closest('.combobox'), false)
+  };
+
+  /* ---------- 車型 / 件號 / 車色 連動（只更新建議清單，不清掉已輸入的字）---------- */
+  var allCars = [], allPartNos = [];
+  function curCar() { return $('car').value.trim().toUpperCase(); }
+  function curPartNo() { return $('partNo').value.trim().toUpperCase(); }
+
+  // 車型空白或主檔沒有的新車型 → 列出全部件號
+  function partNoOptions() {
+    var car = curCar();
+    var mine = uniq(parts.filter(function (p) { return p.car === car; }).map(function (p) { return p.partNo; }));
+    return mine.length ? mine : allPartNos;
+  }
+  // 車色：已知的車型、件號才當篩選條件
+  function nameMatches() {
+    var car = curCar(), pn = curPartNo();
+    var carKnown = allCars.indexOf(car) >= 0, pnKnown = allPartNos.indexOf(pn) >= 0;
+    return {
+      pnKnown: pnKnown,
+      names: uniq(parts.filter(function (p) {
+        return (!carKnown || p.car === car) && (!pnKnown || p.partNo === pn);
+      }).map(function (p) { return p.name; }))
+    };
+  }
+  function refreshNameOptions() { COMBOS.partName.setOptions(nameMatches().names); }
+  function refreshPartNoOptions() { COMBOS.partNo.setOptions(partNoOptions()); refreshNameOptions(); }
+
+  // 車型+件號只對到一個車色 → 帶入（車色空白或上次也是自動帶入時才覆蓋）
+  function autoFillName() {
+    var m = nameMatches();
+    if (!m.pnKnown || m.names.length !== 1) return;
+    var el = $('partName');
+    if (el.value.trim() && !nameAutoFilled) return;
+    if (el.value !== m.names[0]) {
+      el.value = m.names[0];
+      el.classList.remove('auto-filled');
+      void el.offsetWidth;
+      el.classList.add('auto-filled');
+    }
+    nameAutoFilled = true;
+  }
+
+  $('car').addEventListener('input', refreshPartNoOptions);
+  $('car').addEventListener('change', function () { refreshPartNoOptions(); autoFillName(); });
+  $('partNo').addEventListener('input', refreshNameOptions);
+  $('partNo').addEventListener('change', function () { refreshNameOptions(); autoFillName(); });
+  $('partName').addEventListener('input', function () { nameAutoFilled = false; });
+
+  /* ---------- 數量 ---------- */
+  function getQty() {
+    var n = parseInt($('qty').value, 10);
+    return isFinite(n) ? n : 0;
+  }
+  $('qtyMinus').addEventListener('click', function () { $('qty').value = Math.max(1, getQty() - 1); });
+  $('qtyPlus').addEventListener('click', function () { $('qty').value = Math.max(1, getQty() + 1); });
+  $('qty').addEventListener('blur', function () { if (getQty() < 1) $('qty').value = 1; });
+
+  /* ---------- 不良原因「其他」 ---------- */
+  $('reason').addEventListener('change', function () {
+    var other = $('reason').value === REASON_OTHER;
+    $('reasonOther').classList.toggle('hidden', !other);
+    if (other) $('reasonOther').focus();
+    else $('reasonOther').value = '';
+  });
+
+  /* ---------- 表頭 ---------- */
+  $('operator').addEventListener('change', function () { lsSet(LS_OPERATOR, $('operator').value.trim()); });
+  $('date').addEventListener('change', loadRecords);
+  $('unit').addEventListener('change', loadRecords);
+  $('refreshBtn').addEventListener('click', loadRecords);
+
+  // 輸入時移除紅框
+  document.addEventListener('input', function (e) { if (e.target.classList) e.target.classList.remove('invalid'); });
+  document.addEventListener('change', function (e) { if (e.target.classList) e.target.classList.remove('invalid'); });
+
+  /* ---------- 送出 ---------- */
+  function clearDetail() {
+    $('car').value = '';
+    $('partNo').value = '';
+    $('partName').value = '';
+    nameAutoFilled = false;
+    refreshPartNoOptions();
+    $('qty').value = 1;
+    $('defectType').value = $('defectType').querySelector('option[value="異常"]') ? '異常' : $('defectType').value;
+    $('reason').value = '';
+    $('reasonOther').value = '';
+    $('reasonOther').classList.add('hidden');
+    $('respUnit').value = '塗裝';
+    $('note').value = '';
+  }
+
+  function submit() {
+    if (submitting) return;
+    var msg = $('submitMsg');
+    hideMsg(msg);
+    if (!apiReady()) { showMsg(msg, 'err', '尚未在 scrap-config.js 設定 API 網址'); return; }
+
+    var reasonVal = $('reason').value === REASON_OTHER ? $('reasonOther').value.trim() : $('reason').value;
+    var checks = [
+      ['date', '日期', $('date').value],
+      ['unit', '單位', $('unit').value],
+      ['shift', '班別', $('shift').value],
+      ['operator', '填寫人', $('operator').value.trim()],
+      ['car', '車型', curCar()],
+      ['partNo', '件號', curPartNo()],
+      ['partName', '車色', $('partName').value.trim()],
+      ['qty', '報廢數量', getQty() >= 1 ? 'ok' : ''],
+      [$('reason').value === REASON_OTHER ? 'reasonOther' : 'reason', '不良原因', reasonVal],
+      ['respUnit', '責任單位', $('respUnit').value.trim()]
+    ];
+    var missing = [];
+    checks.forEach(function (c) {
+      if (!c[2]) { missing.push(c[1]); $(c[0]).classList.add('invalid'); }
+    });
+    if (missing.length) {
+      showMsg(msg, 'err', '請填寫：' + missing.join('、'));
+      return;
+    }
+
+    var body = {
+      action: 'add',
+      date: $('date').value,
+      unit: $('unit').value,
+      shift: $('shift').value,
+      operator: $('operator').value.trim(),
+      car: curCar(),
+      machine: '',
+      partNo: curPartNo(),
+      name: $('partName').value.trim(),
+      qty: getQty(),
+      defectType: $('defectType').value,
+      reason: reasonVal,
+      respUnit: $('respUnit').value.trim(),
+      note: $('note').value.trim()
+    };
+    lsSet(LS_OPERATOR, body.operator);
+
+    submitting = true;
+    var btn = $('submitBtn');
+    btn.disabled = true;
+    btn.textContent = '送出中…';
+
+    apiPost(body)
+      .then(function () {
+        showMsg(msg, 'ok', '✔ 已送出：' + body.car + ' ' + body.partNo + ' ' + body.name + ' × ' + body.qty);
+        clearDetail();
+        loadRecords();
+      })
+      .catch(function (err) {
+        showMsg(msg, 'err', '送出失敗：' + err.message);
+      })
+      .then(function () {
+        submitting = false;
+        btn.disabled = false;
+        btn.textContent = '送出';
+      });
+  }
+  $('submitBtn').addEventListener('click', submit);
+
+  /* ---------- 今日已填 ---------- */
+  var recSeq = 0;
+  function loadRecords() {
+    var list = $('recList');
+    var date = $('date').value;
+    var unit = $('unit').value;
+    if (!apiReady() || !date || !unit) { list.innerHTML = '<div class="empty">—</div>'; $('recSummary').textContent = ''; return; }
+    var seq = ++recSeq;
+    list.innerHTML = '<div class="empty">載入中…</div>';
+    apiGet({ action: 'list', from: date, to: date, unit: unit })
+      .then(function (j) {
+        if (seq !== recSeq) return;
+        renderRecords(j.rows || []);
+      })
+      .catch(function (err) {
+        if (seq !== recSeq) return;
+        list.innerHTML = '<div class="msg err">載入失敗：' + esc(err.message) + '</div>';
+      });
+  }
+
+  function renderRecords(rows) {
+    rows.sort(function (a, b) { return a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0; });
+    var total = rows.reduce(function (s, r) { return s + (Number(r.qty) || 0); }, 0);
+    $('recSummary').textContent = $('date').value + ' ' + $('unit').value + '｜共 ' + rows.length + ' 筆，合計 ' + total;
+    if (!rows.length) { $('recList').innerHTML = '<div class="empty">尚無資料</div>'; return; }
+
+    $('recList').innerHTML = rows.map(function (r) {
+      var printed = r.status === '已列印';
+      var action = printed
+        ? '<div class="lock-tag">🔒 已列印</div>'
+        : '<button type="button" class="del-btn" data-id="' + esc(r.id) + '">✕ 刪除</button>';
+      return '<div class="rec">' +
+        '<div><div class="rec-main">' + esc(r.car) + '　' + esc(r.partNo) + '　' + esc(r.name) + '</div>' +
+        '<div class="rec-sub">' + esc(r.shift) + '｜' + esc(r.defectType) + '｜' + esc(r.reason) + '｜' + esc(r.respUnit) + '</div>' +
+        '<div class="rec-status ' + (printed ? 'locked' : 'open') + '">' + esc(r.status) + '</div></div>' +
+        '<div><div class="rec-qty">× ' + esc(r.qty) + '</div>' + action + '</div>' +
+        '</div>';
+    }).join('');
+
+    var byId = {};
+    rows.forEach(function (r) { byId[r.id] = r; });
+    Array.prototype.forEach.call($('recList').querySelectorAll('.del-btn'), function (btn) {
+      btn.addEventListener('click', function () { deleteRecord(byId[btn.getAttribute('data-id')], btn); });
+    });
+  }
+
+  function deleteRecord(r, btn) {
+    if (!r) return;
+    if (!confirm('確定刪除這筆？\n\n' + r.car + ' ' + r.partNo + ' ' + r.name + ' × ' + r.qty + '\n' + r.reason)) return;
+    btn.disabled = true;
+    apiPost({ action: 'delete', id: r.id })
+      .then(loadRecords)
+      .catch(function (err) {
+        alert('刪除失敗：' + err.message);
+        loadRecords();
+      });
+  }
+
+  /* ---------- 初始化 ---------- */
+  function setComboHints(text) {
+    Object.keys(COMBOS).forEach(function (k) { COMBOS[k].setHint(text); });
+  }
+
+  function init() {
+    $('date').value = todayStr();
+    $('operator').value = lsGet(LS_OPERATOR) || '';
+    $('respUnit').value = '塗裝';
+
+    if (!apiReady()) {
+      showMsg($('loadMsg'), 'err', '尚未在 scrap-config.js 填入 Apps Script 部署網址');
+      $('recList').innerHTML = '<div class="empty">—</div>';
+      setComboHints('（未設定 API，可直接輸入）');
+      return;
+    }
+
+    showMsg($('loadMsg'), 'ok', '選單載入中…');
+    apiGet({ action: 'options' })
+      .then(function (o) {
+        hideMsg($('loadMsg'));
+        parts = (o.parts || []).map(function (p) {
+          return {
+            car: String(p.car).trim().toUpperCase(),
+            partNo: String(p.partNo).trim().toUpperCase(),
+            name: String(p.name).trim()
+          };
+        });
+        allCars = uniq(parts.map(function (p) { return p.car; }));
+        allPartNos = uniq(parts.map(function (p) { return p.partNo; }));
+        fillSelect($('unit'), o.units || [], '塗裝');
+        fillSelect($('shift'), o.shifts || [], null, PLACEHOLDER);
+        fillSelect($('defectType'), o.defectTypes || [], '異常');
+        fillSelect($('reason'), o.reasons || [], null, PLACEHOLDER);
+        fillDatalist($('respUnitList'), o.respUnits || []);
+        COMBOS.car.setOptions(allCars);
+        refreshPartNoOptions();
+        setComboHints('');
+        loadRecords();
+      })
+      .catch(function (err) {
+        showMsg($('loadMsg'), 'err', '選單載入失敗：' + err.message);
+        setComboHints('（選單載入失敗，可直接輸入）');
+      });
+  }
+  init();
+})();
+</script>
+</body>
+</html>

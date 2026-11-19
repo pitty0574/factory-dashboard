@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>報廢單查詢列印</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&display=swap" rel="stylesheet">
+<script src="scrap-config.js"></script>
+<style>
+  /* ================= 螢幕區（SCADA） ================= */
+  :root, [data-theme="dark"] {
+    --bg: #0a1120;
+    --panel: #101a2e;
+    --panel-2: #0c1527;
+    --border: #1e3557;
+    --text: #d8e4f5;
+    --muted: #7d91ae;
+    --accent: #00c8ff;
+    --accent-ink: #001a24;
+    --ok: #22c55e;
+    --warn: #f59e0b;
+    --err: #f87171;
+    --err-bg: rgba(248, 113, 113, .14);
+    --row-hover: rgba(0, 200, 255, .07);
+    --row-sel: rgba(0, 200, 255, .15);
+    --glow: 0 0 10px rgba(0, 200, 255, .25);
+    --paper-shadow: 0 4px 24px rgba(0, 0, 0, .6);
+  }
+  [data-theme="light"] {
+    --bg: #e9eef5;
+    --panel: #ffffff;
+    --panel-2: #f5f8fc;
+    --border: #b9c8dc;
+    --text: #12233b;
+    --muted: #5a6b84;
+    --accent: #0072b5;
+    --accent-ink: #ffffff;
+    --ok: #15803d;
+    --warn: #b45309;
+    --err: #c62828;
+    --err-bg: rgba(198, 40, 40, .08);
+    --row-hover: rgba(0, 114, 181, .05);
+    --row-sel: rgba(0, 114, 181, .12);
+    --glow: none;
+    --paper-shadow: 0 2px 14px rgba(0, 0, 0, .18);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Microsoft JhengHei", "微軟正黑體", "Noto Sans TC", system-ui, sans-serif;
+    font-size: 15px;
+  }
+  .screen-only { max-width: 1100px; margin: 0 auto; padding: 0 16px; }
+
+  header {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 12px 0; margin-bottom: 14px;
+    border-bottom: 2px solid var(--accent);
+  }
+  .brand .en { font-family: "Orbitron", sans-serif; font-weight: 700; font-size: 20px; letter-spacing: 2px; color: var(--accent); }
+  .brand .zh { font-size: 14px; color: var(--muted); }
+  .btn {
+    min-height: 40px; padding: 0 16px; border-radius: 6px;
+    border: 1px solid var(--border); background: var(--panel-2); color: var(--text);
+    font-size: 15px; font-family: inherit; cursor: pointer;
+  }
+  .btn:hover { border-color: var(--accent); }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 700; box-shadow: var(--glow); }
+  .btn:disabled { opacity: .5; cursor: wait; }
+
+  .panel {
+    background: var(--panel); border: 1px solid var(--border); border-left: 3px solid var(--accent);
+    border-radius: 8px; padding: 14px; margin-bottom: 14px;
+  }
+  .panel-title { font-family: "Orbitron", sans-serif; font-size: 13px; letter-spacing: 1.5px; color: var(--accent); margin: 0 0 10px; }
+  .panel-title .zh { font-family: inherit; letter-spacing: 0; color: var(--muted); margin-left: 6px; }
+
+  .filters { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+  .filters label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+  .filters input, .filters select {
+    min-height: 40px; padding: 0 10px; font-size: 15px; font-family: inherit;
+    color: var(--text); background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px;
+  }
+
+  table.result { width: 100%; border-collapse: collapse; }
+  table.result th, table.result td { padding: 8px 10px; border-bottom: 1px solid var(--border); text-align: left; }
+  table.result th { font-size: 13px; color: var(--muted); font-weight: 400; }
+  table.result td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  table.result tbody tr:hover { background: var(--row-hover); }
+  table.result tbody tr.sel { background: var(--row-sel); }
+  table.result tfoot td { font-weight: 700; border-top: 2px solid var(--border); border-bottom: none; }
+  .st { font-size: 13px; padding: 2px 8px; border-radius: 10px; border: 1px solid currentColor; white-space: nowrap; }
+  .st.none { color: var(--muted); }
+  .st.all { color: var(--ok); }
+  .st.part { color: var(--warn); }
+  .empty { text-align: center; color: var(--muted); padding: 20px 0; }
+  .msg { padding: 10px 12px; border-radius: 6px; margin-bottom: 12px; }
+  .msg.err { color: var(--err); background: var(--err-bg); border: 1px solid var(--err); }
+  .msg.info { color: var(--muted); border: 1px solid var(--border); }
+  .hidden { display: none !important; }
+
+  .preview-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; }
+  .preview-bar .info { font-size: 15px; }
+  .preview-bar .info b { color: var(--accent); }
+
+  .modal-mask {
+    position: fixed; inset: 0; z-index: 100;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(0, 0, 0, .55);
+  }
+  .modal {
+    width: min(360px, calc(100% - 32px)); padding: 20px;
+    background: var(--panel); border: 1px solid var(--accent); border-radius: 8px; box-shadow: var(--glow);
+  }
+  .modal-title { font-size: 18px; font-weight: 700; margin-bottom: 6px; }
+  .modal-sub { font-size: 14px; color: var(--muted); margin-bottom: 18px; }
+  .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+
+  /* ================= 列印區（固定黑白，不受主題影響） ================= */
+  #print-area { padding: 0 16px 40px; }
+  #print-area:empty { display: none; }
+  .sheet {
+    width: 210mm; min-height: 297mm; margin: 0 auto 16px; padding: 10mm;
+    background: #fff; color: #000; box-shadow: var(--paper-shadow);
+    font-family: "Microsoft JhengHei", "微軟正黑體", sans-serif;
+    font-size: 10.5pt; line-height: 1.25;
+  }
+  .sheet * { color: #000; }
+  .p-title { text-align: center; font-size: 17pt; font-weight: 700; letter-spacing: 2px; margin: 0 0 4mm; }
+  .p-meta { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 2mm; font-size: 11pt; }
+  .p-meta .page { font-size: 10pt; }
+
+  .p-table, .p-sign { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  .p-table th, .p-table td, .p-sign th, .p-sign td { border: 1px solid #000; padding: 0 1mm; text-align: center; vertical-align: middle; }
+  .p-table th { font-weight: 700; font-size: 10pt; height: 7mm; }
+  .p-table td { height: 7.6mm; font-size: 10pt; word-break: break-all; }
+  .p-table td.num { font-variant-numeric: tabular-nums; }
+  .p-table tr.total td { font-weight: 700; }
+  .p-table tr, .p-sign tr { page-break-inside: avoid; break-inside: avoid; }
+
+  .p-notes { margin: 2.5mm 0 3mm; font-size: 9.5pt; line-height: 1.5; }
+  .p-sign th { font-weight: 400; font-size: 10pt; height: 6.5mm; }
+  .p-sign td.stamp { height: 22mm; }
+
+  @page { size: A4 portrait; margin: 10mm; }
+  @media print {
+    html, body { background: #fff !important; }
+    .screen-only { display: none !important; }
+    #print-area { padding: 0; }
+    .sheet {
+      width: auto; min-height: 0; margin: 0; padding: 0; box-shadow: none;
+      page-break-after: always; break-after: page;
+      -webkit-print-color-adjust: exact; print-color-adjust: exact;
+    }
+    .sheet:last-child { page-break-after: auto; break-after: auto; }
+  }
+</style>
+</head>
+<body>
+
+<div class="screen-only">
+  <header>
+    <div class="brand">
+      <div class="en">SCRAP QUERY</div>
+      <div class="zh">部件報廢申請單｜查詢與列印</div>
+    </div>
+    <button type="button" class="btn" id="themeBtn" title="切換深淺色">☀ 淺色</button>
+  </header>
+
+  <div id="topMsg" class="msg hidden"></div>
+
+  <section class="panel">
+    <h2 class="panel-title">FILTER<span class="zh">篩選條件</span></h2>
+    <div class="filters">
+      <div><label for="from">起日</label><input type="date" id="from"></div>
+      <div><label for="to">迄日</label><input type="date" id="to"></div>
+      <div><label for="unit">單位</label><select id="unit"><option value="塗裝">塗裝</option></select></div>
+      <div><button type="button" class="btn primary" id="queryBtn">查詢</button></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2 class="panel-title">RESULT<span class="zh">查詢結果（依日期）</span></h2>
+    <div id="resultBox"><div class="empty">請按「查詢」</div></div>
+  </section>
+
+  <section class="panel hidden" id="previewPanel">
+    <div class="preview-bar">
+      <div class="info" id="previewInfo"></div>
+      <div>
+        <button type="button" class="btn primary" id="printBtn">🖨 列印</button>
+        <button type="button" class="btn" id="closePreviewBtn">關閉預覽</button>
+      </div>
+    </div>
+  </section>
+
+  <div class="modal-mask hidden" id="printConfirm" role="dialog" aria-modal="true" aria-labelledby="printConfirmTitle">
+    <div class="modal">
+      <div class="modal-title" id="printConfirmTitle">單據是否已印出？</div>
+      <div class="modal-sub" id="printConfirmSub"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn" id="printNoBtn">未印出</button>
+        <button type="button" class="btn primary" id="printYesBtn">已印出</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="print-area"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  var LS_THEME = 'scrapTheme';
+  var ROWS_PER_PAGE = 18;
+  var TITLE = '每日生產/試打統計表(供報廢用)';
+  var NOTES = [
+    '1. 粉碎房每日報廢件接收',
+    '2. 當班生產之不良品必須當班報廢。',
+    '3. 製程不良件送粉碎房時，需檢附每日生產/試打統計表及製程成套報廢單。'
+  ];
+  // 欄寬比例（%）：班別 車型 機台 件號 品名 ST時間 實際生產數 良品數 換模 開機 異常 不良原因 責任者
+  var COL_WIDTHS = [6, 6, 7, 9, 12, 6, 7, 6, 6, 6, 6, 15, 8];
+
+  var $ = function (id) { return document.getElementById(id); };
+  var shiftOrder = ['日班', '夜班'];
+  var groups = {};        // date -> rows（目前查詢結果）
+  var queried = null;     // {from, to, unit}
+  var preview = null;     // {date, unit}
+  var printJob = null;
+
+  /* ---------- 共用 ---------- */
+  function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+  function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* ignore */ } }
+
+  function ymd(d) {
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function apiReady() {
+    return typeof SCRAP_API_URL === 'string' && /^https:\/\//.test(SCRAP_API_URL);
+  }
+
+  function apiGet(params) {
+    return fetch(SCRAP_API_URL + '?' + new URLSearchParams(params).toString())
+      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function (j) { if (!j.ok) throw new Error(j.error || '未知錯誤'); return j; });
+  }
+
+  function apiPost(body) {
+    return fetch(SCRAP_API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(body)
+    })
+      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function (j) { if (!j.ok) throw new Error(j.error || '未知錯誤'); return j; });
+  }
+
+  function showTop(type, text) { var m = $('topMsg'); m.className = 'msg ' + type; m.textContent = text; }
+  function hideTop() { $('topMsg').className = 'msg hidden'; }
+
+  /* ---------- 主題 ---------- */
+  function applyTheme(t) {
+    document.documentElement.setAttribute('data-theme', t);
+    $('themeBtn').textContent = t === 'dark' ? '☀ 淺色' : '☾ 深色';
+  }
+  applyTheme(lsGet(LS_THEME) === 'light' ? 'light' : 'dark');
+  $('themeBtn').addEventListener('click', function () {
+    var t = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    applyTheme(t);
+    lsSet(LS_THEME, t);
+  });
+
+  /* ---------- 查詢 ---------- */
+  function groupStatus(rows) {
+    var printed = rows.filter(function (r) { return r.status === '已列印'; }).length;
+    if (printed === 0) return { cls: 'none', text: '全部未列印' };
+    if (printed === rows.length) return { cls: 'all', text: '已列印' };
+    return { cls: 'part', text: '部分已列印' };
+  }
+
+  function sumQty(rows) {
+    return rows.reduce(function (s, r) { return s + (Number(r.qty) || 0); }, 0);
+  }
+
+  function runQuery() {
+    if (!apiReady()) { showTop('err', '尚未在 scrap-config.js 填入 Apps Script 部署網址'); return Promise.resolve(); }
+    var from = $('from').value, to = $('to').value, unit = $('unit').value;
+    if (!from || !to) { showTop('err', '請選擇起日與迄日'); return Promise.resolve(); }
+    if (from > to) { showTop('err', '起日不可晚於迄日'); return Promise.resolve(); }
+    hideTop();
+    $('queryBtn').disabled = true;
+    $('resultBox').innerHTML = '<div class="empty">查詢中…</div>';
+
+    return apiGet({ action: 'list', from: from, to: to, unit: unit })
+      .then(function (j) {
+        queried = { from: from, to: to, unit: unit };
+        groups = {};
+        (j.rows || []).forEach(function (r) { (groups[r.date] = groups[r.date] || []).push(r); });
+        renderResult();
+        if (preview && preview.unit === unit && groups[preview.date]) renderPreview(preview.date);
+        else closePreview();
+      })
+      .catch(function (err) {
+        $('resultBox').innerHTML = '<div class="msg err">查詢失敗：' + esc(err.message) + '</div>';
+      })
+      .then(function () { $('queryBtn').disabled = false; });
+  }
+
+  function renderResult() {
+    var dates = Object.keys(groups).sort();
+    if (!dates.length) { $('resultBox').innerHTML = '<div class="empty">查無資料</div>'; return; }
+
+    var totalCnt = 0, totalQty = 0;
+    var body = dates.map(function (d) {
+      var rows = groups[d];
+      var st = groupStatus(rows);
+      var q = sumQty(rows);
+      totalCnt += rows.length; totalQty += q;
+      var sel = preview && preview.date === d ? ' class="sel"' : '';
+      return '<tr' + sel + '><td>' + esc(d) + '</td>' +
+        '<td class="num">' + rows.length + '</td>' +
+        '<td class="num">' + q + '</td>' +
+        '<td><span class="st ' + st.cls + '">' + st.text + '</span></td>' +
+        '<td><button type="button" class="btn" data-date="' + esc(d) + '">預覽列印</button></td></tr>';
+    }).join('');
+
+    $('resultBox').innerHTML =
+      '<table class="result"><thead><tr><th>日期</th><th style="text-align:right">筆數</th><th style="text-align:right">報廢總數</th><th>狀態</th><th></th></tr></thead>' +
+      '<tbody>' + body + '</tbody>' +
+      '<tfoot><tr><td>合計（' + dates.length + ' 天）</td><td class="num">' + totalCnt + '</td><td class="num">' + totalQty + '</td><td></td><td></td></tr></tfoot></table>';
+
+    Array.prototype.forEach.call($('resultBox').querySelectorAll('button[data-date]'), function (b) {
+      b.addEventListener('click', function () { renderPreview(b.getAttribute('data-date')); });
+    });
+  }
+
+  /* ---------- 單據預覽 ---------- */
+  function sortForPrint(rows) {
+    return rows.slice().sort(function (a, b) {
+      var sa = shiftOrder.indexOf(a.shift), sb = shiftOrder.indexOf(b.shift);
+      if (sa < 0) sa = 99;
+      if (sb < 0) sb = 99;
+      if (sa !== sb) return sa - sb;
+      return a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0;
+    });
+  }
+
+  function zhDate(d) {
+    var p = d.split('-');
+    return p[0] + ' 年 ' + p[1] + ' 月 ' + p[2] + ' 日';
+  }
+
+  function numCell(v) { return '<td class="num">' + (v ? v : '') + '</td>'; }
+
+  function rowHtml(r) {
+    if (!r) return '<tr>' + new Array(14).join('<td></td>') + '</tr>';
+    var q = Number(r.qty) || 0;
+    var chg = 0, start = 0, abn = 0;
+    if (r.defectType === '換模') chg = q;
+    else if (r.defectType === '開機') start = q;
+    else abn = q; // 異常（或未知類別）歸入異常數量
+    return '<tr>' +
+      '<td>' + esc(r.shift) + '</td>' +
+      '<td>' + esc(r.car) + '</td>' +
+      '<td></td>' +
+      '<td>' + esc(r.partNo) + '</td>' +
+      '<td>' + esc(r.name) + '</td>' +
+      '<td></td>' +
+      numCell(q) +
+      '<td></td>' +
+      numCell(chg) + numCell(start) + numCell(abn) +
+      '<td>' + esc(r.reason) + '</td>' +
+      '<td>' + esc(r.respUnit) + '</td>' +
+      '</tr>';
+  }
+
+  function sheetHtml(pageRows, pageNo, pageCount, date, unit, totals) {
+    var cols = '<colgroup>' + COL_WIDTHS.map(function (w) { return '<col style="width:' + w + '%">'; }).join('') + '</colgroup>';
+    var head =
+      '<thead>' +
+      '<tr><th rowspan="2">班別</th><th rowspan="2">車型</th><th rowspan="2">機台</th><th rowspan="2">件號</th>' +
+      '<th rowspan="2">品名</th><th rowspan="2">ST時間</th><th rowspan="2">實際<br>生產數</th><th rowspan="2">良品數</th>' +
+      '<th colspan="3">不良數</th><th rowspan="2">不良原因</th><th rowspan="2">責任者</th></tr>' +
+      '<tr><th>換模數量</th><th>開機數量</th><th>異常數量</th></tr>' +
+      '</thead>';
+
+    var body = '';
+    for (var i = 0; i < ROWS_PER_PAGE; i++) body += rowHtml(pageRows[i]);
+    if (totals) {
+      body += '<tr class="total"><td colspan="6">合計</td>' +
+        '<td class="num">' + totals.qty + '</td><td></td>' +
+        '<td class="num">' + totals.chg + '</td><td class="num">' + totals.start + '</td><td class="num">' + totals.abn + '</td>' +
+        '<td></td><td></td></tr>';
+    }
+
+    var sign =
+      '<table class="p-sign"><colgroup>' + new Array(10).join('<col style="width:11.11%">') + '</colgroup>' +
+      '<tr><th>總經理室</th><th>總經理</th><th>協理</th><th colspan="2">生管部</th><th colspan="4">報廢單位</th></tr>' +
+      '<tr><th>副理</th><th></th><th></th><th>課長</th><th>承辦</th><th>經理</th><th>副理</th><th>課長</th><th>承辦</th></tr>' +
+      '<tr>' + new Array(10).join('<td class="stamp"></td>') + '</tr>' +
+      '</table>';
+
+    return '<div class="sheet">' +
+      '<div class="p-title">' + TITLE + '</div>' +
+      '<div class="p-meta"><div>單位：' + esc(unit) + '<br>日期：' + zhDate(date) + '</div>' +
+      '<div class="page">第 ' + pageNo + '/' + pageCount + ' 頁</div></div>' +
+      '<table class="p-table">' + cols + head + '<tbody>' + body + '</tbody></table>' +
+      '<div class="p-notes">' + NOTES.map(esc).join('<br>') + '</div>' +
+      sign +
+      '</div>';
+  }
+
+  function renderPreview(date) {
+    var unit = queried ? queried.unit : $('unit').value;
+    var rows = sortForPrint(groups[date] || []);
+    preview = { date: date, unit: unit };
+
+    var totals = { qty: 0, chg: 0, start: 0, abn: 0 };
+    rows.forEach(function (r) {
+      var q = Number(r.qty) || 0;
+      totals.qty += q;
+      if (r.defectType === '換模') totals.chg += q;
+      else if (r.defectType === '開機') totals.start += q;
+      else totals.abn += q;
+    });
+
+    var pageCount = Math.max(1, Math.ceil(rows.length / ROWS_PER_PAGE));
+    var html = '';
+    for (var p = 0; p < pageCount; p++) {
+      html += sheetHtml(rows.slice(p * ROWS_PER_PAGE, (p + 1) * ROWS_PER_PAGE), p + 1, pageCount, date, unit,
+        p === pageCount - 1 ? totals : null);
+    }
+    $('print-area').innerHTML = html;
+
+    var st = groupStatus(rows);
+    $('previewInfo').innerHTML = '單據預覽：<b>' + esc(date) + '</b>　' + esc(unit) + '　共 ' + rows.length +
+      ' 筆、' + pageCount + ' 頁　<span class="st ' + st.cls + '">' + st.text + '</span>';
+    $('previewPanel').classList.remove('hidden');
+    renderResult();
+    $('previewPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function closePreview() {
+    preview = null;
+    $('print-area').innerHTML = '';
+    $('previewPanel').classList.add('hidden');
+    if (Object.keys(groups).length) renderResult();
+  }
+
+  /* ---------- 列印 → 確認 → markPrinted ---------- */
+  // 列印對話框關閉後（afterprint 或 print() 返回）呼叫；有 done 旗標防重複
+  function finishPrint() {
+    if (!printJob || printJob.done) return;
+    printJob.done = true;
+    if (printJob.reprint) { printJob = null; return; } // 重印：不確認、不更新狀態
+    $('printConfirmSub').textContent = printJob.date + '　' + printJob.unit;
+    $('printConfirm').classList.remove('hidden');
+    $('printYesBtn').focus();
+  }
+
+  function closePrintConfirm() {
+    $('printConfirm').classList.add('hidden');
+    printJob = null;
+  }
+
+  $('printYesBtn').addEventListener('click', function () {
+    var job = printJob;
+    closePrintConfirm();
+    if (!job) return;
+    $('printBtn').disabled = true;
+    apiPost({ action: 'markPrinted', date: job.date, unit: job.unit })
+      .catch(function (err) { showTop('err', '列印狀態更新失敗：' + err.message); })
+      .then(runQuery)
+      .then(function () { $('printBtn').disabled = false; });
+  });
+  $('printNoBtn').addEventListener('click', closePrintConfirm);
+
+  $('printBtn').addEventListener('click', function () {
+    if (!preview || printJob) return;
+    var reprint = groupStatus(groups[preview.date] || []).cls === 'all';
+    printJob = { date: preview.date, unit: preview.unit, reprint: reprint, done: false };
+    window.print();
+    finishPrint();
+  });
+  window.addEventListener('afterprint', finishPrint);
+
+  $('closePreviewBtn').addEventListener('click', closePreview);
+  $('queryBtn').addEventListener('click', runQuery);
+
+  /* ---------- 初始化 ---------- */
+  function init() {
+    var now = new Date();
+    $('from').value = ymd(new Date(now.getFullYear(), now.getMonth(), 1));
+    $('to').value = ymd(now);
+
+    if (!apiReady()) { showTop('err', '尚未在 scrap-config.js 填入 Apps Script 部署網址'); return; }
+
+    apiGet({ action: 'options' })
+      .then(function (o) {
+        if (o.units && o.units.length) {
+          $('unit').innerHTML = o.units.map(function (u) { return '<option value="' + esc(u) + '">' + esc(u) + '</option>'; }).join('');
+          if (o.units.indexOf('塗裝') >= 0) $('unit').value = '塗裝';
+        }
+        if (o.shifts && o.shifts.length) shiftOrder = o.shifts;
+      })
+      .catch(function (err) { showTop('err', '選單載入失敗（單位僅顯示預設值）：' + err.message); })
+      .then(runQuery);
+  }
+  init();
+})();
+</script>
+</body>
+</html>
