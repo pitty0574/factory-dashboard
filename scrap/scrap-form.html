@@ -91,15 +91,50 @@
   label .hint { font-weight: 400; color: var(--muted); font-size: 0.9rem; margin-left: 4px; }
   label .req { color: var(--err); margin-left: 2px; }
 
+  /* grid / flex 子元素不被內容撐破欄寬 */
+  .grid2 > *, .qty-row > *, .rec > *, header > *, .panel-title > *, .combo-option { min-width: 0; }
+
   input, select {
-    width: 100%; min-width: 0; min-height: 56px; padding: 0 10px;
-    font-size: 1.25rem;
-    color: var(--text); background: var(--panel-2);
+    box-sizing: border-box; width: 100%; min-width: 0; height: 56px; margin: 0;
+    padding: 0 10px;
+    font-size: 1.25rem; line-height: normal;
+    color: var(--text); background-color: var(--panel-2);
     border: 1px solid var(--border); border-radius: 6px;
     outline: none;
   }
   input:focus, select:focus { border-color: var(--accent); box-shadow: var(--glow); }
-  .invalid { border-color: var(--err) !important; background: var(--err-bg); }
+  .invalid { border-color: var(--err) !important; background-color: var(--err-bg) !important; }
+
+  /* iOS 日期欄：拿掉原生樣式，避免寬度溢出、文字置中 */
+  input[type="date"] {
+    -webkit-appearance: none; appearance: none;
+    display: block; text-align: left;
+  }
+  input[type="date"]::-webkit-date-and-time-value { text-align: left; }
+
+  /* select：拿掉原生樣式，用兩道漸層畫下拉箭頭（顏色跟主題變數走） */
+  select {
+    -webkit-appearance: none; -moz-appearance: none; appearance: none;
+    padding-right: 44px;
+    text-overflow: ellipsis; white-space: nowrap; overflow: hidden;
+    background-image:
+      linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+      linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+    background-position: calc(100% - 24px) 50%, calc(100% - 17px) 50%;
+    background-size: 7px 7px, 7px 7px;
+    background-repeat: no-repeat;
+  }
+  select:focus {
+    background-image:
+      linear-gradient(45deg, transparent 50%, var(--accent) 50%),
+      linear-gradient(135deg, var(--accent) 50%, transparent 50%);
+  }
+
+  /* 窄螢幕：表頭區改單欄直排 */
+  @media (max-width: 480px) {
+    .grid2 { grid-template-columns: minmax(0, 1fr); }
+    .grid2 > .field { width: 100%; }
+  }
   .hidden { display: none !important; }
 
   /* ── 智慧搜尋 Combobox（車型 / 件號 / 車色），操作手感同射出日報 ── */
@@ -298,7 +333,7 @@
   var LS_OPERATOR = 'scrapOperator';
   var LS_THEME = 'scrapTheme';
   var REASON_OTHER = '其他';
-  var PLACEHOLDER = '-- 請選擇 --';
+  var PLACEHOLDER = '請選擇';
 
   var $ = function (id) { return document.getElementById(id); };
   var parts = [];
