@@ -583,6 +583,7 @@
 
   /* ---------- 車型 / 件號 / 車色 連動（只更新建議清單，不清掉已輸入的字）---------- */
   var allCars = [], allPartNos = [];
+  var reasonOpts = [], respUnitOpts = [];
   function curCar() { return $('car').value.trim().toUpperCase(); }
   function curPartNo() { return $('partNo').value.trim().toUpperCase(); }
 
@@ -714,8 +715,10 @@
     apiPost(body)
       .then(function () {
         showMsg(msg, 'ok', '✔ 已送出：' + body.car + ' ' + body.partNo + ' ' + body.name + ' × ' + body.qty);
+        addLocalOptions(body);
         clearDetail();
         loadRecords();
+        reloadOptions();
       })
       .catch(function (err) {
         showMsg(msg, 'err', '送出失敗：' + err.message);
@@ -791,6 +794,55 @@
     Object.keys(COMBOS).forEach(function (k) { COMBOS[k].setHint(text); });
   }
 
+  /* ---------- 選單資料（記憶體）---------- */
+  // 車型 / 件號 / 車色 / 不良原因 / 責任單位：只覆蓋這幾項，不重設表頭的下拉選單
+  function setMenuData(o) {
+    parts = (o.parts || []).map(function (p) {
+      return {
+        car: String(p.car).trim().toUpperCase(),
+        partNo: String(p.partNo).trim().toUpperCase(),
+        name: String(p.name).trim()
+      };
+    });
+    reasonOpts = uniq((o.reasons || []).map(function (v) { return String(v).trim(); }))
+      .filter(function (v) { return v !== '其他'; });
+    respUnitOpts = uniq((o.respUnits || []).map(function (v) { return String(v).trim(); }));
+    refreshMenus();
+  }
+
+  function refreshMenus() {
+    allCars = uniq(parts.map(function (p) { return p.car; }));
+    allPartNos = uniq(parts.map(function (p) { return p.partNo; }));
+    COMBOS.car.setOptions(allCars);
+    refreshPartNoOptions();
+    COMBOS.reason.setOptions(reasonOpts);
+    COMBOS.respUnit.setOptions(respUnitOpts);
+  }
+
+  // 送出成功後立即把這筆的值併入建議清單（已存在不重複加），不等 API
+  function addLocalOptions(b) {
+    var car = String(b.car || '').trim().toUpperCase();
+    var pn = String(b.partNo || '').trim().toUpperCase();
+    var name = String(b.name || '').trim();
+    if (car && pn && name && !parts.some(function (p) { return p.car === car && p.partNo === pn && p.name === name; })) {
+      parts.push({ car: car, partNo: pn, name: name });
+    }
+    var reason = String(b.reason || '').trim();
+    if (reason && reason !== '其他' && reasonOpts.indexOf(reason) < 0) reasonOpts.push(reason);
+    var resp = String(b.respUnit || '').trim();
+    if (resp && respUnitOpts.indexOf(resp) < 0) respUnitOpts.push(resp);
+    refreshMenus();
+  }
+
+  // 背景重抓 options 覆蓋記憶體；失敗不提示，維持本機併入的結果；只採用最後一次請求的回應
+  var optSeq = 0;
+  function reloadOptions() {
+    var seq = ++optSeq;
+    apiGet({ action: 'options', _t: Date.now() })
+      .then(function (o) { if (seq === optSeq) setMenuData(o); })
+      .catch(function () { /* ignore */ });
+  }
+
   function init() {
     $('date').value = todayStr();
     $('operator').value = lsGet(LS_OPERATOR) || '';
@@ -804,25 +856,14 @@
     }
 
     showMsg($('loadMsg'), 'ok', '選單載入中…');
-    apiGet({ action: 'options' })
+    var seq = ++optSeq;
+    apiGet({ action: 'options', _t: Date.now() })
       .then(function (o) {
         hideMsg($('loadMsg'));
-        parts = (o.parts || []).map(function (p) {
-          return {
-            car: String(p.car).trim().toUpperCase(),
-            partNo: String(p.partNo).trim().toUpperCase(),
-            name: String(p.name).trim()
-          };
-        });
-        allCars = uniq(parts.map(function (p) { return p.car; }));
-        allPartNos = uniq(parts.map(function (p) { return p.partNo; }));
         fillSelect($('unit'), o.units || [], '塗裝');
         fillSelect($('shift'), o.shifts || [], null, PLACEHOLDER);
         fillSelect($('defectType'), o.defectTypes || [], '異常');
-        COMBOS.reason.setOptions((o.reasons || []).filter(function (v) { return v !== '其他'; }));
-        COMBOS.respUnit.setOptions(o.respUnits || []);
-        COMBOS.car.setOptions(allCars);
-        refreshPartNoOptions();
+        if (seq === optSeq) setMenuData(o);
         setComboHints('');
         loadRecords();
       })
