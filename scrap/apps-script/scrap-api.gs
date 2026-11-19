@@ -22,6 +22,7 @@
  * 錯誤一律回傳 {ok:false, error:訊息}。
  *
  * 新增報廢時，若料號主檔沒有相同的 車型+件號+車色，會自動在最後補一列（來源＝現場新增）。
+ * 不良原因、責任單位若不在下拉選單資料 D / E 欄，也會補在該欄最後（黃底＋註解「現場新增 日期」）。
  */
 
 var SHEET_RECORDS = '報廢明細';
@@ -272,8 +273,44 @@ function addRecord_(b) {
   } catch (partErr) {
     console.log('料號主檔回寫失敗：' + errMsg_(partErr) + '｜' + rec.car + ' / ' + rec.partNo + ' / ' + rec.name);
   }
+  // 下拉選單資料回寫：D 不良原因、E 責任單位（同樣失敗只記 log）
+  [[4, rec.reason, '不良原因'], [5, rec.respUnit, '責任單位']].forEach(function (o) {
+    try {
+      appendOptionIfMissing_(o[0], o[1]);
+    } catch (optErr) {
+      console.log('下拉選單資料回寫失敗（' + o[2] + '）：' + errMsg_(optErr) + '｜' + o[1]);
+    }
+  });
 
   return { ok: true, id: rec.id };
+}
+
+// 下拉選單資料第 col 欄（D2 起）沒有完全相同的值時，寫到該欄最後一個非空白格的下一格
+// 各欄長度不同，所以逐格找該欄自己的最後一列（getLastRow() 只當掃描上限）
+function appendOptionIfMissing_(col, value) {
+  value = String(value || '').trim();
+  if (!value) return;
+
+  var so = mustSheet_(SHEET_OPTIONS);
+  var scanRows = so.getLastRow() - 1;
+  var lastFilled = 1; // 該欄最後一個非空白列（至少是表頭列）
+  if (scanRows > 0) {
+    var vals = so.getRange(2, col, scanRows, 1).getDisplayValues();
+    for (var i = 0; i < vals.length; i++) {
+      var v = String(vals[i][0]).trim();
+      if (v === value) return;
+      if (v) lastFilled = i + 2;
+    }
+  }
+
+  var row = lastFilled + 1;
+  if (row > so.getMaxRows()) so.insertRowsAfter(so.getMaxRows(), row - so.getMaxRows());
+  var today = Utilities.formatDate(new Date(), tz_(), 'yyyy-MM-dd');
+  so.getRange(row, col)
+    .setNumberFormat('@')
+    .setValue(value)
+    .setBackground('#FFF2CC')
+    .setNote('現場新增 ' + today);
 }
 
 // 料號主檔沒有相同 車型+件號+車色 時在最後新增一列（車型、件號以大寫比對，三欄皆 trim）

@@ -298,13 +298,19 @@
     </div>
     <div class="field">
       <label for="reason">不良原因<span class="req">*</span></label>
-      <select id="reason"></select>
-      <input type="text" id="reasonOther" class="hidden" style="margin-top:8px" placeholder="請輸入不良原因" autocomplete="off">
+      <div class="combobox">
+        <input type="text" id="reason" autocomplete="off" spellcheck="false" placeholder="（載入中…）" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="combo-reason-list">
+        <button type="button" class="combo-toggle" tabindex="-1" aria-label="展開選單">🔽</button>
+        <div class="combo-dropdown" id="combo-reason-list" role="listbox"></div>
+      </div>
     </div>
     <div class="field">
       <label for="respUnit">責任單位<span class="req">*</span></label>
-      <input type="text" id="respUnit" list="respUnitList" autocomplete="off">
-      <datalist id="respUnitList"></datalist>
+      <div class="combobox">
+        <input type="text" id="respUnit" autocomplete="off" spellcheck="false" placeholder="（載入中…）" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="combo-respUnit-list">
+        <button type="button" class="combo-toggle" tabindex="-1" aria-label="展開選單">🔽</button>
+        <div class="combo-dropdown" id="combo-respUnit-list" role="listbox"></div>
+      </div>
     </div>
     <div class="field">
       <label for="note">備註<span class="hint">（選填）</span></label>
@@ -332,7 +338,6 @@
 
   var LS_OPERATOR = 'scrapOperator';
   var LS_THEME = 'scrapTheme';
-  var REASON_OTHER = '其他';
   var PLACEHOLDER = '請選擇';
 
   var $ = function (id) { return document.getElementById(id); };
@@ -386,10 +391,6 @@
     items.forEach(function (v) { html += '<option value="' + esc(v) + '">' + esc(v) + '</option>'; });
     sel.innerHTML = html;
     if (def != null && items.indexOf(def) >= 0) sel.value = def;
-  }
-
-  function fillDatalist(dl, items) {
-    dl.innerHTML = items.map(function (v) { return '<option value="' + esc(v) + '">'; }).join('');
   }
 
   function uniq(arr) {
@@ -575,7 +576,9 @@
   var COMBOS = {
     car: createCombobox($('car').closest('.combobox'), true),
     partNo: createCombobox($('partNo').closest('.combobox'), true),
-    partName: createCombobox($('partName').closest('.combobox'), false)
+    partName: createCombobox($('partName').closest('.combobox'), false),
+    reason: createCombobox($('reason').closest('.combobox'), false),
+    respUnit: createCombobox($('respUnit').closest('.combobox'), false)
   };
 
   /* ---------- 車型 / 件號 / 車色 連動（只更新建議清單，不清掉已輸入的字）---------- */
@@ -633,14 +636,6 @@
   $('qtyPlus').addEventListener('click', function () { $('qty').value = Math.max(1, getQty() + 1); });
   $('qty').addEventListener('blur', function () { if (getQty() < 1) $('qty').value = 1; });
 
-  /* ---------- 不良原因「其他」 ---------- */
-  $('reason').addEventListener('change', function () {
-    var other = $('reason').value === REASON_OTHER;
-    $('reasonOther').classList.toggle('hidden', !other);
-    if (other) $('reasonOther').focus();
-    else $('reasonOther').value = '';
-  });
-
   /* ---------- 表頭 ---------- */
   $('operator').addEventListener('change', function () { lsSet(LS_OPERATOR, $('operator').value.trim()); });
   $('date').addEventListener('change', loadRecords);
@@ -661,8 +656,6 @@
     $('qty').value = 1;
     $('defectType').value = $('defectType').querySelector('option[value="異常"]') ? '異常' : $('defectType').value;
     $('reason').value = '';
-    $('reasonOther').value = '';
-    $('reasonOther').classList.add('hidden');
     $('respUnit').value = '塗裝';
     $('note').value = '';
   }
@@ -673,7 +666,7 @@
     hideMsg(msg);
     if (!apiReady()) { showMsg(msg, 'err', '尚未在 scrap-config.js 設定 API 網址'); return; }
 
-    var reasonVal = $('reason').value === REASON_OTHER ? $('reasonOther').value.trim() : $('reason').value;
+    var reasonVal = $('reason').value.trim();
     var checks = [
       ['date', '日期', $('date').value],
       ['unit', '單位', $('unit').value],
@@ -683,7 +676,7 @@
       ['partNo', '件號', curPartNo()],
       ['partName', '車色', $('partName').value.trim()],
       ['qty', '報廢數量', getQty() >= 1 ? 'ok' : ''],
-      [$('reason').value === REASON_OTHER ? 'reasonOther' : 'reason', '不良原因', reasonVal],
+      ['reason', '不良原因', reasonVal],
       ['respUnit', '責任單位', $('respUnit').value.trim()]
     ];
     var missing = [];
@@ -826,8 +819,8 @@
         fillSelect($('unit'), o.units || [], '塗裝');
         fillSelect($('shift'), o.shifts || [], null, PLACEHOLDER);
         fillSelect($('defectType'), o.defectTypes || [], '異常');
-        fillSelect($('reason'), o.reasons || [], null, PLACEHOLDER);
-        fillDatalist($('respUnitList'), o.respUnits || []);
+        COMBOS.reason.setOptions((o.reasons || []).filter(function (v) { return v !== '其他'; }));
+        COMBOS.respUnit.setOptions(o.respUnits || []);
         COMBOS.car.setOptions(allCars);
         refreshPartNoOptions();
         setComboHints('');
